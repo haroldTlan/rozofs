@@ -107,7 +107,7 @@ static SVCXPRT *exportd_svc = NULL;
 
 extern void export_program_1(struct svc_req *rqstp, SVCXPRT * ctl_svc);
 
-DEFINE_PROFILING(epp_profiler_t) = {0};
+DEFINE_PROFILING(epp_profiler_t);
 
 
 exportd_start_conf_param_t  expgwc_non_blocking_conf;  /**< configuration of the non blocking side */
@@ -758,13 +758,13 @@ static void *monitoring_thread(void *v) {
             continue;
         }
 
-        gprofiler.nb_volumes = 0;
+        gprofiler->nb_volumes = 0;
 
         list_for_each_forward(p, &volumes) {
             if (monitor_volume(&list_entry(p, volume_entry_t, list)->volume) != 0) {
                 severe("monitor thread failed: %s", strerror(errno));
             }
-            gprofiler.nb_volumes++;
+            gprofiler->nb_volumes++;
         }
 
         if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
@@ -779,13 +779,13 @@ static void *monitoring_thread(void *v) {
             continue;
         }
 
-        gprofiler.nb_exports = 0;
+        gprofiler->nb_exports = 0;
 
         list_for_each_forward(p, &exports) {
             if (monitor_export(&list_entry(p, export_entry_t, list)->export) != 0) {
                 severe("monitor thread failed: %s", strerror(errno));
             }
-            gprofiler.nb_exports++;
+            gprofiler->nb_exports++;
         }
 
         if ((errno = pthread_rwlock_unlock(&exports_lock)) != 0) {
@@ -816,13 +816,13 @@ static void *monitoring_thread_slave(void *v) {
             continue;
         }
 
-        gprofiler.nb_volumes = 0;
+        gprofiler->nb_volumes = 0;
 
         list_for_each_forward(p, &volumes) {
             if (monitor_volume_slave(&list_entry(p, volume_entry_t, list)->volume) != 0) {
                 severe("monitor thread failed: %s", strerror(errno));
             }
-            gprofiler.nb_volumes++;
+            gprofiler->nb_volumes++;
         }
 
         if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
@@ -836,13 +836,13 @@ static void *monitoring_thread_slave(void *v) {
             continue;
         }
 
-        gprofiler.nb_exports = 0;
+        gprofiler->nb_exports = 0;
 
         list_for_each_forward(p, &exports) {
             if (monitor_export(&list_entry(p, export_entry_t, list)->export) != 0) {
                 severe("monitor thread failed: %s", strerror(errno));
             }
-            gprofiler.nb_exports++;
+            gprofiler->nb_exports++;
         }
 
         if ((errno = pthread_rwlock_unlock(&exports_lock)) != 0) {
@@ -1495,7 +1495,7 @@ static void on_start() {
       }
 
       SET_PROBE_VALUE(uptime, time(0));
-      strncpy((char *) gprofiler.vers, VERSION, 20);
+      strncpy((char *) gprofiler->vers, VERSION, 20);
       /*
       ** start all the slave exportds
       */
@@ -1846,6 +1846,8 @@ int main(int argc, char *argv[]) {
         {"slave", no_argument, 0, 's'},
         {0, 0, 0, 0}
     };
+    
+    ALLOC_PROFILING(epp_profiler_t);
     /*
     ** Change local directory to "/"
     */

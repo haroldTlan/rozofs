@@ -904,6 +904,36 @@ static inline void  *fuse_ctx_write_pending_queue_get(file_t *f)
   db = &fuse_save_ctx_p->db ; \
 }
 
+static inline void *rozofs_profiler_map(char *path,int size)
+{
+  int fd;
+  struct stat sb;
+  void *p;
+  
+  fd = open (path, O_RDWR| O_CREAT);
+  if (fd == 1) {
+          severe ("open failure for %s : %s",path,strerror(errno));
+          return 0;
+  }
+
+ if (fstat (fd, &sb) == -1) {
+   severe ("fstat failure for %s : %s",path,strerror(errno));
+   close(fd);
+   return 0;
+ }
+ if (ftruncate (fd, size) == -1) {
+   severe ("ftruncate failure for %s : %s",path,strerror(errno));
+   close(fd);
+   return 0;
+ }
+ p = mmap (0, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+ if (p == MAP_FAILED) {
+         severe ("map failure for %s : %s",path,strerror(errno));
+         return 0;
+ }
+ memset(p,0,size);
+ return p;
+}
 /**
 *  Macro METADATA start non blocking case
 */
@@ -911,7 +941,7 @@ static inline void  *fuse_ctx_write_pending_queue_get(file_t *f)
 { \
   unsigned long long time;\
   struct timeval     timeDay;  \
-  gprofiler.the_probe[P_COUNT]++;\
+  gprofiler->the_probe[P_COUNT]++;\
   if (buffer != NULL)\
   { \
     gettimeofday(&timeDay,(struct timezone *)0);  \
@@ -924,13 +954,13 @@ static inline void  *fuse_ctx_write_pending_queue_get(file_t *f)
  { \
   unsigned long long time;\
   struct timeval     timeDay;  \
-  gprofiler.the_probe[P_COUNT]++;\
+  gprofiler->the_probe[P_COUNT]++;\
   if (buffer != NULL)\
     {\
         gettimeofday(&timeDay,(struct timezone *)0);  \
         time = MICROLONG(timeDay); \
         SAVE_FUSE_PARAM(buffer,time);\
-        gprofiler.the_probe[P_BYTES] += the_bytes;\
+        gprofiler->the_probe[P_BYTES] += the_bytes;\
     }\
 }
 /**
@@ -945,7 +975,7 @@ static inline void  *fuse_ctx_write_pending_queue_get(file_t *f)
     gettimeofday(&timeDay,(struct timezone *)0);  \
     timeAfter = MICROLONG(timeDay); \
     RESTORE_FUSE_PARAM(buffer,time);\
-    gprofiler.the_probe[P_ELAPSE] += (timeAfter-time); \
+    gprofiler->the_probe[P_ELAPSE] += (timeAfter-time); \
   }\
 }
 

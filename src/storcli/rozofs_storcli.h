@@ -329,8 +329,8 @@ extern storcli_kpi_t storcli_kpi_transform_inverse;
  { \
   unsigned long long time;\
   struct timeval     timeDay;  \
-  gprofiler.the_probe[P_COUNT]++;\
-  gprofiler.the_probe[P_BYTES] += the_bytes;\
+  gprofiler->the_probe[P_COUNT]++;\
+  gprofiler->the_probe[P_BYTES] += the_bytes;\
   if (buffer != NULL)\
     {\
         gettimeofday(&timeDay,(struct timezone *)0);  \
@@ -343,8 +343,8 @@ extern storcli_kpi_t storcli_kpi_transform_inverse;
  { \
   unsigned long long time;\
   struct timeval     timeDay;  \
-  gprofiler.the_probe[P_COUNT]++;\
-  gprofiler.the_probe[P_BYTES] += the_bytes;\
+  gprofiler->the_probe[P_COUNT]++;\
+  gprofiler->the_probe[P_BYTES] += the_bytes;\
   if (buffer != NULL)\
     {\
         gettimeofday(&timeDay,(struct timezone *)0);  \
@@ -359,12 +359,12 @@ extern storcli_kpi_t storcli_kpi_transform_inverse;
 { \
   unsigned long long timeAfter;\
   struct timeval     timeDay;  \
-  gprofiler.the_probe[P_BYTES] += the_bytes;\
+  gprofiler->the_probe[P_BYTES] += the_bytes;\
   if (buffer != NULL)\
   { \
     gettimeofday(&timeDay,(struct timezone *)0);  \
     timeAfter = MICROLONG(timeDay); \
-    gprofiler.the_probe[P_ELAPSE] += (timeAfter-(buffer)->timestamp); \
+    gprofiler->the_probe[P_ELAPSE] += (timeAfter-(buffer)->timestamp); \
   }\
 }
 
@@ -372,24 +372,24 @@ extern storcli_kpi_t storcli_kpi_transform_inverse;
 { \
   unsigned long long timeAfter;\
   struct timeval     timeDay;  \
-  gprofiler.the_probe[P_BYTES] += the_bytes;\
+  gprofiler->the_probe[P_BYTES] += the_bytes;\
   if (buffer != NULL)\
   { \
     gettimeofday(&timeDay,(struct timezone *)0);  \
     timeAfter = MICROLONG(timeDay); \
-    gprofiler.the_probe[P_ELAPSE] += (timeAfter-(buffer)->timestamp2); \
+    gprofiler->the_probe[P_ELAPSE] += (timeAfter-(buffer)->timestamp2); \
   }\
 }
 
 
 #define STORCLI_ERR_PROF(the_probe)\
  { \
-  gprofiler.the_probe[P_COUNT]++;\
+  gprofiler->the_probe[P_COUNT]++;\
 }
 
 #define STORCLI_ERR_COUNT_PROF(the_probe,count)\
  { \
-  gprofiler.the_probe[P_COUNT] = gprofiler.the_probe[P_COUNT] + count;\
+  gprofiler->the_probe[P_COUNT] = gprofiler->the_probe[P_COUNT] + count;\
 }
 /**
 * transaction statistics

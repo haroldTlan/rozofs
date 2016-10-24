@@ -71,9 +71,9 @@ static char    myBuf[UMA_DBG_MAX_SEND_SIZE];
 
 #define SHOW_PROFILER_PROBE(probe) pChar += sprintf(pChar," %-14s | %15llu | %9llu | %18llu |\n",\
                     #probe,\
-                    (long long unsigned int)gprofiler.probe[P_COUNT],\
-                    (long long unsigned int)(gprofiler.probe[P_COUNT]?gprofiler.probe[P_ELAPSE]/gprofiler.probe[P_COUNT]:0),\
-                    (long long unsigned int)gprofiler.probe[P_ELAPSE]);
+                    (long long unsigned int)gprofiler->probe[P_COUNT],\
+                    (long long unsigned int)(gprofiler->probe[P_COUNT]?gprofiler->probe[P_ELAPSE]/gprofiler->probe[P_COUNT]:0),\
+                    (long long unsigned int)gprofiler->probe[P_ELAPSE]);
 
 /*__________________________________________________________________________
   Trace level debug function
@@ -99,8 +99,8 @@ void rozorpc_srv_debug_show(uint32_t tcpRef, void *bufRef) {
   pChar += sprintf(pChar, "   procedure    |     count       |  time(us) | cumulated time(us) |\n");
   pChar += sprintf(pChar, "----------------+-----------------+-----------+--------------------+\n");
   SHOW_PROFILER_PROBE(forward_reply);
-  gprofiler.forward_reply[0] = 0;
-  gprofiler.forward_reply[1] = 0;
+  gprofiler->forward_reply[0] = 0;
+  gprofiler->forward_reply[1] = 0;
   pChar += sprintf(pChar,"\n");
 
 #ifdef SRV_RPC_POOL 
@@ -602,7 +602,7 @@ uint32_t rozorpc_srv_module_init()
    if (rozorpc_srv_module_initialized) return RUC_OK;
    rozorpc_srv_module_initialized = 1;
    
-    memset(&gprofiler,0,sizeof(gprofiler));
+    ALLOC_PROFILING(rozorpc_profiler_t);
 
     rozorpc_srv_north_small_buf_count  = ROZORPC_SRV_NORTH_MOD_INTERNAL_READ_BUF_CNT ;
     rozorpc_srv_north_small_buf_sz     = ROZORPC_SRV_NORTH_MOD_INTERNAL_READ_BUF_SZ    ;
@@ -738,8 +738,8 @@ uint32_t rozorpc_srv_module_init_ctx_only(uint32_t count)
    if (rozorpc_srv_module_initialized) return RUC_OK;
    rozorpc_srv_module_initialized = 1;
    
-    memset(&gprofiler,0,sizeof(gprofiler));
-   
+   ALLOC_PROFILING(rozorpc_profiler_t); 
+        
    rozorpc_srv_ctx_allocated = 0;
    rozorpc_srv_ctx_count = count;
  

@@ -117,7 +117,7 @@ static SVCXPRT *storaged_monitoring_svc = 0;
 uint8_t storaged_nb_ports = 0;
 uint8_t storaged_nb_io_processes = 0;
 
-DEFINE_PROFILING(spp_profiler_t) = {0};
+DEFINE_PROFILING(spp_profiler_t);
 
 
 static int storaged_initialize() {
@@ -285,7 +285,7 @@ static void on_start() {
 //    SET_PROBE_VALUE(nb_rb_processes, 0);
 
     SET_PROBE_VALUE(uptime, time(0));
-    strncpy((char*) gprofiler.vers, VERSION, 20);
+    strncpy((char*) gprofiler->vers, VERSION, 20);
     SET_PROBE_VALUE(nb_io_processes, common_config.nb_disk_thread);
     
     // Create storio process(es)
@@ -469,6 +469,7 @@ int main(int argc, char *argv[]) {
         { 0, 0, 0, 0}
     };
 
+    ALLOC_PROFILING(spp_profiler_t);
     /*
     ** Change local directory to "/"
     */

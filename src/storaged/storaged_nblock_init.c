@@ -85,16 +85,16 @@ void * storaged_decoded_rpc_buffer_pool = NULL;
 #define sp_display_probe(the_profiler, the_probe){\
   uint64_t rate;\
   uint64_t cpu;\
-  if ((the_profiler.the_probe[P_COUNT] == 0) || (the_profiler.the_probe[P_ELAPSE] == 0) ){\
+  if ((the_profiler->the_probe[P_COUNT] == 0) || (the_profiler->the_probe[P_ELAPSE] == 0) ){\
       cpu = rate = 0;\
   } else {\
-      rate = (the_profiler.the_probe[P_COUNT] * 1000000 / the_profiler.the_probe[P_ELAPSE]);\
-      cpu = the_profiler.the_probe[P_ELAPSE] / the_profiler.the_probe[P_COUNT];\
+      rate = (the_profiler->the_probe[P_COUNT] * 1000000 / the_profiler->the_probe[P_ELAPSE]);\
+      cpu = the_profiler->the_probe[P_ELAPSE] / the_profiler->the_probe[P_COUNT];\
   }\
   *pChar++ = ' ';\
   pChar += rozofs_string_padded_append(pChar,16, rozofs_left_alignment,#the_probe);\
   pChar += rozofs_string_append(pChar," | ");\
-  pChar += rozofs_u64_padded_append(pChar,15, rozofs_right_alignment,the_profiler.the_probe[P_COUNT]);\
+  pChar += rozofs_u64_padded_append(pChar,15, rozofs_right_alignment,the_profiler->the_probe[P_COUNT]);\
   pChar += rozofs_string_append(pChar," | ");\
   pChar += rozofs_u64_padded_append(pChar,12, rozofs_right_alignment,rate);\
   pChar += rozofs_string_append(pChar," | ");\
@@ -104,8 +104,8 @@ void * storaged_decoded_rpc_buffer_pool = NULL;
 
 #define sp_clear_probe(the_profiler, the_probe)\
     {\
-      the_profiler.the_probe[P_COUNT] = 0;\
-      the_profiler.the_probe[P_ELAPSE] = 0;\
+      the_profiler->the_probe[P_COUNT] = 0;\
+      the_profiler->the_probe[P_ELAPSE] = 0;\
     }
     
 
@@ -122,18 +122,18 @@ static void show_profile_storaged_master_display(char * argv[], uint32_t tcpRef,
 
 
     // Compute uptime for storaged process
-    elapse = (int) (this_time - gprofiler.uptime);
+    elapse = (int) (this_time - gprofiler->uptime);
     days = (int) (elapse / 86400);
     hours = (int) ((elapse / 3600) - (days * 24));
     mins = (int) ((elapse / 60) - (days * 1440) - (hours * 60));
     secs = (int) (elapse % 60);
-    pChar += sprintf(pChar, "GPROFILER version %s uptime =  %d days, %2.2d:%2.2d:%2.2d\n", gprofiler.vers,days, hours, mins, secs);
+    pChar += sprintf(pChar, "GPROFILER version %s uptime =  %d days, %2.2d:%2.2d:%2.2d\n", gprofiler->vers,days, hours, mins, secs);
 
     // Print general profiling values for storaged
     pChar += rozofs_string_append(pChar, "storaged: ");
-    pChar += rozofs_string_append(pChar, (char*)gprofiler.vers);
+    pChar += rozofs_string_append(pChar, (char*)gprofiler->vers);
     pChar += rozofs_string_append(pChar, " - ");
-    pChar += rozofs_u64_padded_append(pChar, 16, rozofs_right_alignment,gprofiler.nb_io_processes);
+    pChar += rozofs_u64_padded_append(pChar, 16, rozofs_right_alignment,gprofiler->nb_io_processes);
     pChar += rozofs_string_append(pChar, " IO process(es)\n");
 
     // Print header for operations profiling values for storaged
@@ -154,7 +154,7 @@ static void show_profile_storaged_master_display(char * argv[], uint32_t tcpRef,
             sp_clear_probe(gprofiler, remove);
             sp_clear_probe(gprofiler, list_bins_files);
 	    pChar += sprintf(pChar,"Reset Done\n");  
-	    gprofiler.uptime = this_time;  	      
+	    gprofiler->uptime = this_time;  	      
         }
         else {
           pChar = show_profile_storaged_master_display_help(pChar);

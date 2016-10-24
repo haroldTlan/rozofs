@@ -383,7 +383,7 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
       /*
       ** There is already a pending request, so nothing to send to the export
       */
-      gprofiler.rozofs_ll_lookup_agg[P_COUNT]++;
+      gprofiler->rozofs_ll_lookup_agg[P_COUNT]++;
       rozofs_fuse_release_saved_context(buffer_p);
       return;
     }
@@ -391,7 +391,7 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
     ** check if the lookup is a lookup revalidate. In such a case, the VFS provides*
     ** the inode. So if the i-node attributes are fine, we do not worry
     */
-    if (child != 0)
+    if ((child != 0) && ((lookup_flags & 0x100) == 0))
     {
       uint64_t attr_us = rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino));    
       nie = get_ientry_by_inode(child);

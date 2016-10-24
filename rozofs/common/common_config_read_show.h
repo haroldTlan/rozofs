@@ -34,6 +34,7 @@
 **
 */
 void man_common_config(char * pChar) {
+  pChar += rozofs_string_append(pChar,"cconf is related to the common configuration in rozofs.conf file.\n");
   pChar += rozofs_string_append(pChar,"cconf            displays the whole rozofs.conf configuration.\n");
   pChar += rozofs_string_append(pChar,"cconf <scope>    displays only the rozofs.conf <scope> configuration part.\n");
   pChar += rozofs_string_append(pChar,"cconf reload     reloads and then displays the rozofs.conf configuration.\n");
@@ -132,6 +133,12 @@ char * show_module_client(char * pChar) {
   COMMON_CONFIG_SHOW_BOOL(rozofsmount_fuse_reply_thread,False);
   pChar += rozofs_string_append(pChar,"// To activate fast reconnect from client to exportd\n");
   COMMON_CONFIG_SHOW_BOOL(client_fast_reconnect,False);
+  pChar += rozofs_string_append(pChar,"// delay is minutes after which a file is considered as an archived file (unit is minute)\n");
+  COMMON_CONFIG_SHOW_INT_OPT(archive_file_delay,10,"0:3600");
+  pChar += rozofs_string_append(pChar,"// dentry cache timeout for archive file type (unit is second)\n");
+  COMMON_CONFIG_SHOW_INT_OPT(archive_file_dentry_timeout,30,"0:300");
+  pChar += rozofs_string_append(pChar,"// attribute cache timeout for archive file type (unit is second)\n");
+  COMMON_CONFIG_SHOW_INT_OPT(archive_file_attr_timeout,30,"0:300");
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -361,6 +368,12 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_BOOL(rozofsmount_fuse_reply_thread,False);
   // To activate fast reconnect from client to exportd 
   COMMON_CONFIG_READ_BOOL(client_fast_reconnect,False);
+  // delay is minutes after which a file is considered as an archived file (unit is minute) 
+  COMMON_CONFIG_READ_INT_MINMAX(archive_file_delay,10,0,3600);
+  // dentry cache timeout for archive file type (unit is second) 
+  COMMON_CONFIG_READ_INT_MINMAX(archive_file_dentry_timeout,30,0,300);
+  // attribute cache timeout for archive file type (unit is second) 
+  COMMON_CONFIG_READ_INT_MINMAX(archive_file_attr_timeout,30,0,300);
   /*
   ** storage scope configuration elements
   */

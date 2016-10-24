@@ -22,6 +22,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <errno.h>
+#include <rozofs/common/common_config.h>
+#include <rozofs/core/ruc_sockCtl_api.h>
 
 typedef struct _rozofs_configure_param_t
 {
@@ -60,8 +62,10 @@ typedef enum
   TMR_FUSE_ENTRY_DIR_CACHE_MS,           /**< directory entry cache timeout for fuse        */
 
   /*
-  ** dirent cache timer
+  ** timer related to archiving cache (file case)
   */
+  TMR_FUSE_ATTR_ARCH_CACHE,            /**< file attribute cache timeout for fuse    */
+  TMR_FUSE_ENTRY_ARCH_CACHE,           /**< file entry cache timeout for fuse        */
   
   /*
   ** timer related to TCP connection and load balancing group
@@ -169,6 +173,45 @@ static inline double rozofs_tmr_get_attr(int dir)
 /**
 *  Get the attribute cache timer for FUSE
 
+  @param dir: assert to 1 when the inode is a directory
+*/
+static inline double rozofs_tmr_get_attr_mtime(int dir,uint64_t mtime)
+{
+  if (dir)
+  {
+    return ((double) rozofs_timer_conf[TMR_FUSE_ATTR_DIR_CACHE_MS].cur_val)/1000;
+  }
+  if (mtime== 0)
+  {     
+    if (rozofs_timer_conf[TMR_FUSE_ATTR_CACHE].cur_val != 0) {
+      return (double) rozofs_timer_conf[TMR_FUSE_ATTR_CACHE].cur_val;
+    }
+    if (rozofs_timer_conf[TMR_FUSE_ATTR_CACHE_MS].cur_val != 0) {
+      return ((double) rozofs_timer_conf[TMR_FUSE_ATTR_CACHE_MS].cur_val)/1000;
+    }
+    return 0;
+  }
+  /*
+  ** check the mtime value against the archive delay
+  */
+  if ((mtime+(common_config.archive_file_delay*60)) > rozofs_get_ticker_s())
+  {
+    if (rozofs_timer_conf[TMR_FUSE_ATTR_CACHE].cur_val != 0) {
+      return (double) rozofs_timer_conf[TMR_FUSE_ATTR_CACHE].cur_val;
+    }
+    if (rozofs_timer_conf[TMR_FUSE_ATTR_CACHE_MS].cur_val != 0) {
+      return ((double) rozofs_timer_conf[TMR_FUSE_ATTR_CACHE_MS].cur_val)/1000;
+    }
+    return 0;    
+  }
+  return (double) rozofs_timer_conf[TMR_FUSE_ATTR_ARCH_CACHE].cur_val;
+}
+
+/*__________________________________________________________________________
+*/
+/**
+*  Get the attribute cache timer for FUSE
+
 */
 static inline int rozofs_tmr_get_attr_ms()
 {
@@ -214,6 +257,48 @@ static inline double rozofs_tmr_get_entry(int dir)
   }
   return 0;
 }
+
+/*__________________________________________________________________________
+*/
+/**
+*  Get the entry cache timer for FUSE
+
+  @param dir: assert to 1 when the inode is a directory
+  @param mtime: inode mtime, 0 if not significant (only needed for regular file)
+
+*/
+static inline double rozofs_tmr_get_entry_mtime(int dir,uint64_t mtime)
+{
+  if (dir)
+  {
+    return ((double) rozofs_timer_conf[TMR_FUSE_ENTRY_DIR_CACHE_MS].cur_val)/1000;
+  }
+  if (mtime== 0)
+  {
+    if (rozofs_timer_conf[TMR_FUSE_ENTRY_CACHE].cur_val != 0) {
+      return (double) rozofs_timer_conf[TMR_FUSE_ENTRY_CACHE].cur_val;
+    }
+    if (rozofs_timer_conf[TMR_FUSE_ENTRY_CACHE_MS].cur_val != 0) {
+      return ((double) rozofs_timer_conf[TMR_FUSE_ENTRY_CACHE_MS].cur_val)/1000;
+    }
+    return 0;
+  }
+  /*
+  ** check the mtime value against the archive delay
+  */
+  if ((mtime+(common_config.archive_file_delay*60)) > rozofs_get_ticker_s())
+  {
+    if (rozofs_timer_conf[TMR_FUSE_ENTRY_CACHE].cur_val != 0) {
+      return (double) rozofs_timer_conf[TMR_FUSE_ENTRY_CACHE].cur_val;
+    }
+    if (rozofs_timer_conf[TMR_FUSE_ENTRY_CACHE_MS].cur_val != 0) {
+      return ((double) rozofs_timer_conf[TMR_FUSE_ENTRY_CACHE_MS].cur_val)/1000;
+    }
+    return 0;    
+  }
+  return (double) rozofs_timer_conf[TMR_FUSE_ENTRY_ARCH_CACHE].cur_val;
+}
+
 
 /*__________________________________________________________________________
 */

@@ -107,6 +107,12 @@ typedef struct _common_config_global_t {
   uint32_t    rozofsmount_fuse_reply_thread;
   // To activate fast reconnect from client to exportd
   uint32_t    client_fast_reconnect;
+  // delay is minutes after which a file is considered as an archived file (unit is minute)
+  uint32_t    archive_file_delay;
+  // dentry cache timeout for archive file type (unit is second)
+  uint32_t    archive_file_dentry_timeout;
+  // attribute cache timeout for archive file type (unit is second)
+  uint32_t    archive_file_attr_timeout;
 
   /*
   ** storage scope configuration elements

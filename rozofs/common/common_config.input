@@ -116,6 +116,12 @@ STRING  storage ssh_user 	"root"
 STRING  storage ssh_param 	""
 // To activate fast reconnect from client to exportd
 BOOL	client client_fast_reconnect	        False
+// delay is minutes after which a file is considered as an archived file (unit is minute)
+INT  client    archive_file_delay        10 0:3600
+// dentry cache timeout for archive file type (unit is second)
+INT  client    archive_file_dentry_timeout        30 0:300
+// attribute cache timeout for archive file type (unit is second)
+INT client     archive_file_attr_timeout        30 0:300
 // To disable synchronous write of attributes when set to True
 BOOL	export disable_sync_attributes	        False
 // self healing : Paralellism factor for device self healing feature

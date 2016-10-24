@@ -118,7 +118,7 @@ extern void storaged_profile_program_1(struct svc_req *rqstp, SVCXPRT *ctl_svc);
 uint8_t storaged_nb_ports = 0;
 uint8_t storaged_nb_io_processes = 0;
 
-DEFINE_PROFILING(spp_profiler_t) = {0};
+DEFINE_PROFILING(spp_profiler_t);
 
     uint32_t ipadd_hostformat ; /**< storio IP address in host format */
     uint16_t  port_hostformat ;/**< storio port in host format */
@@ -257,6 +257,7 @@ int main(int argc, char *argv[]) {
         { 0, 0, 0, 0}
     };
 
+    ALLOC_PROFILING(spp_profiler_t);
     /*
     ** Change local directory to "/"
     */
@@ -371,7 +372,7 @@ int main(int argc, char *argv[]) {
     }
 
     SET_PROBE_VALUE(uptime, time(0));
-    strncpy((char*) gprofiler.vers, VERSION, 20);
+    strncpy((char*) gprofiler->vers, VERSION, 20);
     SET_PROBE_VALUE(nb_io_processes, storaged_nb_io_processes);
     
     

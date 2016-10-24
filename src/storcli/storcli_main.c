@@ -65,7 +65,7 @@
 
 int rozofs_storcli_non_blocking_init(uint16_t dbg_port, uint16_t rozofsmount_instance);
 
-DEFINE_PROFILING(stcpp_profiler_t) = {0};
+DEFINE_PROFILING(stcpp_profiler_t);
 
 
 /*
@@ -153,32 +153,32 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 #define RESET_PROFILER_PROBE(probe) \
 { \
-         gprofiler.probe[P_COUNT] = 0;\
-         gprofiler.probe[P_ELAPSE] = 0; \
+         gprofiler->probe[P_COUNT] = 0;\
+         gprofiler->probe[P_ELAPSE] = 0; \
 }
 
 #define RESET_PROFILER_PROBE_BYTE(probe) \
 { \
    RESET_PROFILER_PROBE(probe);\
-   gprofiler.probe[P_BYTES] = 0; \
+   gprofiler->probe[P_BYTES] = 0; \
 }
 
 #define SHOW_PROFILER_PROBE_COUNT(probe) {\
-  if (gprofiler.probe[P_COUNT]) {\
+  if (gprofiler->probe[P_COUNT]) {\
     pChar += sprintf(pChar," %-18s | %15"PRIu64"  | %9s  | %18s  | %15s |\n",\
-                     #probe,gprofiler.probe[P_COUNT]," "," "," ");\
+                     #probe,gprofiler->probe[P_COUNT]," "," "," ");\
   }\
 }
 
 
 #define SHOW_PROFILER_PROBE_BYTE(probe) {\
-  if (gprofiler.probe[P_COUNT]) {\
+  if (gprofiler->probe[P_COUNT]) {\
     pChar += sprintf(pChar," %-18s | %15"PRIu64"  | %9"PRIu64"  | %18"PRIu64"  | %15"PRIu64" |\n",\
 		     #probe,\
-		     gprofiler.probe[P_COUNT],\
-		     gprofiler.probe[P_COUNT]?gprofiler.probe[P_ELAPSE]/gprofiler.probe[P_COUNT]:0,\
-		     gprofiler.probe[P_ELAPSE],\
-                     gprofiler.probe[P_BYTES]);\
+		     gprofiler->probe[P_COUNT],\
+		     gprofiler->probe[P_COUNT]?gprofiler->probe[P_ELAPSE]/gprofiler->probe[P_COUNT]:0,\
+		     gprofiler->probe[P_ELAPSE],\
+                     gprofiler->probe[P_BYTES]);\
   }\
 }
 
@@ -214,7 +214,7 @@ void show_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 
     // Compute uptime for storaged process
-    elapse = (int) (this_time - gprofiler.uptime);
+    elapse = (int) (this_time - gprofiler->uptime);
     days = (int) (elapse / 86400);
     hours = (int) ((elapse / 3600) - (days * 24));
     mins = (int) ((elapse / 60) - (days * 1440) - (hours * 60));
@@ -222,7 +222,7 @@ void show_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 
 
-    pChar += sprintf(pChar, "GPROFILER version %s uptime =  %d days, %2.2d:%2.2d:%2.2d\n", gprofiler.vers,days, hours, mins, secs);
+    pChar += sprintf(pChar, "GPROFILER version %s uptime =  %d days, %2.2d:%2.2d:%2.2d\n", gprofiler->vers,days, hours, mins, secs);
     pChar += sprintf(pChar, "   procedure        |     count        |  time(us)  | cumulated time(us)  |     bytes       |\n");
     pChar += sprintf(pChar, "--------------------+------------------+------------+---------------------+-----------------+\n");
 
@@ -304,7 +304,7 @@ void show_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
 	RESET_PROFILER_PROBE(resize_prj_err);
 	
 	pChar += sprintf(pChar,"Reset Done\n");  
-	gprofiler.uptime = this_time;  
+	gprofiler->uptime = this_time;  
       }
       else {
 	/*
@@ -354,7 +354,7 @@ char * display_corrupted(char * pChar) {
   pChar += rozofs_string_append(pChar, ",\n         \"running\" : ");
   pChar += rozofs_string_append(pChar, (noReadFaultTolerant==0)?"\"Tolerant\"":"\"EIO\"");
   pChar += rozofs_string_append(pChar, "\n      },\n      \"corruption count\" : ");
-  pChar += rozofs_u64_append(pChar, gprofiler.read_blk_corrupted[P_COUNT]);
+  pChar += rozofs_u64_append(pChar, gprofiler->read_blk_corrupted[P_COUNT]);
   pChar += rozofs_string_append(pChar, ",\n");
 
   /*
@@ -1531,6 +1531,8 @@ int main(int argc, char *argv[]) {
         { 0, 0, 0, 0}
     };
 
+    ALLOC_PROFILING(stcpp_profiler_t);
+
     /*
     ** Change local directory to "/"
     */
@@ -1850,7 +1852,7 @@ int main(int argc, char *argv[]) {
     rozofs_storcli_cid_table_state_init();
     storcli_lbg_cnx_sup_init();
 
-    gprofiler.uptime = time(0);
+    gprofiler->uptime = time(0);
     
     /*
     ** Kill the eventual storcli with same instance that main be locked

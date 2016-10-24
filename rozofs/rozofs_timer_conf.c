@@ -65,6 +65,11 @@ void rozofs_tmr_init_configuration()
   DEF_TMR(FUSE_ATTR_DIR_CACHE_MS,0,300000,10000,TMR_MS);            /**< directory attribute cache timeout for fuse    */
   DEF_TMR(FUSE_ENTRY_DIR_CACHE_MS,0,300000,10000,TMR_MS);           /**< directory entry cache timeout for fuse        */
   /*
+  ** timer related to archive cache (file case only)
+  */
+  DEF_TMR(FUSE_ATTR_ARCH_CACHE,0,300,10,TMR_SEC);                   /**< file attribute cache timeout for fuse archive case    */
+  DEF_TMR(FUSE_ENTRY_ARCH_CACHE,0,300,10,TMR_SEC);           /**< file entry cache timeout for fuse archive case        */
+  /*
   ** timer related to TCP connection and load balancing group
   */
   DEF_TMR(TCP_FIRST_RECONNECT,1,10,2,TMR_SEC);        /**< TCP timer for the first TCP re-connect attempt  default   2 s */

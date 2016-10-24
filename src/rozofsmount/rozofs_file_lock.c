@@ -1186,7 +1186,7 @@ int rozofs_ll_setlk_internal(file_t * file) {
     struct timeval tv;
     int ret;
 
-    gprofiler.rozofs_ll_setlk_int[P_COUNT]++;
+    gprofiler->rozofs_ll_setlk_int[P_COUNT]++;
     gettimeofday(&tv,(struct timezone *)0);
     file->timeStamp = MICROLONG(tv);
 
@@ -1220,7 +1220,7 @@ int rozofs_ll_setlk_internal(file_t * file) {
 #endif
    if (ret == 0) return ret;
    gettimeofday(&tv,(struct timezone *)0); 
-   gprofiler.rozofs_ll_setlk_int[P_ELAPSE] += (MICROLONG(tv)-file->timeStamp);  
+   gprofiler->rozofs_ll_setlk_int[P_ELAPSE] += (MICROLONG(tv)-file->timeStamp);  
    /* If lock request can not be sent, rechain the lock request immediatly */
    ruc_objInsertTail(&pending_lock_list,&file->pending_lock);
    return ret;   				         
@@ -1405,7 +1405,7 @@ error:
     
 out:   
     gettimeofday(&tv,(struct timezone *)0); 
-    gprofiler.rozofs_ll_setlk_int[P_ELAPSE] += (MICROLONG(tv)-file->timeStamp);   
+    gprofiler->rozofs_ll_setlk_int[P_ELAPSE] += (MICROLONG(tv)-file->timeStamp);   
      
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    
     if (recv_buf != NULL) ruc_buf_freeBuffer(recv_buf);           

@@ -72,7 +72,7 @@
 int rozofs_rotation_read_modulo = 0;
 static char *mountpoint = NULL;
     
-DEFINE_PROFILING(mpp_profiler_t) = {0};
+DEFINE_PROFILING(mpp_profiler_t) ;
 
 sem_t *semForEver; /**< semaphore used for stopping rozofsmount: typically on umount */
 
@@ -666,28 +666,28 @@ void show_ientry(char * argv[], uint32_t tcpRef, void *bufRef) {
 */  
 #define SHOW_PROFILER_PROBE(probe) pChar += sprintf(pChar," %-12s | %15"PRIu64" | %9"PRIu64" | %18"PRIu64" | %15s |\n",\
                     #probe,\
-                    gprofiler.rozofs_ll_##probe[P_COUNT],\
-                    gprofiler.rozofs_ll_##probe[P_COUNT]?gprofiler.rozofs_ll_##probe[P_ELAPSE]/gprofiler.rozofs_ll_##probe[P_COUNT]:0,\
-                    gprofiler.rozofs_ll_##probe[P_ELAPSE]," " );
+                    gprofiler->rozofs_ll_##probe[P_COUNT],\
+                    gprofiler->rozofs_ll_##probe[P_COUNT]?gprofiler->rozofs_ll_##probe[P_ELAPSE]/gprofiler->rozofs_ll_##probe[P_COUNT]:0,\
+                    gprofiler->rozofs_ll_##probe[P_ELAPSE]," " );
 
 #define SHOW_PROFILER_PROBE_BYTE(probe) pChar += sprintf(pChar," %-12s | %15"PRIu64" | %9"PRIu64" | %18"PRIu64" | %15"PRIu64" |\n",\
                     #probe,\
-                    gprofiler.rozofs_ll_##probe[P_COUNT],\
-                    gprofiler.rozofs_ll_##probe[P_COUNT]?gprofiler.rozofs_ll_##probe[P_ELAPSE]/gprofiler.rozofs_ll_##probe[P_COUNT]:0,\
-                    gprofiler.rozofs_ll_##probe[P_ELAPSE],\
-                    gprofiler.rozofs_ll_##probe[P_BYTES]);
+                    gprofiler->rozofs_ll_##probe[P_COUNT],\
+                    gprofiler->rozofs_ll_##probe[P_COUNT]?gprofiler->rozofs_ll_##probe[P_ELAPSE]/gprofiler->rozofs_ll_##probe[P_COUNT]:0,\
+                    gprofiler->rozofs_ll_##probe[P_ELAPSE],\
+                    gprofiler->rozofs_ll_##probe[P_BYTES]);
 
 
 #define RESET_PROFILER_PROBE(probe) \
 { \
-         gprofiler.rozofs_ll_##probe[P_COUNT] = 0;\
-         gprofiler.rozofs_ll_##probe[P_ELAPSE] = 0; \
+         gprofiler->rozofs_ll_##probe[P_COUNT] = 0;\
+         gprofiler->rozofs_ll_##probe[P_ELAPSE] = 0; \
 }
 
 #define RESET_PROFILER_PROBE_BYTE(probe) \
 { \
    RESET_PROFILER_PROBE(probe);\
-   gprofiler.rozofs_ll_##probe[P_BYTES] = 0; \
+   gprofiler->rozofs_ll_##probe[P_BYTES] = 0; \
 }
 static char * show_profiler_help(char * pChar) {
   pChar += sprintf(pChar,"usage:\n");
@@ -702,14 +702,14 @@ void show_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
     int days, hours, mins, secs;
     time_t  this_time = time(0);    
     
-    elapse = (int) (this_time - gprofiler.uptime);
+    elapse = (int) (this_time - gprofiler->uptime);
     days = (int) (elapse / 86400);
     hours = (int) ((elapse / 3600) - (days * 24));
     mins = (int) ((elapse / 60) - (days * 1440) - (hours * 60));
     secs = (int) (elapse % 60);
 
 
-    pChar += sprintf(pChar, "GPROFILER version %s uptime =  %d days, %2.2d:%2.2d:%2.2d\n", gprofiler.vers,days, hours, mins, secs);
+    pChar += sprintf(pChar, "GPROFILER version %s uptime =  %d days, %2.2d:%2.2d:%2.2d\n", gprofiler->vers,days, hours, mins, secs);
     pChar += sprintf(pChar, " - ientry counter: %llu\n", (long long unsigned int) rozofs_ientries_count);
     pChar += sprintf(pChar, " - opened file   : %llu\n", (long long unsigned int) rozofs_opened_file);
     pChar += sprintf(pChar, "   procedure  |     count       |  time(us) | cumulated time(us) |     bytes       |\n");
@@ -787,7 +787,7 @@ void show_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
 	RESET_PROFILER_PROBE(clearlkowner);      
 	RESET_PROFILER_PROBE(ioctl);
 	pChar += sprintf(pChar,"Reset Done\n");  
-	gprofiler.uptime = this_time;   
+	gprofiler->uptime = this_time;   
       }
       else {
 	/*
@@ -2067,6 +2067,7 @@ int main(int argc, char *argv[]) {
     int res;
     struct rlimit core_limit;
 
+    ALLOC_PROFILING(mpp_profiler_t) ;
     /*
     ** Change local directory to "/"
     */
@@ -2438,9 +2439,14 @@ int main(int argc, char *argv[]) {
       rozofs_tmr_configure(TMR_TCP_RECONNECT,1);
       rozofs_tmr_configure(TMR_RPC_NULL_PROC_TCP,1);
       rozofs_tmr_configure(TMR_RPC_NULL_PROC_LBG,1);   
-    }      
+    }
+    /*
+    ** update the file archiving timers
+    */
+    rozofs_tmr_configure(TMR_FUSE_ATTR_ARCH_CACHE,common_config.archive_file_attr_timeout);
+    rozofs_tmr_configure(TMR_FUSE_ENTRY_ARCH_CACHE,common_config.archive_file_dentry_timeout);          
 
-    gprofiler.uptime = time(0);
+    gprofiler->uptime = time(0);
 
     res = fuseloop(&args, fg);
 
