@@ -152,7 +152,7 @@ char * show_module_storage(char * pChar) {
   pChar += rozofs_string_append(pChar,"# storage scope configuration elements\n");
   pChar += rozofs_string_append(pChar,"#\n\n");
   pChar += rozofs_string_append(pChar,"// Number of disk threads in the STORIO.\n");
-  COMMON_CONFIG_SHOW_INT_OPT(nb_disk_thread,4,"2:32");
+  COMMON_CONFIG_SHOW_INT_OPT(nb_disk_thread,4,"2:64");
   pChar += rozofs_string_append(pChar,"// Whether STORIO is in multiple (1 STORIO per cluster) \n");
   pChar += rozofs_string_append(pChar,"// or single mode (only 1 STORIO).\n");
   COMMON_CONFIG_SHOW_BOOL(storio_multiple_mode,True);
@@ -378,7 +378,7 @@ static inline void common_config_generated_read(char * fname) {
   ** storage scope configuration elements
   */
   // Number of disk threads in the STORIO. 
-  COMMON_CONFIG_READ_INT_MINMAX(nb_disk_thread,4,2,32);
+  COMMON_CONFIG_READ_INT_MINMAX(nb_disk_thread,4,2,64);
   // Whether STORIO is in multiple (1 STORIO per cluster)  
   // or single mode (only 1 STORIO). 
   COMMON_CONFIG_READ_BOOL(storio_multiple_mode,True);

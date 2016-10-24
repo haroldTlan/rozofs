@@ -50,7 +50,7 @@ BOOL	export 	fid_recycle                     False
 BOOL	client 	wr_ack_on_inverse		False
 INT	export 	export_buf_cnt			128 32:1024
 // Number of disk threads in the STORIO.
-INT	storage nb_disk_thread         		4 2:32
+INT	storage nb_disk_thread         		4 2:64
 // Whether STORIO is in multiple (1 STORIO per cluster) 
 // or single mode (only 1 STORIO).
 BOOL	storage storio_multiple_mode 		True

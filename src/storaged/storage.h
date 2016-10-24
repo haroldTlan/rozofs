@@ -58,7 +58,7 @@ static inline int rozofs_scan_mark_file(char * name, int * cid, int * sid, int *
   if (ret != 3) return -1;
   return 0;
 }
-#define ROZOFS_MAX_DISK_THREADS  32
+#define ROZOFS_MAX_DISK_THREADS  64
 
 /* Storage config to be configured in cfg file */
 #define STORAGE_MAX_DEVICE_NB   64
