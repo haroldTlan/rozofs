@@ -41,7 +41,8 @@ int af_unix_disk_socket_ref = -1;
  
  #define MICROLONG(time) ((unsigned long long)time.tv_sec * 1000000 + time.tv_usec)
 
-
+uint64_t   af_unix_disk_parallel_req        = 0;
+uint64_t   af_unix_disk_parallel_req_tbl[ROZOFS_MAX_DISK_THREADS] = {0};
 
 storage_t *storaged_lookup(cid_t cid, sid_t sid) ;
 
@@ -1221,6 +1222,7 @@ void *storio_disk_thread(void *arg) {
   storio_disk_thread_msg_t   msg;
   rozofs_disk_thread_ctx_t * ctx_p = (rozofs_disk_thread_ctx_t*)arg;
   int                        bytesRcvd;
+  uint64_t                   newval;
 
   uma_dbg_thread_add_self("Disk thread");
 
@@ -1273,7 +1275,11 @@ void *storio_disk_thread(void *arg) {
       fatal("Disk Thread %d socket is dead (%d/%d) %s !!\n",ctx_p->thread_idx,bytesRcvd,(int)sizeof(msg),strerror(errno));
       exit(0);    
     }
-    
+      
+    newval = __atomic_fetch_add(&af_unix_disk_parallel_req,1,__ATOMIC_SEQ_CST);
+    newval++;
+    af_unix_disk_parallel_req_tbl[newval]++;
+        
     msg.size = 0;
     
     switch (msg.opcode) {
@@ -1322,6 +1328,7 @@ void *storio_disk_thread(void *arg) {
         fatal(" unexpected opcode : %d\n",msg.opcode);
         exit(0);       
     }
+    newval = __atomic_fetch_sub(&af_unix_disk_parallel_req,1,__ATOMIC_SEQ_CST)-1;
 //    sched_yield();
   }
 }

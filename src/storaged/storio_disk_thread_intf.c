@@ -44,6 +44,12 @@ int        af_unix_disk_south_socket_ref = -1;
 int        af_unix_disk_thread_count=0;
 int        af_unix_disk_pending_req_count = 0;
 
+#define MAX_PENDING_REQUEST     64
+uint64_t   af_unix_disk_pending_req_tbl[MAX_PENDING_REQUEST];
+
+extern uint64_t   af_unix_disk_parallel_req_tbl[ROZOFS_MAX_DISK_THREADS];
+extern uint64_t   af_unix_disk_parallel_req;
+
 struct  sockaddr_un storio_south_socket_name;
 struct  sockaddr_un storio_north_socket_name;
 
@@ -200,9 +206,10 @@ void storio_throughput_counter_init(void) {
   /*
   ** Initialize counters
   */
-  storio_cnts[STORIO_RD_CNT] = NULL;
-  storio_cnts[STORIO_WR_CNT] = NULL;
-  
+  storio_throughput_enable = 1;
+  storio_cnts[STORIO_RD_CNT] = rozofs_thr_cnts_allocate(storio_cnts[STORIO_RD_CNT],"Read");
+  storio_cnts[STORIO_WR_CNT] = rozofs_thr_cnts_allocate(storio_cnts[STORIO_WR_CNT],"Write");    
+  rozofs_thr_set_column(6); 
   /*
   ** Register the diagnostic function
   */
@@ -287,6 +294,36 @@ void disk_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     }  
     doreset = 1;
   }
+  
+  pChar += rozofs_string_append(pChar,"current pending requests = ");
+  pChar += rozofs_u32_append(pChar,af_unix_disk_pending_req_count);
+  pChar += rozofs_string_append(pChar,"\npending requests table   ");  
+  for (i=0; i<MAX_PENDING_REQUEST; i++) {
+    if (af_unix_disk_pending_req_tbl[i]==0) {
+      continue;
+    }
+    pChar += rozofs_string_append(pChar," [");
+    pChar += rozofs_u32_append(pChar,i);
+    pChar += rozofs_string_append(pChar,"]=");    
+    pChar += rozofs_u32_append(pChar,af_unix_disk_pending_req_tbl[i]);
+    if ((i%8)==0) pChar += rozofs_string_append(pChar,"\n                         ");
+  }
+  
+  pChar += rozofs_string_append(pChar,"\nparallel active requests = ");
+  pChar += rozofs_u32_append(pChar,af_unix_disk_parallel_req); 
+  pChar += rozofs_string_append(pChar,"\nactive requests table    ");
+  for (i=0; i<ROZOFS_MAX_DISK_THREADS; i++) {
+    if (af_unix_disk_parallel_req_tbl[i]==0) {
+      continue;
+    }
+    pChar += rozofs_string_append(pChar," [");
+    pChar += rozofs_u32_append(pChar,i);
+    pChar += rozofs_string_append(pChar,"]=");    
+    pChar += rozofs_u32_append(pChar,af_unix_disk_parallel_req_tbl[i]);
+    if ((i%8)==0) pChar += rozofs_string_append(pChar,"\n                         ");
+  }    
+  pChar += rozofs_string_append(pChar,"\n");
+     
   
   memset(&sum, 0, sizeof(sum));
   stopIdx  = 0;
@@ -388,6 +425,8 @@ void disk_thread_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     for (i=0; i<af_unix_disk_thread_count; i++) {
        memset(&p[i].stat,0,sizeof(p[i].stat));
     }
+    memset(af_unix_disk_pending_req_tbl,0,sizeof(af_unix_disk_pending_req_tbl));
+    memset(af_unix_disk_parallel_req_tbl,0,sizeof(uint64_t)*ROZOFS_MAX_DISK_THREADS);
     pChar += rozofs_string_append(pChar,"Reset done\n");                
   }
   
@@ -652,8 +691,6 @@ uint32_t af_unix_disk_rcvMsgsock(void * unused,int socketId)
   storio_disk_thread_msg_t   msg;
   int                        bytesRcvd;
   int eintr_count = 0;
-  
-
 
   /*
   ** disk responses have the highest priority, loop on the socket until
@@ -665,7 +702,7 @@ uint32_t af_unix_disk_rcvMsgsock(void * unused,int socketId)
     */
     if (af_unix_disk_pending_req_count == 0)
     {
-     return TRUE;
+     goto out;
     }
     /*
     ** read the north disk socket
@@ -680,7 +717,7 @@ uint32_t af_unix_disk_rcvMsgsock(void * unused,int socketId)
         /*
         ** the socket is empty
         */
-        return TRUE;
+        goto out;
 
        case EINTR:
          /*
@@ -692,7 +729,7 @@ uint32_t af_unix_disk_rcvMsgsock(void * unused,int socketId)
          ** here we consider it as a error
          */
          severe ("Disk Thread Response error too many eintr_count %d",eintr_count);
-         return TRUE;
+         goto out;
 
        case EBADF:
        case EFAULT:
@@ -713,7 +750,9 @@ uint32_t af_unix_disk_rcvMsgsock(void * unused,int socketId)
     af_unix_disk_pending_req_count--;
     if (  af_unix_disk_pending_req_count < 0) af_unix_disk_pending_req_count = 0;
     af_unix_disk_response(&msg); 
-  }       
+  }    
+  
+out:
   return TRUE;
 }
 
@@ -806,6 +845,12 @@ int storio_disk_thread_intf_send(storio_device_mapping_t      * fidCtx,
   }
   
   af_unix_disk_pending_req_count++;
+  if (af_unix_disk_pending_req_count<MAX_PENDING_REQUEST) {
+    af_unix_disk_pending_req_tbl[af_unix_disk_pending_req_count]++;
+  }
+  else {
+    af_unix_disk_pending_req_tbl[MAX_PENDING_REQUEST-1]++;    
+  }  
   return 0;
 }
 
