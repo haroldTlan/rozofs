@@ -73,7 +73,8 @@ char prompt[64];
 **   lnkdebug <IPADDR> <PORT>
 */
 void syntax_display() {
-  printf("\n%s ([-i <hostname>] {-p <port>|-T <target>})... [-c <cmd|all>]... [-f <cmd file>]... [-period <seconds>] [-t <seconds>]\n\n",prgName);
+  printf("\n%s - RozoFS %s\n\n", prgName, VERSION);
+  printf("%s ([-i <hostname>] {-p <port>|-T <target>})... [-c <cmd|all>]... [-f <cmd file>]... [-period <seconds>] [-t <seconds>]\n\n",prgName);
   printf("Several diagnostic targets can be specified ( [-i <hostname>] {-p <port>|-T <target>} )...\n");
   printf("  -i <hostname>  IP address or hostname of the diagnostic target.\n");
   printf("                 When omitted previous -i value in the command line is taken as default\n");

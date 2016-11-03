@@ -1,0 +1,67 @@
+#/bin/bash
+RESULT="/tmp/rozo_dumpcnf.conf"
+
+#______________________________________________
+# Display the content of a file
+# $1 file name
+cat_file() {
+  if [ ! -f $1 ];
+  then
+    return
+  fi
+    
+  echo "_______________________________$1:"
+  cat $1
+}
+#______________________________________________
+# Display the content of a directory
+# $1 directory name
+cat_dir() {
+
+  if [ ! -d $1 ];
+  then
+    echo "________________directory $1: diretory does not exist !!!"
+    return
+  fi
+  echo 
+  echo "________________directory $1:"
+
+  for file in `ls -a $1`
+  do
+    cat_file $1/$file
+  done  
+}
+   
+cat_all() {
+  cat_file   /etc/fstab
+  cat_file   /etc/sysctl.conf
+  cat_file   /etc/resolv.conf
+  cat_file   /etc/sysctl.conf  
+  cat_file   /etc/sysfs.conf  
+  cat_file   /etc/nsswitch.conf  
+  cat_dir    /etc/network
+  cat_dir    /etc/rozofs
+  cat_dir    /etc/corosync
+  cat_dir    /etc/drbd.d
+  cat_dir    /etc/samba
+  cat_dir    /etc/lvm
+  cat_dir    /etc/pacemaker
+  cat_dir    /etc/ctdb
+  cat_dir    /proc/sys/net/ipv4
+  cat_dir    /proc/sys/net/core
+  cat_dir    /proc/sys/net/unix
+  cat_dir    /proc/sys/vm
+  
+  for dev in `ls /sys/block`
+  do
+    case "$dev" in
+      .|..) continue;;
+      *)    cat_dir /sys/block/${dev}/queue
+    esac  
+  done
+}
+
+cat_all > ${RESULT}
+echo
+echo "Result is in ${RESULT}"
+echo
