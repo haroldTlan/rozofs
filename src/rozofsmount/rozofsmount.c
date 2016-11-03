@@ -180,9 +180,12 @@ static void usage() {
     fprintf(stderr, "    -o rozofsminreadsize=N\tdefine minimum read size on disk in KiB (default: %u)\n", ROZOFS_BSIZE_BYTES(ROZOFS_BSIZE_MIN)/1024);
     fprintf(stderr, "    -o rozofsmaxwritepending=N\tdefine the number of write request(s) that can be sent for an open file from the rozofsmount toward the storcli asynchronously (default: 4)\n");
     fprintf(stderr, "    -o rozofsmaxretry=N\t\tdefine number of retries before I/O error is returned (default: 50)\n");
-    fprintf(stderr, "    -o rozofsexporttimeout=N\tdefine timeout (s) for exportd requests (default: 25)\n");
-    fprintf(stderr, "    -o rozofsstoragetimeout=N\tdefine timeout (s) for IO storaged requests (default: 4)\n");
-    fprintf(stderr, "    -o rozofsstorclitimeout=N\tdefine timeout (s) for IO storcli requests (default: 15)\n");
+    fprintf(stderr, "    -o rozofsexporttimeout=N\tdefine timeout (s) for exportd requests (default: %ds)\n",
+                            rozofs_tmr_get(TMR_EXPORT_PROGRAM));
+    fprintf(stderr, "    -o rozofsstoragetimeout=N\tdefine timeout (s) for IO storaged requests (default: %ds)\n",
+                            rozofs_tmr_get(TMR_STORAGE_PROGRAM));
+    fprintf(stderr, "    -o rozofsstorclitimeout=N\tdefine timeout (s) for IO storcli requests (default: %ds)\n",
+                            rozofs_tmr_get(TMR_STORCLI_PROGRAM));
     fprintf(stderr, "    -o rozofsattrtimeout=N\tdefine timeout (s) for which file/directory attributes are cached (default: %ds)\n",
                             rozofs_tmr_get(TMR_FUSE_ATTR_CACHE));
     fprintf(stderr, "    -o rozofsattrtimeoutms=N\tdefine timeout (ms) for which file/directory attributes are cached (default: %ds)\n",
