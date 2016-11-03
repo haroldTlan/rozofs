@@ -31,8 +31,8 @@
 #include "file.h"
 
 #define ROZOFSMOUNT_MAX_EXPORT_TX 32
-#define ROZOFSMOUNT_MAX_STORCLI_TX  32
-#define ROZOFSMOUNT_MAX_TX (ROZOFSMOUNT_MAX_EXPORT_TX+ROZOFSMOUNT_MAX_STORCLI_TX)
+#define ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_STANDALONE  32
+#define ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_PER_PROCESS  24
 
 #define hash_xor8(n)    (((n) ^ ((n)>>8) ^ ((n)>>16) ^ ((n)>>24)) & 0xff)
 #define ROOT_INODE 1
@@ -55,6 +55,8 @@ extern int rozofs_mode;
 extern int rozofs_rotation_read_modulo;
 extern int rozofs_bugwatch;
 extern uint16_t rozofsmount_diag_port;
+extern int rozofs_max_storcli_tx ;  /**< depends on the number of storcli processes */
+
 
 typedef struct rozofsmnt_conf {
     char *host;

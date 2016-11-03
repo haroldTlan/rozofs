@@ -71,6 +71,7 @@
 
 int rozofs_rotation_read_modulo = 0;
 static char *mountpoint = NULL;
+int rozofs_max_storcli_tx =0;  /**< depends on the number of storcli processes */
     
 DEFINE_PROFILING(mpp_profiler_t) ;
 
@@ -1891,7 +1892,14 @@ int fuseloop(struct fuse_args *args, int fg) {
     rozofs_fuse_conf.se = se;
     rozofs_fuse_conf.ch = ch;
     rozofs_fuse_conf.exportclt = (void*) &exportclt;
-    rozofs_fuse_conf.max_transactions = ROZOFSMOUNT_MAX_TX;
+    if (conf.nbstorcli > 1) {
+     rozofs_max_storcli_tx = ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_PER_PROCESS*conf.nbstorcli;
+    }
+    else
+    {
+      rozofs_max_storcli_tx = ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_STANDALONE;
+    }
+    rozofs_fuse_conf.max_transactions =ROZOFSMOUNT_MAX_EXPORT_TX + rozofs_max_storcli_tx;
 
     if ((errno = pthread_create(&thread, NULL, (void*) rozofs_stat_start, &rozofs_fuse_conf)) != 0) {
         severe("can't create debug thread: %s", strerror(errno));
@@ -1928,7 +1936,7 @@ int fuseloop(struct fuse_args *args, int fg) {
        uint32_t buf_sz;
        if (SHAREMEM_IDX_READ == i) buf_sz = ROZOFS_MAX_FILE_BUF_SZ_READ;
        else buf_sz = ROZOFS_MAX_FILE_BUF_SZ_READ;
-       ret = rozofs_create_shared_memory(key_instance,i,ROZOFSMOUNT_MAX_STORCLI_TX,(buf_sz)+4096);
+       ret = rozofs_create_shared_memory(key_instance,i,rozofs_max_storcli_tx,(buf_sz)+4096);
        if (ret < 0)
        {
          fatal("Cannot create the shared memory for storcli %d\n",i);

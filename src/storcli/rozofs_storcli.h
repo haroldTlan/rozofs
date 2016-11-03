@@ -61,7 +61,7 @@ int test_north_lbg_get_state(int lbg_idx);
 
 extern uint64_t storcli_buf_depletion_count; /**< buffer depletion on storcli buffers */
 extern uint64_t storcli_rng_full_count; /**< ring request full counter */
-
+extern uint64_t rozofs_storcli_ctx_wrap_count_err;
 /**
 *  STORCLI Resource configuration
 */
@@ -77,8 +77,8 @@ extern uint64_t storcli_rng_full_count; /**< ring request full counter */
 /**
 * Buffer s associated with the reception of the load balancing group on north interface
 */
-#define STORCLI_NORTH_LBG_BUF_RECV_CNT   STORCLI_CTX_CNT  /**< number of reception buffer to receive from rozofsmount */
-#define STORCLI_NORTH_LBG_BUF_RECV_SZ    (1024*12)  /**< max user data payload is 12K       */
+#define STORCLI_NORTH_LBG_BUF_RECV_CNT   (STORCLI_CTX_CNT)  /**< number of reception buffer to receive from rozofsmount */
+#define STORCLI_NORTH_LBG_BUF_RECV_SZ    (1024*2)  /**< max user data payload is 12K       */
 /**
 * Storcli buffer mangement configuration
 *  INTERNAL_READ are small buffer used when a write request requires too trigger read of first and/or last block
@@ -86,8 +86,8 @@ extern uint64_t storcli_rng_full_count; /**< ring request full counter */
 #define STORCLI_NORTH_MOD_INTERNAL_READ_BUF_CNT   STORCLI_CTX_CNT  /**< rozofs_storcli_north_small_buf_count  */
 #define STORCLI_NORTH_MOD_INTERNAL_READ_BUF_SZ   1024  /**< rozofs_storcli_north_small_buf_sz  */
 
-#define STORCLI_NORTH_MOD_XMIT_BUF_CNT   STORCLI_CTX_CNT  /**< rozofs_storcli_north_large_buf_count  */
-#define STORCLI_NORTH_MOD_XMIT_BUF_SZ    STORCLI_NORTH_LBG_BUF_RECV_SZ  /**< rozofs_storcli_north_large_buf_sz  */
+#define STORCLI_NORTH_MOD_XMIT_BUF_CNT   (STORCLI_CTX_CNT)  /**< rozofs_storcli_north_large_buf_count  */
+#define STORCLI_NORTH_MOD_XMIT_BUF_SZ    (1024*8)             /**< rozofs_storcli_north_large_buf_sz  */
 
 #define STORCLI_SOUTH_TX_XMIT_BUF_CNT   (STORCLI_CTX_CNT*ROZOFS_MAX_LAYOUT)  /**< rozofs_storcli_south_large_buf_count  */
 #define STORCLI_SOUTH_TX_XMIT_BUF_SZ    (1024*160)                           /**< rozofs_storcli_south_large_buf_sz  */
@@ -218,7 +218,8 @@ typedef struct _rozofs_storcli_ctx_t
   uint32_t   src_transaction_id;  /**< transaction id of the source request                                       */
   void      *xmitBuf;             /**< reference of the xmit buffer that will use for sending the response        */
   uint32_t   read_seqnum;         /**< read sequence number that must be found in the reply to correlate with ctx */
-  uint32_t   reply_done;         /**< assert to one when reply has been sent to rozofsmount */
+  uint16_t   reply_done;         /**< assert to one when reply has been sent to rozofsmount */
+  uint16_t   rsvd_ctx_count;         /**< number of pre-reserved storcli context for processing the current request */
   rozofs_storcli_projection_ctx_t  prj_ctx[ROZOFS_SAFE_MAX_STORCLI];
   rozofs_storcli_lbg_prj_assoc_t lbg_assoc_tb[ROZOFS_SAFE_MAX_STORCLI]; /**< association table between lbg and projection */
   rozofs_storcli_inverse_block_t block_ctx_table[ROZOFS_MAX_BLOCK_PER_MSG];  
@@ -651,6 +652,32 @@ rozofs_storcli_ctx_t *storcli_hash_table_search_ctx(fid_t fid);
   @retval NULL out of free context
 */
 rozofs_storcli_ctx_t *rozofs_storcli_alloc_context();
+/*
+**____________________________________________________
+*/
+/**
+   rozofs_storcli_rsvd_context_release
+
+  Pre-reserve a set of storcli context
+
+@param     p: main storcli context
+@param     count: number of context to release
+@retval   : none
+*/
+void  rozofs_storcli_rsvd_context_release(rozofs_storcli_ctx_t *p);
+/*
+**____________________________________________________
+*/
+/**
+   rozofs_storcli_rsvd_context_alloc
+
+  Pre-reserve a set of storcli context
+
+@param     p: main storcli context
+@param     count: number of context to reserve
+@retval   : none
+*/
+void  rozofs_storcli_rsvd_context_alloc(rozofs_storcli_ctx_t *p,int count);
 
 /*
 **__________________________________________________________________________
@@ -668,6 +695,8 @@ void rozofs_storcli_release_context(rozofs_storcli_ctx_t *ctx_p);
 
 extern uint32_t    rozofs_storcli_ctx_count;           /**< Max number of contexts    */
 extern uint32_t    rozofs_storcli_ctx_allocated;      /**< current number of allocated context        */
+extern int         rozofs_storcli_ctx_rsvd;       /**< current number of pre-reserved storcli contexts       */
+
 /*
 **__________________________________________________________________________
 */
@@ -680,7 +709,16 @@ extern uint32_t    rozofs_storcli_ctx_allocated;      /**< current number of all
 */
 static inline uint32_t rozofs_storcli_get_free_transaction_context()
 {
-  return(rozofs_storcli_ctx_count - rozofs_storcli_ctx_allocated);
+  if ((rozofs_storcli_ctx_allocated+rozofs_storcli_ctx_rsvd) > rozofs_storcli_ctx_count)
+  {
+     if (rozofs_storcli_ctx_wrap_count_err ==0) severe("too much allocated storcli context: %u+%d > %u",
+                                                        rozofs_storcli_ctx_allocated,
+							rozofs_storcli_ctx_rsvd,
+							rozofs_storcli_ctx_count);
+     rozofs_storcli_ctx_wrap_count_err++;
+     return 0;
+  }
+  return(rozofs_storcli_ctx_count - (rozofs_storcli_ctx_allocated+rozofs_storcli_ctx_rsvd));
 
 }
 /*

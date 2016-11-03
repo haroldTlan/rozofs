@@ -307,6 +307,14 @@ void rozofs_storcli_truncate_req_init(uint32_t  socket_ctx_idx, void *recv_buf,r
      working_ctx_p->prj_ctx[i].bins       = (bin_t*)(pbuf+position); 
    }
    		
+   if (storcli_truncate_rq_p->last_seg != 0)
+   {
+      /*
+      ** need to pre-reserve a storcli context, because the truncate is going to generate
+      ** an internal read
+      */
+      rozofs_storcli_rsvd_context_alloc(working_ctx_p,1);         
+   }
    /*
    ** Prepare for request serialization
    */
@@ -891,7 +899,10 @@ void rozofs_storcli_truncate_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
   ** the end of the block.
   */
   if (storcli_truncate_rq_p->last_seg != 0) {
-
+    /*
+    ** Release the pre-allocated storcli contexts
+    */
+    rozofs_storcli_rsvd_context_release(working_ctx_p);
     working_ctx_p->write_ctx_lock = 1;  /* Avoid direct response on internal read error */
     ret = rozofs_storcli_internal_read_before_truncate_req(working_ctx_p);
     working_ctx_p->write_ctx_lock = 0;

@@ -158,6 +158,7 @@ static inline int rozofs_storcli_all_prj_write_check(uint8_t layout,rozofs_storc
 **_________________________________________________________________________
 */
 
+#if 0
 /** 
  *  The purpose of that function is to split the input buffer (data write part) in sections that are
     a multiple of ROZOFS_BSIZE.
@@ -176,9 +177,10 @@ static inline int rozofs_storcli_all_prj_write_check(uint8_t layout,rozofs_storc
  * @param bid_p: pointer  to the array when the function returns the index of the first block to write
  * @param nb_blocks_p: pointer  to the array when the function returns the number of blocks to write
  *
- * @return: none
+ * @return: number of internal read required
  */
-void rozofs_storcli_prepare2write_empty_file(rozofs_storcli_ctx_t *working_ctx_p, 
+
+int rozofs_storcli_prepare2write_empty_file(rozofs_storcli_ctx_t *working_ctx_p, 
                                   uint32_t bsize,
                                   uint64_t off, 
                                   uint32_t len,
@@ -193,6 +195,7 @@ void rozofs_storcli_prepare2write_empty_file(rozofs_storcli_ctx_t *working_ctx_p
     int i;
     void * buffer;
     uint8_t * payload; 
+    int internal_read_count = 0;
     uint32_t bbytes = ROZOFS_BSIZE_BYTES(bsize); 
     
    *nb_blocks_p = 0;
@@ -301,7 +304,7 @@ void rozofs_storcli_prepare2write_empty_file(rozofs_storcli_ctx_t *working_ctx_p
     wr_proj_buf_p[ROZOFS_WR_FIRST].last_block_size    = loffset;               
     *nb_blocks_p += wr_proj_buf_p[ROZOFS_WR_FIRST].number_of_blocks;
 }
-
+#endif
 /** 
  *  The purpose of that function is to split the input buffer (data write part) in sections that are
     a multiple of ROZOFS_BSIZE.
@@ -319,9 +322,9 @@ void rozofs_storcli_prepare2write_empty_file(rozofs_storcli_ctx_t *working_ctx_p
  * @param nb_blocks_p: pointer  to the array when the function returns the number of blocks to write
  * @param flags: flags of the write request (when STORCLI_FLAGS_NO_END_REREAD is set, no need to re-read the last block)
  *
- * @return: none
+ * @return: number of internal read required
  */
-void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p, 
+int rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p, 
                                   uint32_t bsize,
                                   uint64_t off, 
                                   uint32_t len,
@@ -337,6 +340,7 @@ void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p,
     uint16_t loffset = 0;
     int i;
     uint32_t bbytes = ROZOFS_BSIZE_BYTES(bsize); 
+    int internal_read_count = 0;
     
    *nb_blocks_p = 0;
    //working_ctx_p->last_block_size = 0;       
@@ -412,7 +416,7 @@ void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p,
             wr_proj_buf_p[ROZOFS_WR_FIRST].number_of_blocks   = 1;  
             *nb_blocks_p += 1;          
             wr_proj_buf_p[ROZOFS_WR_FIRST].last_block_size = bbytes; 
-            return;            
+            return 1;            
         } 
         /**
         * write the full block since it is ROZOFS_BSIZE
@@ -425,7 +429,7 @@ void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p,
         wr_proj_buf_p[ROZOFS_WR_FIRST].number_of_blocks   = 1;            
         *nb_blocks_p += 1;          
         wr_proj_buf_p[ROZOFS_WR_FIRST].last_block_size = len;
-        return;              
+        return 0;              
     }
     /*
     ** Here we must write more than one block
@@ -439,7 +443,8 @@ void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p,
         wr_proj_buf_p[ROZOFS_WR_FIRST].len   = bbytes;
         wr_proj_buf_p[ROZOFS_WR_FIRST].first_block_idx    = 0;            
         wr_proj_buf_p[ROZOFS_WR_FIRST].number_of_blocks   = 1;  
-        *nb_blocks_p += 1;          
+        *nb_blocks_p += 1;    
+	internal_read_count=1;      
                         
         wr_proj_buf_p[ROZOFS_WR_MIDDLE].state = ROZOFS_WR_ST_TRANSFORM_REQ;
         wr_proj_buf_p[ROZOFS_WR_MIDDLE].off   = (first+1) * bbytes;            
@@ -467,9 +472,9 @@ void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p,
         wr_proj_buf_p[ROZOFS_WR_LAST].first_block_idx    = (last-first);            
         wr_proj_buf_p[ROZOFS_WR_LAST].number_of_blocks   = 1;  
         *nb_blocks_p += wr_proj_buf_p[ROZOFS_WR_LAST].number_of_blocks;
-
+	internal_read_count++;      
       }
-      return;
+      return internal_read_count;
     }
     /*
     ** all is aligned on ROZOFS_BSIZE
@@ -481,6 +486,7 @@ void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p,
     wr_proj_buf_p[ROZOFS_WR_FIRST].first_block_idx    = 0;            
     wr_proj_buf_p[ROZOFS_WR_FIRST].number_of_blocks   = ((last - first) + 1);            
     *nb_blocks_p += wr_proj_buf_p[ROZOFS_WR_FIRST].number_of_blocks;
+    return 0;
 
 }
 
@@ -517,7 +523,10 @@ void rozofs_storcli_write_req_processing_exec(rozofs_storcli_ctx_t *working_ctx_
     int errcode=0;
     int ret;
     int read_req = 0;
-
+    /*
+    ** Release the pre-allocated storcli contexts
+    */
+    rozofs_storcli_rsvd_context_release(working_ctx_p);
     /*
     ** need to lock to avoid the sending a a direct reply error on internal reading
     */
@@ -653,6 +662,7 @@ void rozofs_storcli_write_req_init(uint32_t  socket_ctx_idx, void *recv_buf,rozo
    int      len;       /* effective length of application message               */
    uint8_t  *pmsg;     /* pointer to the first available byte in the application message */
    uint32_t header_len;
+   int nb_internal_read=0;
    XDR xdrs;
    int errcode = EINVAL;
    /*
@@ -861,15 +871,16 @@ void rozofs_storcli_write_req_init(uint32_t  socket_ctx_idx, void *recv_buf,rozo
    ** That situation occurs when the data to write does not start on a ROZOFS_BSIZE boundary (first) or
    ** does not end of a ROZOFS_BSIZE boundary (last)
    */
-   rozofs_storcli_prepare2write(working_ctx_p, 
-                              storcli_write_rq_p->bsize,
-                              storcli_write_rq_p->off , 
-                              storcli_write_rq_p->len,
-                              &working_ctx_p->wr_bid,
-                              &working_ctx_p->wr_nb_blocks,
-			      storcli_write_rq_p->flags
-                              );				
+   nb_internal_read = rozofs_storcli_prepare2write(working_ctx_p, 
+                        			   storcli_write_rq_p->bsize,
+                        			   storcli_write_rq_p->off , 
+                        			   storcli_write_rq_p->len,
+                        			   &working_ctx_p->wr_bid,
+                        			   &working_ctx_p->wr_nb_blocks,
+						   storcli_write_rq_p->flags
+                        			   );				
 
+   rozofs_storcli_rsvd_context_alloc(working_ctx_p,nb_internal_read);
    /*
    ** Prepare for request serialization
    */
