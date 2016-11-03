@@ -747,8 +747,12 @@ int rozofs_storcli_send_common(exportclt_t * clt,uint32_t timeout_sec,uint32_t p
     /*
     ** insert the storcli load balancing context in the  stclbg_hash_table hash table.
     ** the context is embedded in the transaction context  
+    ** This context is not inserted for read request since read do not require other requests
+    ** to follow the same path.
     */
-    stclbg_hash_table_insert_ctx(&rozofs_tx_ctx_p->rw_lbg,fid,storcli_idx);
+    if (opcode != STORCLI_READ) {
+      stclbg_hash_table_insert_ctx(&rozofs_tx_ctx_p->rw_lbg,fid,storcli_idx);
+    }  
     /*
     ** Get the load balancing group reference associated with the storcli
     */
