@@ -1082,7 +1082,7 @@ void exports_release() {
 
     list_for_each_forward_safe(p, q, &exports) {
         export_entry_t *entry = list_entry(p, export_entry_t, list);
-	export_profiler_free(entry->export.eid);
+//	export_profiler_free(entry->export.eid);
 	geo_profiler_free(entry->export.eid);
         export_release(&entry->export);
         list_remove(p);

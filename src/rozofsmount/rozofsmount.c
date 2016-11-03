@@ -2395,7 +2395,12 @@ int main(int argc, char *argv[]) {
       usleep(ROZOFS_MOUNT_CHECK_RETRY_MICROSEC);
       delay += ROZOFS_MOUNT_CHECK_RETRY_MICROSEC; 	
     }
-
+    {
+         char path[256];
+	 
+	 sprintf(path,"%s/mount/inst_%d/mount/",ROZOFS_KPI_ROOT_PATH,conf.instance);
+	 ALLOC_KPI_FILE_PROFILING(path,"profiler",mpp_profiler_t);    
+    }
     /*
     ** assert the cache mode
     */

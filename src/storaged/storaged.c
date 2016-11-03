@@ -524,7 +524,12 @@ int main(int argc, char *argv[]) {
                 break;
         }
     }
-
+    {
+         char path[256];
+	 
+	 sprintf(path,"%s/storage/%s/storaged/",ROZOFS_KPI_ROOT_PATH,(pHostArray[0]==NULL)?"localhost":pHostArray[0]);
+	 ALLOC_KPI_FILE_PROFILING(path,"profiler",spp_profiler_t);    
+    }
     
     /*
     ** read common config file

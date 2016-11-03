@@ -1840,6 +1840,13 @@ int main(int argc, char *argv[]) {
         conf.passwd = strdup("none");
     }
     
+    {
+         char path[256];
+	 
+	 sprintf(path,"%s/mount/inst_%d/storcli_%d/",ROZOFS_KPI_ROOT_PATH,conf.rozofsmount_instance,conf.module_index);
+	 ALLOC_KPI_FILE_PROFILING(path,"profiler",stcpp_profiler_t);    
+    }    
+    
     /*
     ** read common config file
     */

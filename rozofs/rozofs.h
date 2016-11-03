@@ -21,11 +21,20 @@
 
 #include <stdint.h>
 #include <uuid/uuid.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <rozofs/common/log.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include <config.h>
 #include <rozofs/common/common_config.h>
 #include <rozofs/core/rozofs_string.h>
 
+#define ROZOFS_KPI_ROOT_PATH "/var/run/rozofs_kpi"
 //#include <rozofs/common/log.h>
 /*
 ** Get ticker
@@ -763,4 +772,103 @@ static inline char * rbs_file_type2string(rbs_file_type_e ftype) {
   }
   return "?";
 }  
+
+/*
+*______________________________________________________________________
+* Create a directory, recursively creating all the directories on the path 
+* when they do not exist
+*
+* @param directory_path   The directory path
+* @param mode             The rights
+*
+* retval 0 on success -1 else
+*/
+static inline int rozofs_kpi_mkpath(char * directory_path) {
+  char* p;
+  int  isZero=1;
+  int  status = -1;
+    
+  p = directory_path;
+  p++; 
+  while (*p!=0) {
+  
+    while((*p!='/')&&(*p!=0)) p++;
+    
+    if (*p==0) {
+      isZero = 1;
+    }  
+    else {
+      isZero = 0;      
+      *p = 0;
+    }
+    
+    if (access(directory_path, F_OK) != 0) {
+      if (mkdir(directory_path, 0744) != 0) {
+        if (errno != EEXIST)
+	{
+	  severe("mkdir(%s) %s", directory_path, strerror(errno));
+          goto out;
+	}
+      }      
+    }
+    
+    if (isZero==0) {
+      *p ='/';
+      p++;
+    }       
+  }
+  status = 0;
+  
+out:
+  if (isZero==0) *p ='/';
+  return status;
+}
+
+static inline void *rozofs_kpi_map(char *path,char *name,int size,void *init_buf)
+{
+  int fd;
+  struct stat sb;
+  void *p;
+  char pathname[1024];
+  int ret;
+  
+  strcpy(pathname,path);  
+  ret = rozofs_kpi_mkpath(pathname);
+  if (ret < 0) return NULL;
+  
+  sprintf(pathname,"%s/%s",path,name);  
+  
+  fd = open (pathname, O_RDWR| O_CREAT);
+  if (fd == 1) {
+          severe ("open failure for %s : %s",path,strerror(errno));
+          return NULL;
+  }
+
+ if (fstat (fd, &sb) == -1) {
+   severe ("fstat failure for %s : %s",path,strerror(errno));
+   close(fd);
+   return NULL;
+ }
+ if (ftruncate (fd, size) == -1) {
+   severe ("ftruncate failure for %s : %s",path,strerror(errno));
+   close(fd);
+   return NULL;
+ }
+ p = mmap (0, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+ if (p == MAP_FAILED) {
+         severe ("map failure for %s : %s",path,strerror(errno));
+         return NULL;
+ }
+ if (init_buf != NULL)
+ {
+   memcpy(p,init_buf,size);
+ }
+ else
+ {
+   memset(p,0,size);
+ }
+ return p;
+}
+
+
 #endif

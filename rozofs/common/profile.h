@@ -26,6 +26,7 @@
 #include <rozofs/rpc/spproto.h>
 #include <rozofs/rpc/mpproto.h>
 
+
 #ifndef MICROLONG
 #define MICROLONG(time) ((unsigned long long)time.tv_sec * 1000000 + time.tv_usec)
 #endif
@@ -36,6 +37,17 @@
 { \
   gprofiler = malloc(sizeof(the_type));\
   memset(gprofiler,0,sizeof(the_type));\
+}
+
+#define ALLOC_KPI_FILE_PROFILING(path,name,the_type) \
+{ \
+  void *p;\
+  p = rozofs_kpi_map(path,name,sizeof(the_type),gprofiler); \
+  if (p != NULL)\
+  { \
+    if (gprofiler != NULL) free(gprofiler);\
+    gprofiler = p;\
+  }\
 }
   
 
@@ -100,6 +112,7 @@
         memset(gprofiler->the_probe, 0, sizeof(gprofiler->the_probe));\
     }
 #endif
+
 
 
 #endif
