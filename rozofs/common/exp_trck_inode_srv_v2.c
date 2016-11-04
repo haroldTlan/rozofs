@@ -1470,7 +1470,6 @@ int exp_trck_top_add_user_id(exp_trck_top_header_t *top_hdr_p,int user_id)
 exp_trck_top_header_t *exp_trck_top_allocate(char *name,char *root_path,uint16_t max_attributes_sz,int create_flag)
 {
    exp_trck_top_header_t *top_hdr_p;
-   char full_path[1024];
    
    top_hdr_p = EXP_TRK_MALLOC(sizeof(exp_trck_top_header_t));
    if (top_hdr_p == NULL)
