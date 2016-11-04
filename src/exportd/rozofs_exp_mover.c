@@ -405,7 +405,7 @@ int rozofs_mover_allocate_scan(char *value,char *unused,int length,export_t *e,l
   */
   rozofs_safe = rozofs_get_rozofs_safe(e->layout);
   memset (new_sids,0,sizeof(new_sids));
-  memset (sids,0,sizeof(new_sids));
+  memset (sids,0,sizeof(sids));
 
   errno = 0;
 
