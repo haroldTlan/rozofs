@@ -262,9 +262,9 @@ static inline int file_close(file_t * f) {
      /*
      ** Release all memory allocated
      */
-     free(f->buffer);
+     xfree(f->buffer);
      f->chekWord = 0;
-     free(f);
+     xfree(f);
      rozofs_opened_file--;
     return 1;
 }

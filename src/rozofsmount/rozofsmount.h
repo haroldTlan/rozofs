@@ -328,7 +328,7 @@ static inline void del_ientry(ientry_t * ie) {
       free(ie->symlink_target);
       ie->symlink_target = NULL;
     }
-    free(ie);    
+    xfree(ie);    
 }
 
 /**
