@@ -838,7 +838,7 @@ static inline void *rozofs_kpi_map(char *path,char *name,int size,void *init_buf
   
   sprintf(pathname,"%s/%s",path,name);  
   
-  fd = open (pathname, O_RDWR| O_CREAT);
+  fd = open (pathname, O_RDWR| O_CREAT, 0644);
   if (fd == 1) {
           severe ("open failure for %s : %s",path,strerror(errno));
           return NULL;
