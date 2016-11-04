@@ -2043,6 +2043,7 @@ void rozofs_ll_release_nb(fuse_req_t req, fuse_ino_t ino,
     void *buffer_p = NULL;
     int ret;
     errno = 0;  
+    int xerrno = 0;
     
     int trc_idx = rozofs_trc_req(srv_rozofs_ll_release,(fuse_ino_t)fi->fh,NULL);
 
@@ -2087,19 +2088,7 @@ void rozofs_ll_release_nb(fuse_req_t req, fuse_ino_t ino,
     ** update the statistics
     */
     rzkpi_file_stat_update(ie->pfid,(int)0,RZKPI_CLOSE);
-    /*
-    ** check the status of the last write operation
-    */
-    if (f->wr_error!= 0)
-    {
-      /*
-      ** that error is permanent, once can read the file but any
-      ** attempt to write will return that error code
-      */
-      errno = f->wr_error;
-      goto error;    
-    }
-    
+
     /*
     ** Clear all the locks eventually pending on the file for this owner
     */
@@ -2151,8 +2140,13 @@ void rozofs_ll_release_nb(fuse_req_t req, fuse_ino_t ino,
     STOP_PROFILING_NB(buffer_p,rozofs_ll_release);
     f->write_block_req = 1;  
     export_write_block_nb(buffer_p,f);    
+    /*
+    ** report the status of the last write operation
+    */
+    xerrno = f->wr_error;    
     file_close(f);
-    fuse_reply_err(req, 0);
+    fuse_reply_err(req, xerrno);
+    errno=xerrno;
     rozofs_trc_rsp(srv_rozofs_ll_release,(fuse_ino_t)f,(ie==NULL)?NULL:ie->attrs.fid,1,trc_idx);
 //    STOP_PROFILING_NB(buffer_p,rozofs_ll_release);
     return;
