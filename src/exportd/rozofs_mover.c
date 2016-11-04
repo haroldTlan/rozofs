@@ -180,7 +180,7 @@ int rozofs_get_free_rozofsmount_intance(void) {
   ** Check rozofsmount instances in use
   */
   sprintf(cmd,"ps -fC rozofsmount > %s",fname);
-  system(cmd);
+  if (system(cmd)==0) {}
 
   /*
   ** Read result file and then remove it
@@ -275,7 +275,7 @@ int rozofs_mover_create_mount_point(char * export_hosts, char * export_path, cha
   /*
   ** Start the rozofsmount instance
   */
-  system(cmd);
+  if (system(cmd)==0) {}
   
   
   /*
