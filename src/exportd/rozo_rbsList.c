@@ -219,6 +219,11 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
      }
      name[i] = 0;	
   } 
+  
+  /*
+  ** File of zero size need not to be rebuilt
+  */
+  if (inode_p->s.attrs.size == 0) return 0;
 
   /*
   ** Check whether this CID/SID is interresting
