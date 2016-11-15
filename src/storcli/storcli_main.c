@@ -1851,6 +1851,12 @@ int main(int argc, char *argv[]) {
     ** read common config file
     */
     common_config_read(NULL);    
+    
+    /*
+    **  set the numa node for rozofsmount and its storcli
+    */
+    rozofs_numa_allocate_node(conf.rozofsmount_instance);
+    
 
     rozofs_signals_declare("storcli",common_config.nb_core_file);
     rozofs_attach_crash_cbk(storlci_handle_signal);

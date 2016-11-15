@@ -18,7 +18,7 @@
 #include <numa.h>
 #include "rozofs_numa.h"
 #include <rozofs/common/common_config.h>
-
+#include <rozofs/common/log.h>
 /**
 *  case of NUMA: allocate the running node according to the
 *  instance
@@ -32,6 +32,7 @@ void rozofs_numa_allocate_node(int instance)
    int bit;
    
    if (!common_config.numa_aware) {
+     info("rozofs_numa_allocate_node(%d): aware not configured", instance);
      return;
    }  
    
@@ -41,6 +42,7 @@ void rozofs_numa_allocate_node(int instance)
      /*
      ** numa not available
      */
+     info("rozofs_numa_allocate_node(%d): numa not available", instance);
      return;
    }
      
@@ -51,5 +53,5 @@ void rozofs_numa_allocate_node(int instance)
    ** set the preferred memory
    */
    numa_set_preferred(bit);
-
+   info("rozofs_numa_allocate_node(%d): set on node %d", instance,bit);
 }

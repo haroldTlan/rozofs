@@ -2135,6 +2135,12 @@ int main(int argc, char *argv[]) {
     if (fuse_opt_parse(&args, &conf, rozofs_opts, myfs_opt_proc) < 0) {
         exit(1);
     }
+
+    /*
+    ** read common config file
+    */
+    common_config_read(NULL);  
+
     /*
     **  set the numa node for rozofsmount and its storcli
     */
@@ -2438,11 +2444,6 @@ int main(int argc, char *argv[]) {
 
     // Change AF_UNIX datagram socket length
     af_unix_socket_set_datagram_socket_len(128);
-
-    /*
-    ** read common config file
-    */
-    common_config_read(NULL);  
     
     /*
     ** Check whether fast reconnect is required

@@ -269,7 +269,7 @@ class sid_class:
         pass 
     
   def get_device_file_path(self,site): 
-    if len(self.host) < (int(site)+1): return None  
+#    if len(self.host) < (int(site)+1): return None  
     return "%s/devices/site%d/cid%s/sid%s/"%(rozofs.get_config_path(),site,self.cid.cid,self.sid)
  
 
@@ -1126,6 +1126,9 @@ class rozofs_class:
 
   def create_loopback_device(self,path,mark):  
     if rozofs.disk_size_mb == None: return
+
+    print "Create create_loopback_device %s %s"%(path,mark)
+    
     # Need a working directory
     tmpdir="/tmp/setup"
     os.system("umount -f %s  > /dev/null 2>&1"%(tmpdir))
@@ -1205,6 +1208,7 @@ class rozofs_class:
     display_config_bool("crc32c_generate",rozofs.crc32)
     display_config_true("crc32c_hw_forced")
     display_config_int("storio_slice_number",rozofs.storio_slice)
+    display_config_bool("numa_axare",True)
     if self.storio_mode == "multiple": display_config_true("storio_multiple_mode")
     else:                              display_config_false("storio_multiple_mode")
     display_config_bool("allow_disk_spin_down", rozofs.spin_down_allowed)
