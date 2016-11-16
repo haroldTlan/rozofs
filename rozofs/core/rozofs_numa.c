@@ -19,6 +19,35 @@
 #include "rozofs_numa.h"
 #include <rozofs/common/common_config.h>
 #include <rozofs/common/log.h>
+#include <rozofs/core/uma_dbg_api.h>
+
+static    int bit = -1;
+static    int dbg_recorded = 0;
+
+void show_numa(char * argv[], uint32_t tcpRef, void *bufRef) {
+  char *pChar = uma_dbg_get_buffer();
+  int available;
+  
+  pChar += sprintf(pChar,"{ \"numa\" : {\n");
+  pChar += sprintf(pChar,"    \"aware\"     : \"%s\",\n",
+                   common_config.numa_aware?"True":"False");
+  available = numa_available();
+  pChar += sprintf(pChar,"    \"available\" : ");
+
+  if (available<0) {
+    pChar += sprintf(pChar,"\"False\"\n");
+  }
+  else {
+    pChar += sprintf(pChar,"\"True\",\n");
+    pChar += sprintf(pChar,"    \"nodes    \" : %d,\n",
+                     numa_num_configured_nodes());
+    pChar += sprintf(pChar,"    \"node     \" : %d\n",
+                     bit);
+  }
+  pChar += sprintf(pChar,"   }\n}");
+  
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+} 
 /**
 *  case of NUMA: allocate the running node according to the
 *  instance
@@ -29,7 +58,11 @@ void rozofs_numa_allocate_node(int instance)
 {
    int configured_nodes;
    int available;
-   int bit;
+
+   if (dbg_recorded==0) {
+     dbg_recorded = 1;
+     uma_dbg_addTopic("numa", show_numa);
+   }   
    
    if (!common_config.numa_aware) {
      info("rozofs_numa_allocate_node(%d): aware not configured", instance);
