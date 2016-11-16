@@ -494,10 +494,11 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
       /*
       ** indicates that there is a pending file size update
       */
-      ie->file_extend_pending  = 1;      
-      ie->file_extend_size     = (ie->attrs.size - attr.size);       
+      ie->mtime_locked = 1;      
       ie->attrs.size           = attr.size;
-      
+      ie->file_extend_running = 1;
+      ie->file_extend_pending = 0; 
+      ie->file_extend_size    = 0;               
       
       /*
       ** Flush on disk any pending data in any buffer open on this file 
