@@ -379,7 +379,8 @@ void rozofs_ll_getxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, siz
 	   else                 pChar += sprintf(pChar, "/%s", pHost);
        }
        pChar += sprintf(pChar, " %u ",exportclt.eid);
-       pChar += sprintf(pChar, "%s\n",conf.export);
+       pChar += sprintf(pChar, "%s ",conf.export);
+       pChar += sprintf(pChar, "%d\n",conf.instance);
        fuse_reply_buf(req, (char *)buf_export_attr, strlen(buf_export_attr));   
        goto out; 
     
