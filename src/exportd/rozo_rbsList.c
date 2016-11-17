@@ -86,6 +86,7 @@ lv2_cache_t  cache;
 uint8_t rozofs_safe = -1;
 uint8_t rozofs_forward = -1;
 uint8_t layout = -1;
+uint8_t bsize;
 
 int     nb_requested_vid = 0;
 uint8_t requested_vid[256] = {0};
@@ -252,6 +253,7 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p) {
       entry.todo      = 1;
       entry.block_end = -1;
       entry.layout    = layout;
+      entry.bsize     = bsize;
       for (j=0; j<rozofs_safe;j++) {
 	entry.dist_set_current[j] = sid_tab[j];
       }    
@@ -774,6 +776,8 @@ int main(int argc, char *argv[]) {
       severe("eid %d has layout %d",econfig->eid, layout);
       continue;
     }    
+    
+    bsize = econfig->bsize;
     
     entry_size =  sizeof(rozofs_rebuild_entry_file_t) - ROZOFS_SAFE_MAX + rozofs_safe;
     
