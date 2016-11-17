@@ -1,67 +1,214 @@
 #/bin/bash
-RESULT="/tmp/rozo_dumpcnf.conf"
-
-#______________________________________________
-# Display the content of a file
-# $1 file name
-cat_file() {
-  if [ ! -f $1 ];
-  then
-    return
-  fi
-    
-  echo "_______________________________$1:"
-  cat $1
+#______________________________________________   
+#
+# Ad somedirectory to the tar list
+#
+#______________________________________________   
+add_tarlist() {
+  TARLIST="${TARLIST} $1"
 }
-#______________________________________________
-# Display the content of a directory
-# $1 directory name
-cat_dir() {
+#______________________________________________   
+#
+# Copy some configuration files
+#
+#______________________________________________   
+copy_conf() {
 
-  if [ ! -d $1 ];
-  then
-    echo "________________directory $1: diretory does not exist !!!"
-    return
-  fi
-  echo 
-  echo "________________directory $1:"
+  # Add /etc to the tarlist
+  add_tarlist /etc
 
-  for file in `ls -a $1`
-  do
-    cat_file $1/$file
-  done  
+  # /proc/sys are not real files but interface
+  # with the kernel, so make a copy for taring
+  rm -rf /tmp/proc
+  mkdir -p /tmp/proc
+  cp -rf /proc/sys /tmp/proc
+
+  # Add /tmp/proc to the tarlist  
+  add_tarlist "-C /tmp proc"
 }
-   
-cat_all() {
-  cat_file   /etc/fstab
-  cat_file   /etc/sysctl.conf
-  cat_file   /etc/resolv.conf
-  cat_file   /etc/sysctl.conf  
-  cat_file   /etc/sysfs.conf  
-  cat_file   /etc/nsswitch.conf  
-  cat_dir    /etc/network
-  cat_dir    /etc/rozofs
-  cat_dir    /etc/corosync
-  cat_dir    /etc/drbd.d
-  cat_dir    /etc/samba
-  cat_dir    /etc/lvm
-  cat_dir    /etc/pacemaker
-  cat_dir    /etc/ctdb
-  cat_dir    /proc/sys/net/ipv4
-  cat_dir    /proc/sys/net/core
-  cat_dir    /proc/sys/net/unix
-  cat_dir    /proc/sys/vm
+#______________________________________________   
+#
+# Copy disk configuration files
+#
+#______________________________________________   
+copy_disks() {
+
+
+  # /proc/sys are not real files but interface
+  # with the kernel, so make a copy for taring
+
+  rm -rf /tmp/sys
+  mkdir -p /tmp/sys 
   
   for dev in `ls /sys/block`
   do
-    case "$dev" in
-      .|..) continue;;
-      *)    cat_dir /sys/block/${dev}/queue
-    esac  
+    mkdir -p /tmp/sys/block/${dev}  
+    \cp -af /sys/block/${dev}/* /tmp/sys/block/${dev}
+  done
+
+  # Add /tmp/proc to the tarlist  
+  add_tarlist "-C /tmp sys"  
+}
+#______________________________________________
+#
+# Dump storage diagnostic information 
+#
+#______________________________________________   
+dump_storage() {
+
+  rozodiag -T storaged -c all > /tmp/rozodiag/storaged
+  
+  storios=`rozodiag -T storaged -c storio | awk '{if ($1=="cids") print $0;}' | awk -F':' '{print $2;}'`
+  for storio in ${storios} 
+  do
+    rozodiag -T storio:${storio} -c all > /tmp/rozodiag/storio:${storio}
   done
 }
+#______________________________________________
+#
+# Dump export diagnostic information 
+#
+#______________________________________________   
+dump_export() {
 
-cat_all > ${RESULT}
-echo
-echo "Result is in ${RESULT}"
-echo
+  for i in {0..8}
+  do
+    rozodiag -T export:${i} -c all > /tmp/rozodiag/export:${i}
+  done
+}
+#______________________________________________
+#
+# Dump rozofsmount diagnostic information
+#
+#______________________________________________   
+dump_mount() {
+
+  for path in `mount | awk '{if ($1=="rozofs") print $3;}'`
+  do
+  
+    inst=`attr -q -g rozofs.export ${path} | awk '{print $4}'`
+    rozodiag -T mount:${inst} -c all > /tmp/rozodiag/mount:${inst}
+
+    for storcli in `rozodiag -T mount:${inst} -c stclbg | awk '{if ($1=="storcli") print $2;}'` 
+    do
+      storcli=`echo ${storcli} | awk -F':' '{print $1}'`
+      rozodiag -T mount:${inst}:${storcli} -c all > /tmp/rozodiag/mount:${inst}:${storcli}
+    done        
+
+  done
+}
+#______________________________________________
+#
+# Process every diagnostic information
+#
+#______________________________________________   
+dump_rozodiag() { 
+
+  rm -rf /tmp/rozodiag
+  mkdir -p /tmp/rozodiag
+  
+  dump_storage
+  dump_export
+  dump_mount
+  
+  add_tarlist "-C /tmp rozodiag"
+} 
+
+#______________________________________________
+#
+# Process every dump/copy
+#
+#______________________________________________   
+do_dump() {   
+
+  # Result file name
+  case "$1" in
+    "") {
+      zedate=`date +"%Y_%m_%d_%H.%M.%S"`
+      RESULT="${utilityName}.${zedate}"
+    };;
+    *) {
+      RESULT=`echo $1 | awk -F".tgz" '{print $1}'`
+    };;
+  esac  
+  
+  # Reset the tar list
+  TARLIST=""
+
+  # Copy configuration files 
+  copy_conf > /dev/null 2>&1
+  
+  # Copy disk configuration files
+  copy_disks  > /dev/null 2>&1
+
+  # Dump rozodiag outputs
+  dump_rozodiag
+
+  # Add core files to the result tar file
+  add_tarlist "/var/run/rozofs_core"
+
+  # tar the working directory
+  tar cfz ${RESULT}.tgz ${TARLIST} > /dev/null 2>&1
+
+  # Remove dumped core files
+  for core in `tar -tf ${RESULT}.tgz | awk -F'/' '{if (($3=="rozofs_core")&&($5!="")) print $0;}'`
+  do
+    echo ${core}
+    rm -f /${core}
+  done
+
+  # Display the result file
+  echo
+  ls -lh ${RESULT}.tgz 
+
+  exit 0
+}
+#______________________________________________
+#
+# Extract from tar
+#
+#______________________________________________   
+do_extract() {
+  case "$1" in
+    "") syntax "Missing input file name";;
+  esac
+  
+  name=`echo $1 | awk -F".tgz" '{print $1}'`
+  name=${name}.extract
+  mkdir ${name}  
+  tar xfz $1 -C ${name}
+  echo "Result directory directory ${name}"
+  exit 0
+}
+#______________________________________________
+#
+# Syntax
+#
+#______________________________________________   
+syntax() {
+
+  case "$1" in
+    "");;
+    *) echo $1;;
+  esac
+     
+  echo "usage :"
+  echo "  ${utilityName} dump    <file>    To dump and tar everything in <file>.tgz"
+  echo "  ${utilityName} extract <file>    To extract every thing from <file>"
+  exit 1
+}
+#______________________________________________   
+#
+# M A I N
+# 
+#______________________________________________   
+
+# Get utility name and set other relative names
+utilityName=`basename $0`
+
+case "$1" in
+  "")        do_dump;;
+  "dump")    do_dump $2;;
+  "extract") do_extract $2;;
+  *) syntax;;
+esac
