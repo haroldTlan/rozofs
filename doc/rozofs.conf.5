@@ -12,8 +12,16 @@ is managed thanks to
 .B libconfig
 grammar.
 
+Boolean values must be set to either
+.B
+True
+or
+.B
+False.
+
+String values must enclosed into double quotes.
 .SS numa_aware
-That boolean (True or False) enables to take into account the NUMA architecture of the board in order to collocate some RozoFS modules on a same node. This may improve the inter process communication performance. 
+That boolean enables to take into account the NUMA architecture of the mother board in order to collocate some RozoFS modules on a same node. This may improve the inter process communication performance. 
 
 .SS file_distribution_rule
 This parameter enables to choose the file distribution rule at file creation. The following rules are defined:
@@ -40,8 +48,9 @@ This parameter enables to choose the file distribution rule at file creation. Th
 .RE	    
 
 .SS trashed_file_per_run
-Maximum number of file that the remove bins thread of a slave export can remove in a run. A 2 seconds delay occurs between every run. 
-
+Maximum number of file that the remove bins thread of a slave export can remove in a run. A 2 seconds delay occurs between every run. This provides the maximum deletion rate.
+.SS deletion_delay 
+Minimum delay in seconds between the FID unlink in the export and the actual projections removal on the storage nodes.
 .SS core_file_directory
 The directory under which the RozoFS modules store their core files in case a crash occurs. 
 
@@ -49,13 +58,16 @@ The directory under which the RozoFS modules store their core files in case a cr
 Maximum number of core file to keep on this node per RozoFS module type. The older core files are kept while the newest ones are removed. 
 
 .SS storio_multiple_mode
-Specifies if storaged starts one or multiple storio process(es).
-       Valid values are :
-           - "False"
-             only storio instance 0 is started. It takes care of every storage instance configured in the storage.conf.
-           - "True"
-             one storio is started for each cluster declared in the storage.conf file. The storio instance is the cluster number. 
+Specifies if storaged starts one or multiple storio process(es). Valid values are :
 
+- False
+.RS
+only storio instance 0 is started. It takes care of every storage instance configured in the storage.conf.
+.RE
+- True
+.RS
+one storio is started for each cluster declared in the storage.conf file. The storio instance is the cluster number. 
+.RE
 .SS nb_disk_thread
 Specifies the number of threads within the STORIO process that can operate the disk read/write.
 
@@ -139,38 +151,58 @@ When set to True, the rozofsmount updates some of its timers in order to reconne
 .SS disable_sync_attributes
 When set to True it disables synchonous write of the attributes.
 .SS device_selfhealing_mode
-The self-healing mode is a string that can take the following values:
-
-           - ""
-             No automatic device rebuild can take place.
- 
-           -
+This parameter is a string that can take the following values:
+.RS
+-
+.B
+""
+.RS
+No automatic device rebuild can take place.
+.RE
+-
 .B spareOnly
-             Failed devices are automatically rebuilt on a spare disk when one is available. 
- 
-           -
-.B relocate
-             Identical to "spareOnly" while some spare device is available.
-             When no more spare device is available, files of failed devices are automatically relocated on remaining devices of the same sid.
+.RS
+Failed devices are automatically rebuilt on a spare disk when one is available.
+.B
+device_automount
+must be True for auto rebuilt to take places on spare device.               
+.RE
+-
+.B "relocate"
+.RS
+Identical to 
+.B
+"spareOnly" 
+while some spare device is available. When no more spare device is available, files of failed devices are automatically relocated on remaining devices of the same sid.
+.RE
+.RE
 
 For self-healing to be active, the 
 .B export_hosts 
 parameter must be configured too.
+when self-healing is set, the following configuration parameters become effective.
+.TP 
 .SS device_selfhealing_delay
 Gives the delay in minutes before starting an automatic rebuild of a failed device. The lowest possible value is 1.  
+.TP
 .SS device_self_healing_process
 This parameter sets the number of rebuilder processes that run in parallel in case of an automatic rebuild for self-healing purpose. This is also the default number of rebuilder processes for operator rebuild commands.
+.TP
 .SS export_hosts 
 This parameter is needed for automatic rebuilds to take place. It gives the list of addresses (or dns names) where exportd daemon is running. When securing the exportd thanks to virtual IP address only the virtual IP address is declared (i.e "192.168.10.1"). When no virtual IP address is used the list of "physical" IP addresses of each host securing the exportd must be given (i.e "192.168.10.1/192.168.20.1").
-.SS deletion_delay 
-Minimum delay in seconds between the FID unlink in the export and the actual projections removal on the storage nodes.
-.SS deletion_delay 
-Minimum delay in seconds between the FID unlink in the export and the actual projections removal on the storage nodes.
+.TP
+.SS device_selfhealing_read_throughput
+This parameter provides the maximum bandwith in MB/s that a single rebuild process can take. 
 .SS spare_restore_enable
 Set to False to disable spare file restoring. Default value is True, which enables the spare file restoring feature. This feature tries to relocate data saved in spare files to the nominal location.
-This feature also requires export_hosts parameter to be set.
+This feature also requires 
+.B export_hosts 
+parameter to be set.
+when spare file restoring is active, the following configuration parameters become effective.
+.TP 
 .SS spare_restore_loop_delay
 This parameter gives in minutes the delay between two spare file restoring attempts.
+.TP 
 .SS spare_restore_read_throughput
 This parameter is the maximum network/disk bandwith that the spare file restoring process will take to run.  
 .SH EXAMPLE
