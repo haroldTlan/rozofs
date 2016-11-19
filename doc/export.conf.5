@@ -107,17 +107,12 @@ rule. Incoming IP addresses for a given export are checked against the
    squota is the number of data blocks that can be stored on a file system
    before being notified. hquota is the number maximum of data blocks that can
    be stored on a file system. vid is the volume where the file data for this
-   exported filesystem will be stored. bsize defines the block size to be used 
-   on this export.
+   exported filesystem will be stored.
 
        eid: (export identifier)
                - must be an integer.
                - must be unique for each exported filesystem managed by this
                  exportd.
-
-       bsize: (defines the block size used on this export)
-               - Valid bsize are within "4K", "8K", "16K", "32K".
-               - default bsize is "4K".
 
        root: (directory path where metadata for this filesystem will be stored)
                - must be an existing directory.
@@ -262,9 +257,9 @@ filters =
 exports = ( # List of exported filesystem
 
     # exported file systems on volume 1
-    {eid = 1; bsize="4K"; root = "/path/to/foo1"; filter="vol1", squota="128G"; hquota="256G"; vid=1;},
-    {eid = 2; bsize="4K"; root = "/path/to/foo2"; filter="vol1", squota="256G"; hquota="512G"; vid=1;},
-    {eid = 3; bsize="4K"; root = "/path/to/foo3"; filter="vol1", vid=1;},
+    {eid = 1; root = "/path/to/foo1"; filter="vol1", squota="128G"; hquota="256G"; vid=1;},
+    {eid = 2; root = "/path/to/foo2"; filter="vol1", squota="256G"; hquota="512G"; vid=1;},
+    {eid = 3; root = "/path/to/foo3"; filter="vol1", vid=1;},
 
     # exported file systems on volume 2
     {eid = 4; root = "/path/to/bar1"; vid=2;}
