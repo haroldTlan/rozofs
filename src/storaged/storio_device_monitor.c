@@ -650,8 +650,18 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
   if (re_enumration_required) {
     storio_monitor_enumerate();
     re_enumration_required = 0;
-  }
-         
+  }         
+
+  /*
+  ** Compute the maximium number of failures before self healing
+  */
+  max_failures = (common_config.device_selfhealing_delay  * 60)/STORIO_DEVICE_PERIOD;
+  if (max_failures == 0) max_failures = 1;
+
+  /*
+  ** Read system disk stat file
+  */
+  storage_read_disk_stats();  
        
   /*
   ** Loop on every storage managed by this storio
@@ -666,12 +676,6 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
     if (share->monitoring_period != STORIO_DEVICE_PERIOD) {
       share->monitoring_period = STORIO_DEVICE_PERIOD;
     }  
-
-    /*
-    ** Compute the maximium number of failures before self healing
-    */
-    max_failures = (common_config.device_selfhealing_delay  * 60)/STORIO_DEVICE_PERIOD;
-    if (max_failures == 0) max_failures = 1;
 
     /*
     ** Check whether some device is already in rebuild
@@ -708,12 +712,6 @@ void storio_device_monitor(uint32_t allow_disk_spin_down) {
     ** for distribution of new files on devices 
     */
     passive = 1 - st->device_free.active; 
-
-
-    /*
-    ** Read system disk stat file
-    */
-    storage_read_disk_stats();  
     
     /*
     ** Check whether some devices need to be mounted or unmounted now

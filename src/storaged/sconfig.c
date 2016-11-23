@@ -50,12 +50,13 @@
 #define SIOADDR     "addr"
 #define SIOPORT     "port"
 
+#define SSPARE_MARK     "spare-mark"
 #define SDEV_TOTAL      "device-total"
 #define SDEV_MAPPER     "device-mapper"
 #define SDEV_RED        "device-redundancy"
 
 int storage_config_initialize(storage_config_t *s, cid_t cid, sid_t sid,
-        const char *root, int dev, int dev_mapper, int dev_red) {
+        const char *root, int dev, int dev_mapper, int dev_red, const char * spare_mark) {
     DEBUG_FUNCTION;
 
     s->sid = sid;
@@ -64,11 +65,27 @@ int storage_config_initialize(storage_config_t *s, cid_t cid, sid_t sid,
     s->device.total      = dev;
     s->device.mapper     = dev_mapper; 
     s->device.redundancy = dev_red;
+    if (spare_mark == NULL) {
+      /*
+      ** Spare device have an empty "rozofs_spare" file
+      */
+      s->spare_mark = NULL;
+    }
+    else {
+      /*
+      ** Spare device have a "rozofs_spare" file with <spare_mark> string in it
+      */      
+      s->spare_mark = xstrdup(spare_mark);
+    }
     list_init(&s->list);
     return 0;
 }
 
 void storage_config_release(storage_config_t *s) {
+    if (s->spare_mark != NULL) {
+      xfree(s->spare_mark);
+      s->spare_mark = NULL;
+    }  
     return;
 }
 
@@ -204,6 +221,8 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
         long int cid;
 #endif
         const char *root = 0;
+        const char *spare_mark = NULL;
+        
 	char       rootPath[PATH_MAX];
 
         if (!(ms = config_setting_get_elem(stor_settings, i))) {
@@ -325,10 +344,19 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
             goto out;
         }
 
+        
+        /*
+        ** What string should be set in rozofs_spare mark files of spare disk for
+        ** this volume
+        */  
+        spare_mark = NULL;
+        if (config_setting_lookup_string(ms, SSPARE_MARK, &spare_mark) == CONFIG_FALSE) {
+          spare_mark = NULL;
+        }
 
         new = xmalloc(sizeof (storage_config_t));
         if (storage_config_initialize(new, (cid_t) cid, (sid_t) sid,
-                root, devices, mapper, redundancy) != 0) {
+                root, devices, mapper, redundancy,spare_mark) != 0) {
             if (new)
                 free(new);
             goto out;

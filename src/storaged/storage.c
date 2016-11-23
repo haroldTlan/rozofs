@@ -1256,7 +1256,8 @@ int storage_initialize(storage_t *st,
 		       const char *root, 
                        uint32_t device_number, 
 		       uint32_t mapper_modulo, 
-		       uint32_t mapper_redundancy) {
+		       uint32_t mapper_redundancy,
+                       const char *spare_mark) {
     int status = -1;
     int dev;
 
@@ -1281,6 +1282,19 @@ int storage_initialize(storage_t *st,
     st->device_number     = device_number; 
     st->mapper_redundancy = mapper_redundancy;
     st->share             = NULL;
+    if (spare_mark == NULL) {
+      /*
+      ** Spare disks have an empty mark file "rozofs_spare"
+      */
+      st->spare_mark = NULL;
+    }
+    else {
+      /*
+      ** Spare disks have the mark file "rozofs_spare" containing string <spare_mark>"
+      */
+      st->spare_mark = strdup(spare_mark);
+    }
+      
     
     st->device_free.active = 0;
     for (dev=0; dev<STORAGE_MAX_DEVICE_NB; dev++) {
@@ -3054,12 +3068,32 @@ typedef struct _storage_enumerated_device_t {
   int       mounted:1;    // Is it mounted 
   int       ext4:1;       // Is it ext4 (else xfs)
   int       spare:1;      // Is it a spare drive (cid/sid/device are meaningless)
+  char *    spare_mark;   // String written in spare mark file in case of a spare device
 } storage_enumerated_device_t;
 
 #define STORAGE_MAX_DEV_PER_NODE 255
 
 storage_enumerated_device_t * storage_enumerated_device_tbl[STORAGE_MAX_DEV_PER_NODE]={0};
 int                           storage_enumerated_device_nb=0;
+
+/*
+ *_______________________________________________________________________
+ *
+ * Free an enumerated device context
+ *
+ * @param pDev       Enumerated device context address
+ */
+void storage_enumerated_device_free(storage_enumerated_device_t * pDev) {
+
+  if (pDev == NULL) return;
+  
+  if (pDev->spare_mark != NULL) {
+    xfree(pDev->spare_mark);
+    pDev->spare_mark = NULL;
+  }
+  
+  xfree (pDev);
+} 
 /*
  *_______________________________________________________________________
  *
@@ -3071,6 +3105,7 @@ int                           storage_enumerated_device_nb=0;
  *
  * @retval 0 on success -1 when no mark file found
  */
+ #define        MAX_MARK_LEN    65
 int storage_check_device_mark_file(char * dir, storage_enumerated_device_t * pDev) {
   DIR           * dp = NULL;
   int             ret;
@@ -3081,6 +3116,9 @@ int storage_check_device_mark_file(char * dir, storage_enumerated_device_t * pDe
   char          * pChar;
   int             cid, sid, dev;
   int             status = -1;
+  int             i;
+  char            mark[MAX_MARK_LEN+1];
+  int             size;
   
   /*
   ** Check the directory is accessible
@@ -3090,7 +3128,7 @@ int storage_check_device_mark_file(char * dir, storage_enumerated_device_t * pDe
   }
   
   /*
-  ** Look for a spare mark in in the directory
+  ** Look for a spare mark file in the directory
   */
   pChar = path;
   pChar += rozofs_string_append(pChar,dir);
@@ -3098,11 +3136,51 @@ int storage_check_device_mark_file(char * dir, storage_enumerated_device_t * pDe
   pChar ++;
   pChar += rozofs_string_append(pChar,STORAGE_DEVICE_SPARE_MARK);    
   if (stat(path,&buf) == 0) {
+  
     pDev->spare = 1;
     pDev->date  = buf.st_mtime;
     pDev->cid   = 0;
     pDev->sid   = 0;
     pDev->dev   = 0;
+    
+    /*
+    ** There is one spare mark file.
+    ** Check its content
+    */
+    pDev->spare_mark = NULL;
+
+    /*
+    ** Empty mark file
+    */
+    if (buf.st_size == 0) return 0;
+    
+    /*
+    ** Mark file too big
+    */
+    if (buf.st_size > MAX_MARK_LEN) return -1;
+          
+    /*
+    ** Open file
+    */
+    int fd = open(path, ROZOFS_ST_NO_CREATE_FILE_FLAG);
+    if (fd < 0) return -1;
+    
+    /*
+    ** Read mark file
+    */  
+    size = pread(fd, mark, MAX_MARK_LEN, 0);
+    close(fd);
+      
+    /*
+    ** Remove carriage return
+    */  
+    for (i=0; i<size; i++) {
+      if (mark[i] == 0) break;
+      if (mark[i] == '\n') break;
+    } 
+    mark[i] = 0;
+    pDev->spare_mark = xmalloc(i+1);
+    strcpy(pDev->spare_mark, mark);
     return 0;
   }    
 
@@ -3222,7 +3300,7 @@ void storage_sort_enumerated_devices() {
 	/* 
 	** Same CID/SID/device. Compare mark file date
 	*/     	 	     	 	
-        if (pDev2->date < pDev1->date) {
+        if (pDev2->date > pDev1->date) {
 	  swap = 1;
 	  break;
 	} 		 	
@@ -3247,11 +3325,8 @@ void storage_reset_enumerated_device_tbl() {
   storage_enumerated_device_t * pDev;
   
   for (idx=0; idx<storage_enumerated_device_nb; idx++) {
-  
     pDev = storage_enumerated_device_tbl[idx];
-    if (pDev != NULL) {
-      xfree (pDev);
-    }  
+    storage_enumerated_device_free(pDev); 
     storage_enumerated_device_tbl[idx] = NULL;
   }
   storage_enumerated_device_nb = 0;
@@ -3358,6 +3433,15 @@ int storage_enumerate_devices(char * workDir, int unmount) {
 	CONT;
       }
     }
+    else {
+      /*
+      ** Free spare mark string if any was allocated
+      */
+      if (pDev->spare_mark) {
+        xfree(pDev->spare_mark);
+        pDev->spare_mark = NULL;
+      }
+    }
     memset(pDev,0,sizeof(storage_enumerated_device_t));
 
     /* 
@@ -3415,17 +3499,51 @@ int storage_enumerate_devices(char * workDir, int unmount) {
       }
       
       /*
-      ** Spare should not be mounted 
+      ** Spare device
       */
       if (pDev->spare) {
+      
+        /*
+        ** Spare device should not be mounted 
+        */
         if (umount2(pMount,MNT_FORCE)==0) {
 	  pDev->mounted = 0;
 	}
+        
+        /*
+        ** Check if someone cares about this spare file in this module        
+        */
+        st = NULL;
+        while (st = storaged_next(st)) {
+          /*
+          ** This storage requires a mark in the spare file
+          */
+          if (st->spare_mark != NULL) {
+            /*
+            ** There is none in this spare file
+            */
+            if (pDev->spare_mark == NULL) continue;
+            /*
+            ** There is one but not the expected one
+            */
+            if (strcmp(st->spare_mark,pDev->spare_mark)!= 0) continue;
+            /*
+            ** This spare device is interresting for this logical storage
+            */
+            break;
+          }
+          /*
+          ** This storage requires no mark in the spare file (empty file)
+          */
+          if (pDev->spare_mark == NULL) break;
+        }
 	/*
-	** Record device 
+	** Record device in enumeration table when relevent
 	*/
-	storage_enumerated_device_tbl[storage_enumerated_device_nb++] = pDev;
-	pDev = NULL;
+        if (st != NULL) {
+  	  storage_enumerated_device_tbl[storage_enumerated_device_nb++] = pDev;
+	  pDev = NULL;
+        }  
         CONT;
       }	   
       
@@ -3477,7 +3595,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
     ** Mount the file system on the working directory
     */
     ret = mount(pDev->name, workDir,  FStype, 
-		MS_NOATIME | MS_NODIRATIME , 
+		MS_NOATIME | MS_NODIRATIME | MS_SILENT, 
 		common_config.device_automount_option);
     if (ret != 0) {
       severe("mount(%s,%s,%s) %s",
@@ -3503,11 +3621,41 @@ int storage_enumerate_devices(char * workDir, int unmount) {
     ** Spare device
     */
     if (pDev->spare) {
+      
       /*
-      ** Record device 
+      ** Check if someone cares about this spare file in this module
       */
-      storage_enumerated_device_tbl[storage_enumerated_device_nb++] = pDev;
-      pDev = NULL;
+      st = NULL;
+      while (st = storaged_next(st)) {
+        /*
+        ** This storage requires a mark in the spare file
+        */
+        if (st->spare_mark != NULL) {
+          /*
+          ** There is none in this spare file
+          */
+          if (pDev->spare_mark == NULL) continue;
+          /*
+          ** There is one but not the expected one
+          */
+          if (strcmp(st->spare_mark,pDev->spare_mark)!= 0) continue;
+          /*
+          ** This spare device is interresting for this logical storage
+          */
+          break;
+        }
+        /*
+        ** This storage requires no mark in the spare file (empty file)
+        */
+        if (pDev->spare_mark == NULL) break;
+      }
+      /*
+      ** Record device in enumeration table when relevent
+      */
+      if (st != NULL) {
+        storage_enumerated_device_tbl[storage_enumerated_device_nb++] = pDev;
+        pDev = NULL;
+      }  
       CONT;
     }	   
       
@@ -3532,7 +3680,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   ** Free allocated structure that has not been used
   */ 
   if (pDev != NULL) {
-    free(pDev);
+    storage_enumerated_device_free(pDev);
     pDev = NULL;
   }
   /*
@@ -3637,7 +3785,8 @@ int rozofs_check_mountpath(const char * mntpoint) {
  * Display enumerated devices
  */
 void storage_show_enumerated_devices_man(char * pt) {
-  pt += rozofs_string_append(pt, "Display some information on each RozoFS enumerated devices.\n");
+  pt += rozofs_string_append(pt, "usage :\nenumeration\n    Displays RozoFS enumerated devices.\n");
+  pt += rozofs_string_append(pt, "enumeration again\n    Forces re-enumeration (storio only).\n");
 }
 /*
  *_______________________________________________________________________
@@ -3693,6 +3842,11 @@ void storage_show_enumerated_devices(char * argv[], uint32_t tcpRef, void *bufRe
     pChar += rozofs_string_append(pChar, "      \"role\" : \"");
     if (pDev1->spare) {
       pChar += rozofs_string_append(pChar, "spare\"");
+      pChar += rozofs_string_append(pChar, ", \"mark\" : \"");
+      if (pDev1->spare_mark) {
+        pChar += rozofs_string_append(pChar, pDev1->spare_mark);
+      }
+      pChar += rozofs_string_append(pChar, "\"");
     }
     else {
       pChar += rozofs_u32_append(pChar,pDev1->cid);
@@ -3805,12 +3959,12 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev) {
   */
   if (pDev->ext4) {
     ret = mount(pDev->name, cmd, "ext4", 
-		MS_NOATIME | MS_NODIRATIME ,
+		MS_NOATIME | MS_NODIRATIME | MS_SILENT,
 		common_config.device_automount_option);
   }
   else {
     ret = mount(pDev->name, cmd, "xfs", 
-		MS_NOATIME | MS_NODIRATIME ,
+		MS_NOATIME | MS_NODIRATIME | MS_SILENT,
 		common_config.device_automount_option);
   }		  
   if (ret != 0) {
@@ -3871,6 +4025,11 @@ int storage_mount_one_device(storage_enumerated_device_t * pDev) {
   ** Device is mounted now
   */
   pDev->mounted = 1;
+  /*
+  ** Force rereading major & minor of the mounted device
+  */
+  st->device_ctx[pDev->dev].major = 0;
+  st->device_ctx[pDev->dev].minor = 0;  
   info("%s mounted on %s",pDev->name,cmd);    
   return 0;
 }  
@@ -3897,7 +4056,29 @@ int storage_replace_with_spare(storage_t * st, int dev) {
     pDev = storage_enumerated_device_tbl[idx];
     if (pDev == NULL)   continue;
     if (pDev->spare==0) continue;
+    
+    
+    if (st->spare_mark == 0) {
+      /*
+      ** Looking for an empty spare mark file
+      */
+      if (pDev->spare_mark != NULL) continue; 
+    }
+    else {
+      /*
+      ** Looking for a given string in the spare mark file
+      */
+      if (pDev->spare_mark == NULL) continue;
+      if (strcmp(pDev->spare_mark,st->spare_mark) != 0) continue;  
+    }
 
+    /*
+    ** This is either the empty spare mark file we were expecting
+    ** or a spare mark file containing the string we were expecting.
+    ** This spare device can be used by this cid/sid.
+    */
+    
+    
     /*
     ** Mount this spare disk instead
     */

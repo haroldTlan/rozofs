@@ -1410,7 +1410,8 @@ int rbs_initialize(cid_t cid, sid_t sid, const char *storage_root,
       if (storage_initialize(storage_to_rebuild, cid, sid, storage_root,
 		  dev,
 		  dev_mapper,
-		  dev_red) != 0)
+		  dev_red,
+                  NULL/*don't care about spare files */) != 0)
           goto out;
     }
 
@@ -1440,7 +1441,8 @@ static int storaged_initialize() {
                 sc->cid, sc->sid, sc->root,
 		sc->device.total,
 		sc->device.mapper,
-		sc->device.redundancy) != 0) {
+		sc->device.redundancy,
+                sc->spare_mark) != 0) {
             severe("can't initialize storage (cid:%d : sid:%d) with path %s",
                     sc->cid, sc->sid, sc->root);
             goto out;

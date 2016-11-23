@@ -27,18 +27,49 @@ Specifies list of IP(s) (or hostname(s)) and port(s) the storio process must lis
 
 .SS storages (mandatory)
 
-It's the list of local storage managed by this storaged.
-Each storage is identified by the cluster to which belongs the storage (cid) 
-and by it's identifier in the cluster (sid). Each pair (cid,sid) must be
-unique. The root is the path where data will be stored for this storage.
-Under this path stands the logical devices (numbered from 0) on which the
-storage will spread the data. The storage writes a new data file on the 
-less occupied device. A mapping file stores the choosen device for each
-file. The device holding the mapping file is computed from a hash. Although
-the number of devices can be increased to scale the storage up, the number
-of mapping devices can not change (because of the hash). The mapping files 
-have some replica written on the devices following their main device.
+It is the list of logical storages managed by this storage node.
+The storage node is subdivided in several logical storages, each managing its set of disk. 
+Each logical storage is identified by its cluster identifier (cid) and logical storage identifier (sid) within the cluster. 
+Each (cid,sid) pair must be unique within a RozoFS system.
 
+The logical storage manages several devices. 
+When device automount is not set (check device_automount in man rozofs.conf) a root path parameter must be set for each logical storage to tell the directory under which one must find a sub-directory per configured device.
+1rst device is subdirectory "0", 2nd is subdirectory "1" and so on. 
+An empty  file named "X" should be created in the device subdirectory prior to mounting any device on it.
+Whether this "X" file is visible or not tells RozoFS whether some device is mounted or not on the directory.
+A mark file named "storage_c<cid>_s<sid>_<device#>" should be created at the root of the device in order to prevent this device to be miss used in case it is not mounted at the right place.
+All these directories and files should be created offline at installation time when device automount is not set.
+
+Prefer setting device automount feature on (man rozofs.conf) for an easier system setup. 
+In this case the root path parameter is ignored.
+One has just to format the device, mount it anywhere, set the "storage_c<cid>_s<sid>_<device#>" mark file at its root and finally unmount it.
+The storage will take care of the rest.
+
+It is up to the logical storage to distribute each mojette projected chunk of data file on its devices and to remember where they are.
+For this purpose it stores this distribution information in a mapper file per user file.
+These mapper files are spread among the available devices.
+For a given data file a hash on the file unic identifier (FID) modulo the number of devices gives the device number where the mapper file of this FID stands.
+When one first install the logical storage, all available devices should be used to receive mapper files.
+Later when some devices are added to the logical storage, one must not change the hash modulo to be able to retrieve the mapper information.
+So the data files will be spread on all the devices (device-total) while the mapper files will still be spread on the previous number of device (device-mapper).
+At the first RozoFS system setup the 2 values are the same.
+Later when one add some devices to the logical storage, device-total is increased while device-mapper is not changed.
+
+When some device is broken, some mapper files may be missing. As RozoFS must be fault tolerant, it must keep several copy of each mapper file on several 
+devices. A value of 2 for device-redundancy is consistent with a layout 0, while a value of 3 better fits a layout 1.
+
+If device self healing from spare devices is enabled (check device_selfhealing_mode in man rozofs.conf), while only one volume is configured, any spare device can be used by any logical storage. 
+In this case a spare device is just a formatted but not mounted ext4/xfs disk with an empty mark file named "rozofs_spare" at its root. 
+Any logical storage can use it when it needs to replace a failed device.
+The spare-mark parameter must not be set in the storage configuration file.
+
+When several volumes are defined, they are probably built from disks of different nature and characteristics. 
+A spare device can only secure a given volume.
+A specific string for each volume must be set in the "rozofs_spare" mark files of the spare devices to tell what volume this spare device can secure.
+The logical storage must know which string it must find in a spare device mark file to use this spare device.
+The spare-mark parameter tells the logical storage the content of the rozofs_spare mark file of its spare devices.
+ 
+ 
     cid: (cluster identifier)
             - must be an integer.
             - should exist in exportd configuration file.
@@ -48,6 +79,7 @@ have some replica written on the devices following their main device.
             - should exist in exportd configuration file.
 
     root: (directory path where data will be stored)
+            - is ignored and so can be omitted when device automount is set.
             - must be an existing directory.
             - must be unique for each storage managed by this storaged.
 	    
@@ -62,9 +94,12 @@ have some replica written on the devices following their main device.
     device-redundancy: (number of copies of each file to device mapping file)
             - must be an integer.
             - must be lower than or equal to device-mapper.	    
-            - must not be decreased.
-
-
+            - must not be decreased.             
+    spare-mark: (content of the rozofs_spare mark file of the spare devices of this logical storage) 
+            - can be ommited if its spare devices have an empty "rozofs_spare" mark file.
+            - must be a string
+            - must not exceed 64 character
+                
 .SS self-healing and export-hosts : Deprecated !
 
 Check in rozofs.conf how to setup selhealing with RozoFS.

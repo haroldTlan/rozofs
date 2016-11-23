@@ -151,9 +151,12 @@ class host_class:
     print "storages = ("
     for s in self.sid:
       if rozofs.device_automount == True:
-        print "\t%s{cid = %s; sid = %s; device-total = %s; device-mapper = %s; device-redundancy = %s;}"%(nexts,s.cid.cid,s.sid,s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red)      
+        if s.cid.volume.vid == 1 :
+          print "\t%s{cid = %s; sid = %s; device-total = %s; device-mapper = %s; device-redundancy = %s; }"%(nexts,s.cid.cid,s.sid,s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red)      
+        else:
+          print "\t%s{cid = %s; sid = %s; device-total = %s; device-mapper = %s; device-redundancy = %s; spare-mark = \"%s\";}"%(nexts,s.cid.cid,s.sid,s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red,s.cid.volume.vid)                
       else:
-        print "\t%s{cid = %s; sid = %s; root =\"%s\"; device-total = %s; device-mapper = %s; device-redundancy = %s;}"%(nexts,s.cid.cid,s.sid,s.get_root_path(self.number),s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red)
+        print "\t%s{cid = %s; sid = %s; root =\"%s\"; device-total = %s; device-mapper = %s; device-redundancy = %s; }"%(nexts,s.cid.cid,s.sid,s.get_root_path(self.number),s.cid.dev_total,s.cid.dev_mapper,s.cid.dev_red)
       nexts=","
     print "); "
        
@@ -1040,7 +1043,6 @@ class rozofs_class:
     self.storaged_start_script = None
     self.device_automount = False
     self.site_number = 1
-    self.spare_device_nb = 0
     self.client_fast_reconnect = False
     self.deletion_delay = None
 
@@ -1077,11 +1079,10 @@ class rozofs_class:
     self.allocsize    = allocsize
   def set_deletion_delay(self,deletion_delay): self.deletion_delay = deletion_delay; 
     
-  def set_ext4(self,mb,spare=0):
+  def set_ext4(self,mb):
     self.fstype = "ext4"
     self.disk_size_mb = mb
     self.set_device_automount()
-    self.spare_device_nb=spare
       
   def get_config_path(self):
     path = "%s/SIMU"%(os.getcwd())
@@ -1124,10 +1125,10 @@ class rozofs_class:
     if val == 2: return "16K"
     if val == 3: return "32K"
 
-  def create_loopback_device(self,path,mark):  
+  def create_loopback_device(self,path,mark,content=None):  
     if rozofs.disk_size_mb == None: return
 
-    print "Create create_loopback_device %s %s"%(path,mark)
+    print "Create create_loopback_device %s %s %s"%(path,mark,content)
     
     # Need a working directory
     tmpdir="/tmp/setup"
@@ -1158,8 +1159,11 @@ class rozofs_class:
     else:  
       os.system("mkfs.xfs -f -q %s"%(loop))
       os.system("mount -t xfs %s %s"%(loop,tmpdir))  
-    # Create the mark file      		
-    os.system("touch %s/%s"%(tmpdir,mark))
+    # Create the mark file  
+    if content == None:     		
+      os.system("touch %s/%s"%(tmpdir,mark))
+    else:
+      os.system("echo %s > %s/%s"%(content,tmpdir,mark))      
     time.sleep(2)
     # Umount the temporary directory
     os.system("umount %s"%(tmpdir))	  
@@ -1192,12 +1196,12 @@ class rozofs_class:
       syslog.syslog("%s Deleted -> %s"%(path,devFile))	
     except: pass 
   
-  def newspare(self):
+  def newspare(self,mark=None):
     # Find a free spare number
     for idx in range(0,4096):
       path="%s/devices/spare%s"%(self.get_config_path(),idx)
-      if not os.path.exists(path):        
-        rozofs.create_loopback_device(path,"rozofs_spare")
+      if not os.path.exists(path):
+        rozofs.create_loopback_device(path,"rozofs_spare",mark)            
         return
     print "No free spare number for spare device file"	
                
@@ -1288,10 +1292,6 @@ class rozofs_class:
       mount_points[0].display()    
 
   def create_path(self):
-    #	Create spare devices
-    idx=int(0)
-    while idx < rozofs.spare_device_nb:
-      rozofs.newspare()  
     for v in volumes: v.create_path()
     
   def delete_path(self):
@@ -1644,8 +1644,11 @@ def test_parse(command, argv):
   elif command == "monitor"            : rozofs.monitor()
 
   elif command == "spare"              : 
-    rozofs.newspare() 
-
+    try: 
+      rozofs.newspare(argv[2]) 
+    except:
+      rozofs.newspare() 
+      
   elif command == "ifup":
     itf=None 
     if len(argv) < 3 : syntax("Missing interface number","if")

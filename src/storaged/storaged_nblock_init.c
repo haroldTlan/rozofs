@@ -404,9 +404,13 @@ static void show_storage_json_device_status(char * argv[], uint32_t tcpRef, void
 	for (device=0; device < st->device_number; device++) {
 	  storage_device_info_t *pdev = &share->dev[device];
 	  
-	  pChar += sprintf(pChar, "    { \"cid\" : %d, \"sid\" : %d, \"device\" : %d, \"name\" : \"%s\", \"status\" : \"%s\", \"free\" : %llu, \"total\" : %llu },\n",
-	                   st->cid, st->sid, device, pdev->devName,storage_device_status2string(pdev->status),
-			   (long long unsigned int)pdev->free ,(long long unsigned int)pdev->size);   
+	  pChar += sprintf(pChar, "    { \"cid\" : %3d, \"sid\" : %2d, \"device\" : %2d, "
+                                        "\"name\" : \"%s\", \"mount-path\" : \"%s/%d\", "
+                                        "\"status\" : \"%s\", \"free\" : %llu, \"total\" : %llu },\n",
+	                          st->cid, st->sid, device, 
+                                  pdev->devName, st->root, device, 
+                                  storage_device_status2string(pdev->status),
+			          (long long unsigned int)pdev->free ,(long long unsigned int)pdev->size);   
 	}
       }	
     }  
