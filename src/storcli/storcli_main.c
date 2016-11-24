@@ -54,6 +54,7 @@
 #include <rozofs/core/rozofs_host2ip.h>
 #include <rozofs/core/ruc_traffic_shaping.h>
 #include <rozofs/core/rozofs_host_list.h>
+#include <rozofs/core/rozofs_numa.h>
 
 #include "rozofs_storcli_lbg_cnf_supervision.h"
 #include "rozofs_storcli.h"

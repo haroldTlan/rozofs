@@ -3514,7 +3514,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
         ** Check if someone cares about this spare file in this module        
         */
         st = NULL;
-        while (st = storaged_next(st)) {
+        while ((st = storaged_next(st)) != NULL) {
           /*
           ** This storage requires a mark in the spare file
           */
@@ -3626,7 +3626,7 @@ int storage_enumerate_devices(char * workDir, int unmount) {
       ** Check if someone cares about this spare file in this module
       */
       st = NULL;
-      while (st = storaged_next(st)) {
+      while ((st = storaged_next(st)) != NULL) {
         /*
         ** This storage requires a mark in the spare file
         */
