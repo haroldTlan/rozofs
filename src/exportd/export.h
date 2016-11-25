@@ -166,8 +166,15 @@ typedef struct export {
     volume_t *volume; ///< the volume export relies on
     uint32_t bsize; ///< the block size from enum ROZOFS_BSIZE_E
     char root[PATH_MAX]; ///< absolute path of the storage root
-    char md5[ROZOFS_MD5_SIZE]; ///< passwd
     uint8_t layout; ///< layout
+    /*
+    ** To check whether meta-data SSD is fulle 
+    */
+    uint8_t   meta_full;    
+    uint64_t  meta_next_microsec;
+    uint32_t  meta_inode;
+    uint32_t  meta_block;    
+    
     uint64_t squota; ///< soft quota in blocks
     uint64_t hquota; ///< hard quota in blocks
     void    *quota_p;  ///< pointer to the quota context
@@ -182,6 +189,7 @@ typedef struct export {
     // of files to delete for each bucket trash
     pthread_t load_trash_thread; ///< pthread for load the list of trash and recycle files
     // to delete when we start or reload this export
+    char md5[ROZOFS_MD5_SIZE]; ///< passwd
 } export_t;
 
 extern uint32_t export_configuration_file_hash;  /**< hash value of the configuration file */
