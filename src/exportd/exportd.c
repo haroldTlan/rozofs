@@ -1348,6 +1348,47 @@ static void exportd_release() {
     lv2_cache_release(&cache);
 #endif    
 }
+
+/*
+**__________________________________________________________________
+  SSD resources rozodiag man   
+**__________________________________________________________________
+*/
+void show_metadata_device_usage(char *pChar) {
+  pChar += sprintf(pChar,"Enable to check whether meta-data device lacks of resources\n");
+  pChar += sprintf(pChar,"usage : metadata <eid>\n");
+}
+/*
+**__________________________________________________________________
+  SSD resources rozodiag cli   
+**__________________________________________________________________
+*/
+void show_metadata_device(char * argv[], uint32_t tcpRef, void *bufRef)  {
+  char     * pChar = uma_dbg_get_buffer();
+  uint32_t   eid;
+  export_t * e;
+
+  eid = 1;  
+  if (argv[1] != NULL) {
+    sscanf(argv[1],"%u",&eid);
+  }
+  
+  e = exports_lookup_export(eid);
+  if (e==NULL) {
+    show_metadata_device_usage(pChar);
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer()); 
+    return;  	     
+  }
+  
+   
+  pChar += sprintf(pChar,"{ \"meta-data\" : {\n");
+  pChar += sprintf(pChar,"     \"eid\"        : %d,\n",eid);    
+  pChar += sprintf(pChar,"     \"full\"       : \"%s\",\n",e->meta_full?"YES":"NO");  
+  pChar += sprintf(pChar,"     \"inode-free\" : %u,\n",e->meta_inode);
+  pChar += sprintf(pChar,"     \"block-free\" : %u\n",e->meta_block);
+  pChar += sprintf(pChar,"  }\n}\n");  
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	     
+}
 /*
  *_______________________________________________________________________
  */

@@ -1052,6 +1052,9 @@ int expgwc_non_blocking_init(uint16_t dbg_port, uint16_t exportd_instance) {
  */
  void show_attr_thread(char * argv[], uint32_t tcpRef, void *bufRef);
 
+void show_metadata_device_usage(char *pChar);
+void show_metadata_device(char * argv[], uint32_t tcpRef, void *bufRef);
+
 int expgwc_start_nb_blocking_th(void *args) {
 
 
@@ -1183,7 +1186,7 @@ int expgwc_start_nb_blocking_th(void *args) {
     uma_dbg_addTopic("flock",    show_flock);  
     uma_dbg_addTopic("clients",show_flock_clients); 
     uma_dbg_addTopic_option("trk_thread", show_tracking_thread,UMA_DBG_OPTION_RESET);
-    
+    uma_dbg_addTopicAndMan("metadata",show_metadata_device,show_metadata_device_usage,0);        
     /*
     ** add export versioning
     */
