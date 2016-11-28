@@ -121,7 +121,7 @@ rozofs.set_self_healing(1)
 # rozofs.set_nb_listen(4)
 
 # Modify number of storio threads
-# rozofs.set_threads(8)
+#rozofs.set_threads(16)
 
 # Use fixed size file mounted through losetup for devices
 #rozofs.set_ext4(100)
@@ -142,7 +142,7 @@ rozofs.set_self_healing(1)
 # rozofs.set_mojette_threads_threshold(32*1024)
 
 # Dual STORCLI
-# rozofs.dual_storcli()
+rozofs.set_nb_storcli(4)
 
 # Disable POSIX lock
 #rozofs.no_posix_lock()
@@ -154,24 +154,34 @@ rozofs.set_self_healing(1)
 # Client fast reconnect
 #rozofs.set_client_fast_reconnect()
 
-#-------------- NB devices
+#-------------- NB devices per sid
 devices    = 3
 mapper     = 3
 redundancy = 2
 
 # Nb cluster per volume
-nbclusters = 3
+nbclusters = 2
 
-# default is to have one mount point per site
+# default is to have one mount point per site and export
 clients_nb = 1
 
-# Define Layout
+# Define default layout
 setLayout(1)
 
-# Define number of Host 
+# Define volume 1 on some hosts
 vol = setVolumeHosts(8)
+# Create an export on this volume with layout 1
 addExport(vol,1)
-addExport(vol,0)
+# Add an other export on this volume with layout 1
+addExport(vol,1)
+
+
+# An other volume on the same hosts
+#vol = setVolumeHosts(8)
+# Create an export on this volume with layout 1
+#addExport(vol,1)
+# Add an other export on this volume with layout 1
+#addExport(vol,1)
 
 
 # Set host 1 faulty

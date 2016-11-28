@@ -456,7 +456,9 @@ class mount_point_class:
 
   def __init__(self, eid, layout, site=0):
     global mount_points
-    instance = len(mount_points)    
+    instance = len(mount_points)
+    # When more than 2 storcli, use one rozofsmount instance upon 2
+    if rozofs.nb_storcli > 2 : instance = 2 * instance       
     self.instance = instance
     self.eid = eid
     self.site= site    
@@ -1070,7 +1072,11 @@ class rozofs_class:
   def enable_read_mojette_threads(self): self.read_mojette_threads = True
   def disable_write_mojette_threads(self): self.read_mojette_threads = False
   def set_mojette_threads_threshold(self,threshold): self.mojette_threads_threshold = threshold
-  def dual_storcli(self): self.nb_storcli = 2
+  def set_nb_storcli(self,nb=1): 
+    self.nb_storcli = nb
+    # Must have enough share memry size
+    with open("/proc/sys/kernel/shmmax") as f: val=f.readlines()
+    if int(val[0]) < int(52428800): os.system("echo 52428800 > /proc/sys/kernel/shmmax")  
   def set_file_distribution(self,val): self.file_distribution = val
   def set_client_fast_reconnect(self): self.client_fast_reconnect = True
   def set_xfs(self,mb,allocsize=None):
