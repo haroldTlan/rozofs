@@ -91,6 +91,7 @@ void syntax_display() {
   printf("                     geomgr                               for a geomgr\n");
   printf("                     geocli[:<geocli instance>]           for a geo-replication client\n");
   printf("                     geocli[:<geocli instance>[:<1|2>]]   for a storcli of a geo-replication client\n");    
+  printf("                     rebalancer[:<instance>]              for rebalancer instance <instance>\n");    
   printf(" At least one -p or -m value must be given.\n");
   printf("\nOptionnaly a list of command to run can be specified:\n");
   printf("  [-c <cmd|all>]...\n"); 
@@ -552,7 +553,26 @@ char *argv[];
 	  // storcli:x:y 
 	  port32 = rozofs_get_service_port_fsmount_storcli_diag(port32,val32);
 	}
-      }          
+      }  
+      else if (strncasecmp(pt,"rebalancer",strlen("rebalancer"))==0) {
+      
+	pt += strlen("rebalancer");
+        
+        if (*pt == 0) { 
+	  port32 = rozofs_get_service_port_rebalancing_diag(0);
+	}  
+        else {
+          if (*pt != ':') { 
+	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
+	  }  
+	  pt++;
+	  ret = sscanf(pt,"%u",&port32);
+	  if (ret != 1) {
+	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
+          }
+          port32 = rozofs_get_service_port_rebalancing_diag(port32);
+	}
+      }                
       else {
 	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);       
       }
