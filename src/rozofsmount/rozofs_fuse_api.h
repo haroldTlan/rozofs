@@ -617,6 +617,10 @@ static inline void  fuse_ctx_read_pending_queue_insert(file_t *f,void *buffer_p)
      rozofs_fuse_save_ctx_t *fuse_save_ctx_p;
      
      f->pending_read_count +=1;
+     /*
+     ** pre-allocate the received buffer
+     */
+     rozofs_storcli_pending_req_count++;
      fuse_save_ctx_p = (rozofs_fuse_save_ctx_t*)ruc_buf_getPayload(buffer_p);
 
      ruc_objInsertTail((ruc_obj_desc_t*)&f->pending_rd_list,(ruc_obj_desc_t*)&fuse_save_ctx_p->link);
@@ -640,6 +644,10 @@ static inline void  *fuse_ctx_read_pending_queue_get(file_t *f)
      fuse_save_ctx_p = (rozofs_fuse_save_ctx_t*) ruc_objGetFirst((ruc_obj_desc_t*)&f->pending_rd_list);
      if ( fuse_save_ctx_p != NULL)
      {
+       /*
+       ** release the pre-allocated receive buffer
+       */
+       rozofs_storcli_pending_req_count--;
        f->pending_read_count -=1;
        ruc_objRemove((ruc_obj_desc_t*)&fuse_save_ctx_p->link);
        return(fuse_save_ctx_p->buf_ref);     
