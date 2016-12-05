@@ -1282,6 +1282,8 @@ int storage_initialize(storage_t *st,
     st->device_number     = device_number; 
     st->mapper_redundancy = mapper_redundancy;
     st->share             = NULL;
+    st->next_device       = 0;
+    
     if (spare_mark == NULL) {
       /*
       ** Spare disks have an empty mark file "rozofs_spare"

@@ -246,6 +246,7 @@ typedef struct storage {
     sid_t sid; ///< unique id of this storage for one cluster
     cid_t cid; //< unique id of cluster that owns this storage
     char root[FILENAME_MAX]; ///< absolute path.
+    uint32_t next_device;    ///< for strict round robin allocation
     /*
     ** String to search for inside spare mark file when looking for a spare device
     ** When null : look for empty "rozofs_spare" file
