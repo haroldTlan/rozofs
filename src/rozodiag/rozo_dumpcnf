@@ -55,13 +55,15 @@ copy_disks() {
 #
 #______________________________________________   
 dump_storage() {
-
-  rozodiag -T storaged -c all > /tmp/rozodiag/storaged
+# ADDR=" -i localhost1 "
+  ADDR=""
   
-  storios=`rozodiag -T storaged -c storio | awk '{if ($1=="cids") print $0;}' | awk -F':' '{print $2;}'`
+  rozodiag ${ADDR} -T storaged -c all > /tmp/rozodiag/storaged
+  
+  storios=`rozodiag ${ADDR} -T storaged -c storio | awk '{if ($1=="cids") print $0;}' | awk -F':' '{print $2;}' | tr ' ' '\n' | sort -u`
   for storio in ${storios} 
-  do
-    rozodiag -T storio:${storio} -c all > /tmp/rozodiag/storio:${storio}
+  do  
+    rozodiag ${ADDR} -T storio:${storio} -c all > /tmp/rozodiag/storio:${storio}
   done
 }
 #______________________________________________
@@ -113,6 +115,32 @@ dump_rozodiag() {
   
   add_tarlist "-C /tmp rozodiag"
 } 
+#______________________________________________
+#
+# Process every diagnostic information
+#
+#______________________________________________   
+dump_interfaces() { 
+
+  ifconfig > /tmp/network  
+  
+  first=1
+  for if in `ifconfig -s | awk '{print $1}'`
+  do
+    # Skip 1rst line
+    case "$first" in
+      "1") first=0; continue;;
+    esac
+    
+    echo "------------ ${if}"
+    echo "--- Pause conf"  
+    ethtool -a ${if}  
+    echo "--- Statistics"  
+    ethtool -S ${if} 
+  done >> /tmp/network  
+   
+  add_tarlist "-C /tmp network"
+} 
 
 #______________________________________________
 #
@@ -144,6 +172,9 @@ do_dump() {
   # Dump rozodiag outputs
   dump_rozodiag
 
+  # Interafce statistics
+  dump_interfaces
+
   # Add core files to the result tar file
   add_tarlist "/var/run/rozofs_core"
 
@@ -156,7 +187,7 @@ do_dump() {
     echo ${core}
     rm -f /${core}
   done
-
+  
   # Display the result file
   echo
   ls -lh ${RESULT}.tgz 
@@ -205,6 +236,16 @@ syntax() {
 
 # Get utility name and set other relative names
 utilityName=`basename $0`
+
+# Options
+while [ ! -z $1 ];
+do
+  case $1 in
+    "-v") set -x; shift 1;;
+    *) break;;
+  esac
+done
+
 
 case "$1" in
   "")        do_dump;;
