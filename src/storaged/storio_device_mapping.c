@@ -509,7 +509,7 @@ void storage_rebuild_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
 */
 uint32_t storio_allocated_device=0;
 uint32_t storio_device_mapping_allocate_device(storage_t * st) {
-  int           dev=0;
+  uint32_t      dev=0;
   uint64_t    * pBlocks;
   uint64_t      max = 0;
   uint64_t      val;
@@ -524,8 +524,7 @@ uint32_t storio_device_mapping_allocate_device(storage_t * st) {
       /*
       ** Get next device number
       */  
-      __atomic_fetch_add(&storio_allocated_device,1,__ATOMIC_SEQ_CST);  
-      dev = storio_allocated_device % st->device_number;
+      dev = __atomic_fetch_add(&st->next_device,1,__ATOMIC_SEQ_CST) % st->device_number;
 
       /*
       ** Check that the device is usable

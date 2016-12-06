@@ -222,6 +222,7 @@ typedef struct storage {
     sid_t sid; ///< unique id of this storage for one cluster
     cid_t cid; //< unique id of cluster that owns this storage
     char root[FILENAME_MAX]; ///< absolute path.
+   uint32_t next_device;    ///< for strict round robin allocation
    uint64_t  crc_error;   ///> CRC32C error counter
     uint32_t mapper_modulo; // Last device number that contains the fid to device mapping
     uint32_t device_number; // Number of devices to receive the data for this sid

@@ -1264,7 +1264,8 @@ int storage_initialize(storage_t *st,
     st->selfHealing       = selfHealing; 
     st->export_hosts      = export_hosts;
     st->share             = NULL;
-    
+    st->next_device       = 0;  
+
     st->device_free.active = 0;
     for (dev=0; dev<STORAGE_MAX_DEVICE_NB; dev++) {
       st->device_free.blocks[0][dev] = 20000;
