@@ -143,8 +143,13 @@ static inline char * storage_device_status2string(storage_device_status_e status
   switch(status) {
     case storage_device_status_undeclared: return "NONE";
     case storage_device_status_init:       return "INIT";
+    
+    case storage_device_status_degraded:   
+#ifdef SHOW_DEGRADED_STATE    
+                                           return "DEG";
+#endif  
     case storage_device_status_is:         return "IS";
-    case storage_device_status_degraded:   return "DEG";
+    
     case storage_device_status_relocating: return "RELOC";
     case storage_device_status_rebuilding: return "REBUILD";
     case storage_device_status_failed:     return "FAILED";
