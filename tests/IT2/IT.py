@@ -809,7 +809,7 @@ def lock_bsd_blocking():
     os.remove(zefile)
   except:
     pass  
-  return os.system("./IT2/test_file_lock.exe -process %d -loop %d -file %s -nonBlocking"%(process,loop,zefile))  
+  return os.system("./IT2/test_file_lock.exe -process %d -loop %d -file %s -bsd "%(process,loop,zefile))  
 #___________________________________________________
 def check_one_criteria(attr,f1,f2):
 #___________________________________________________
@@ -1564,7 +1564,15 @@ def do_list():
     dis.new_line()  
     dis.set_column(1,"%s"%num)
     dis.set_column(2,tst)
-    dis.set_column(3,'basic')  
+    dis.set_column(3,'basic') 
+     
+  dis.end_separator()  
+  for tst in TST_FLOCK:
+    num=num+1
+    dis.new_line()  
+    dis.set_column(1,"%s"%num)
+    dis.set_column(2,tst)
+    dis.set_column(3,'flock')  
     
   dis.end_separator()         
   for tst in TST_REBUILD:
@@ -1750,10 +1758,12 @@ parser.add_option("-n","--nfs", action="store_true",dest="nfs", default=False, h
 # Read/write test list
 TST_RW=['read_parallel','write_parallel','rw2','wr_rd_total','wr_rd_partial','wr_rd_random','wr_rd_total_close','wr_rd_partial_close','wr_rd_random_close','wr_close_rd_total','wr_close_rd_partial','wr_close_rd_random','wr_close_rd_total_close','wr_close_rd_partial_close','wr_close_rd_random_close']
 # Basic test list
-TST_BASIC=['readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','lock_posix_passing','lock_posix_blocking','lock_race','crc32','rsync','compil']
-TST_BASIC_NFS=['readdir','link', 'rename','chmod','truncate','bigFName','lock_posix_passing','lock_posix_blocking','lock_race','crc32','rsync','compil']
+TST_BASIC=['readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','compil']
+TST_BASIC_NFS=['readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','compil']
 # Rebuild test list
 TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','gruyere_reread','gruyere','rebuild_1node_parts','gruyere_reread']
+# File locking
+TST_FLOCK=['lock_posix_passing','lock_posix_blocking','lock_bsd_passing','lock_bsd_blocking','lock_race']
 
 ifnumber=get_if_nb()
 
@@ -1831,6 +1841,7 @@ list=[]
 for arg in args:  
   if arg == "all":
     list.extend(TST_BASIC)
+    list.extend(TST_FLOCK)
     list.extend(TST_REBUILD)
     list.extend(TST_RW)
     append_circumstance_test_list(list,TST_RW,'storageFailed')
@@ -1852,7 +1863,9 @@ for arg in args:
   elif arg == "basic":
     list.extend(TST_BASIC)
   elif arg == "rebuild":
-    list.extend(TST_REBUILD)  
+    list.extend(TST_REBUILD) 
+  elif arg == "flock":
+    list.extend(TST_FLOCK)  
   else:
     list.append(arg)              
 # No list of test. Print usage
