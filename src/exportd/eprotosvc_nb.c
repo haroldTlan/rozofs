@@ -257,6 +257,14 @@ void expnb_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
 	     size = sizeof(epgw_getxattr_arg_t);
 	     break;
 
+     case EP_GETXATTR_RAW:
+	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_epgw_getxattr_arg_t;
+	     rozorpc_srv_ctx_p->xdr_result = (xdrproc_t) xdr_epgw_getxattr_raw_ret_t;
+	     local =  ep_getxattr_raw_1_svc_nb;
+	     size = sizeof(epgw_getxattr_arg_t);
+	     break;
+
+
      case EP_REMOVEXATTR:
 	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_epgw_removexattr_arg_t;
 	     rozorpc_srv_ctx_p->xdr_result = (xdrproc_t) xdr_epgw_status_ret_t;

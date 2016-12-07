@@ -120,7 +120,7 @@ uint64_t rozofs_max_getattr_duplicate = 0;
         if (ie->attrs.mtime != 0) {
 	  mattr_to_stat(&ie->attrs, &stbuf, exportclt.bsize);
 	  stbuf.st_ino = ino; 
-	  rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
+          rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
 	  goto out;           
 	} 
       }	     
@@ -354,7 +354,6 @@ void rozofs_ll_getattr_cbk(void *this,void *param)
     ** update the getattr pending count
     */
     //if (ie->pending_getattr_cnt>=0) ie->pending_getattr_cnt--;
-
     rz_fuse_reply_attr(req, &stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
     goto out;
 error:
@@ -415,8 +414,10 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
     int     ret;
     void *buffer_p = NULL;
     int trc_idx;
-    uint32_t bbytes = ROZOFS_BSIZE_BYTES(exportclt.bsize);    
+    int lkup_cpt = 0;
+    struct stat o_stbuf;
 
+    uint32_t bbytes = ROZOFS_BSIZE_BYTES(exportclt.bsize);    
     /*
     ** set to attr the attributes that must be set: indicated by to_set
     */
@@ -438,9 +439,14 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
     SAVE_FUSE_PARAM(buffer_p,trc_idx);
     SAVE_FUSE_STRUCT(buffer_p,fi,sizeof( struct fuse_file_info));
     START_PROFILING_NB(buffer_p,rozofs_ll_setattr);
-    
+    /*
+    ** If the client is configured to operate in asynchronous mode for the setattr, it is indicated
+    ** by setting lkup_cpt to 1
+    */
+    if ((common_config.async_setattr) || (conf.asyncsetattr)) lkup_cpt = 1;
+    SAVE_FUSE_PARAM(buffer_p,lkup_cpt);   
+     
     DEBUG("setattr for inode: %lu\n", (unsigned long int) ino);
-
 
     if (!(ie = get_ientry_by_inode(ino))) {
         errno = ENOENT;
@@ -551,7 +557,7 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
 	ret = rozofs_fill_storage_info(ie,&args.cid,args.dist_set,args.fid);
 	if (ret < 0)
 	{
-	  severe("FDL bad storage information encoding");
+	  severe("bad storage information encoding");
 	  goto error;
 	}
 	args.bid      = bid;
@@ -569,6 +575,7 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
                                   rozofs_ll_truncate_cbk,buffer_p,storcli_idx,ie->fid); 
 	if (ret < 0) goto error;
 
+        if (lkup_cpt) goto async_setattr;
 	/*
 	** all is fine, wait from the response of the storcli and then updates the exportd upon
 	** receiving the answer from storcli
@@ -590,8 +597,6 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
       ** to the current time and cancal the mtime restoration.
       */      
       ie->mtime_locked = 1; 
-
-
       /*
       ** The size is not given as argument of settattr, 
       ** nevertheless a size modification is pending or running.
@@ -602,6 +607,7 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
       if ((ie->file_extend_pending)||(ie->file_extend_running)) {
 	to_set |= FUSE_SET_ATTR_SIZE;
 	attr.size = ie->attrs.size;  
+	stbuf->st_size = attr.size;
       }	    
 
       /*
@@ -619,8 +625,7 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
 	 */
 	 ie->read_consistency++;  
       }
-    }  
-    
+    }      
     /*
     ** set the argument to encode
     */ 
@@ -653,6 +658,7 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
 	ie->file_extend_size    = 0;        
       }  
     }     
+    if (lkup_cpt) goto async_setattr;
     /*
     ** no error just waiting for the answer
     */
@@ -666,6 +672,17 @@ error:
     STOP_PROFILING_NB(buffer_p,rozofs_ll_setattr);
     if (buffer_p != NULL) rozofs_fuse_release_saved_context(buffer_p);
     return;
+
+async_setattr:
+    /*
+    ** update the attributes in the ientry
+    */
+    stat_to_mattr(stbuf, &ie->attrs, to_set);
+    mattr_to_stat(&ie->attrs, &o_stbuf, exportclt.bsize);
+    o_stbuf.st_ino = ino;
+    rz_fuse_reply_attr(req, &o_stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
+    rozofs_trc_rsp(srv_rozofs_ll_setattr,ino,NULL,1,trc_idx);
+    STOP_PROFILING_NB(buffer_p,rozofs_ll_setattr);
 }
 
 /**
@@ -695,6 +712,7 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
    xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_mattr_ret_t;
    rozofs_fuse_save_ctx_t *fuse_ctx_p;
    errno = 0;
+   int lkup_cpt = 0;
    int trc_idx;
     
    GET_FUSE_CTX_P(fuse_ctx_p,param);    
@@ -704,6 +722,7 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     RESTORE_FUSE_PARAM(param,req);
     RESTORE_FUSE_PARAM(param,ino);
     RESTORE_FUSE_PARAM(param,trc_idx);
+    RESTORE_FUSE_PARAM(param,lkup_cpt);   
     
 //    RESTORE_FUSE_STRUCT_PTR(param,fi);
     /*
@@ -842,11 +861,14 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     */
     o_stbuf.st_size = ie->attrs.size;
 
-    rz_fuse_reply_attr(req, &o_stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
+    if (lkup_cpt == 0) 
+    {
+      rz_fuse_reply_attr(req, &o_stbuf, rozofs_tmr_get_attr(rozofs_is_directory_inode(ino)));
+    }
 
     goto out;
 error:
-    fuse_reply_err(req, errno);
+    if (lkup_cpt == 0) fuse_reply_err(req, errno);
 out:
     rozofs_trc_rsp_attr(srv_rozofs_ll_setattr,ino,(ie==NULL)?NULL:ie->attrs.fid,status,(ie==NULL)?-1:ie->attrs.size,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_setattr);
@@ -887,6 +909,7 @@ void rozofs_ll_truncate_cbk(void *this,void *param)
    int      bufsize;
    storcli_status_ret_t ret;
    int retcode;
+   int lkup_cpt=0;
    xdrproc_t decode_proc = (xdrproc_t)xdr_storcli_status_ret_t;
 
    rpc_reply.acpted_rply.ar_results.proc = NULL;
@@ -899,6 +922,7 @@ void rozofs_ll_truncate_cbk(void *this,void *param)
    RESTORE_FUSE_PARAM(param,ino);
    RESTORE_FUSE_PARAM(param,to_set);
    RESTORE_FUSE_STRUCT_PTR(param,stbuf);      
+   RESTORE_FUSE_PARAM(param,lkup_cpt);   
     /*
     ** Update the exportd with the filesize if that one has changed
     */ 
@@ -1031,7 +1055,7 @@ error:
     /*
     ** reply to fuse and release the transaction context and the fuse context
     */
-    fuse_reply_err(req, errno);
+    if (lkup_cpt == 0) fuse_reply_err(req, errno);
     STOP_PROFILING_NB(param,rozofs_ll_setattr);
     
     rozofs_fuse_release_saved_context(param);

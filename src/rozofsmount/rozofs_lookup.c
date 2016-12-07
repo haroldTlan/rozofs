@@ -571,7 +571,8 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
    mattr_t  pattrs;
    int errcode=0;
    fuse_ino_t ino = 0;
-    
+   rozofs_inode_t *fake_id_p;
+   
    GET_FUSE_CTX_P(fuse_ctx_p,param);  
    /*
    ** dequeue the buffer from the pending list
@@ -781,9 +782,17 @@ success:
       fep.ino = nie->inode;
     }
     stbuf.st_size = nie->attrs.size;
-
-    fep.attr_timeout = rozofs_tmr_get_attr(rozofs_is_directory_inode(nie->inode));
-    fep.entry_timeout = rozofs_tmr_get_entry(rozofs_is_directory_inode(nie->inode));
+    fake_id_p = (rozofs_inode_t *) attrs.fid;
+    if (fake_id_p->s.del)
+    {
+      fep.attr_timeout  = 0;
+      fep.entry_timeout = 0;
+    }
+    else
+    {
+      fep.attr_timeout = rozofs_tmr_get_attr(rozofs_is_directory_inode(nie->inode));
+      fep.entry_timeout = rozofs_tmr_get_entry(rozofs_is_directory_inode(nie->inode));    
+    }
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
     nie->nlookup++;
 

@@ -51,6 +51,8 @@ This parameter enables to choose the file distribution rule at file creation. Th
 Maximum number of files that the remove bins thread of a slave export can remove in a run. A 2 second delay occurs between every run. This provides the maximum deletion rate.
 .SS deletion_delay 
 Minimum delay in seconds between the FID unlink in the export and the actual projections removal on the storage nodes.
+.SS statfs_period 
+caching delay in second of the data reported by a statfs(). The default value is 10 seconds. When the delay is 0, there is no caching.
 .SS core_file_directory
 The directory under which the RozoFS modules store their core files in case a crash occurs. 
 
@@ -102,6 +104,10 @@ Value that indicates the DSCP that is associated with TCP connections used to co
 Boolean (True or False). When set, this flag indicates that the export has its attribute writeback threads activated (default true).
 .SS rozofsmount_fuse_reply_thread
 Boolean (True or False). When set, this flag indicates that the rozofsmount has its fuse reply threads activated (default true).
+.SS client_xattr_cache
+Boolean (True or False). When set, this flag indicates that the rozofsmount caches the extended attributes. The timer used is the same as the one used for attributes (default false).
+.SS async_setattr
+Boolean (True or False). When set, this flag indicates that the rozofsmount operates in asynchronous mode for setattr operations (default false).
 .SS export_versioning
 Boolean (True or False). When set, this flag indicates that any deleted object (file/directory) are save under
 .B @rozofs-del@ 

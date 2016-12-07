@@ -29,6 +29,7 @@
 #include <rozofs/core/rozofs_throughput.h>
 
 #include "file.h"
+#include "rozofs_ext4.h"
 
 #define ROZOFSMOUNT_MAX_EXPORT_TX 32
 #define ROZOFSMOUNT_MAX_DEFAULT_STORCLI_TX_STANDALONE  32
@@ -107,7 +108,9 @@ typedef struct rozofsmnt_conf {
     ** in case of poor network connection
     */
     unsigned localPreference;    
-    unsigned noReadFaultTolerant;         
+    unsigned noReadFaultTolerant;   
+    unsigned xattrcache;   /**< assert to 1 for extended attributes caching                        */      
+    unsigned asyncsetattr; /**< assert to 1 to operate in asynchronous mode for setattr operations */      
 } rozofsmnt_conf_t;
 rozofsmnt_conf_t conf;
 
@@ -129,9 +132,9 @@ typedef struct ientry {
     uint64_t  mtime_locked:1;  
     uint64_t  file_extend_pending:1; /**< assert to one when file is extended by not yet confirm on exportd */
     uint64_t  file_extend_running:1; /**< assert to one when file is extended by not yet confirm on exportd */
+    uint64_t  ientry_long:1; /**< assert to one when the ientry contains the extended attributes of the inode*/
     dirbuf_t db; ///< buffer used for directory listing
     unsigned long nlookup; ///< number of lookup done on this entry (used for forget)
-    mattr_t attrs;   /**< attributes caching for fs_mode = block mode   */
     list_t list;
     /** This is the address of the latest file_t structure on which there is some data
      ** pending in the buffer that have not been flushed to disk. Only one file_t at a time
@@ -147,13 +150,18 @@ typedef struct ientry {
      */
     uint64_t    read_consistency;
     uint64_t    timestamp;
+    uint64_t    xattr_timestamp;
     uint64_t    timestamp_wr_block;
     char      * symlink_target;
     uint64_t    symlink_ts;
     int         pending_getattr_cnt;   /**< pending get attr count  */
+    mattr_t attrs;   /**< attributes caching for fs_mode = block mode   */
+    /* !!!WARNING !!! DO NOT ADD ANY FIELD BELOW attrs since that array can be extended for storing extended attributes */
 } ientry_t;
-
-
+/*
+** ientry size when the client caches the extended attributes of the inode
+*/
+#define ROZOFS_IENTRY_LARGE_SZ   (sizeof(ientry_t) - sizeof(mattr_t) + sizeof(lv2_entry_t)+sizeof(uint64_t))
 
 /*
 ** About exportd id quota
@@ -328,6 +336,17 @@ static inline void del_ientry(ientry_t * ie) {
       free(ie->symlink_target);
       ie->symlink_target = NULL;
     }
+    /*
+    ** check if is a long ientry. In such case we might need to release the memory used
+    ** for storing the extended attributes.
+    */
+    if (ie->ientry_long)
+    {
+       lv2_entry_t *fake_lv2_p;
+       fake_lv2_p = (lv2_entry_t*)&ie->attrs;       
+       if (fake_lv2_p->extended_attr_p != NULL) xfree(fake_lv2_p->extended_attr_p);    
+       fake_lv2_p->extended_attr_p = NULL;
+    }
     xfree(ie);    
 }
 
@@ -372,10 +391,27 @@ static inline ientry_t *get_ientry_by_fid(fid_t fid) {
 static inline ientry_t *alloc_ientry(fid_t fid) {
 	ientry_t *ie;
 	rozofs_inode_t *inode_p ;
+	int extended_attributes = 0;
 	
 	inode_p = (rozofs_inode_t*) fid;
+	/*
+	** Check the alloc mode for ientry
+	*/
+	if ((common_config.client_xattr_cache) || (conf.xattrcache))
+	{
+	  extended_attributes = 1;
+	}
 
-	ie = xmalloc(sizeof(ientry_t));
+        if (extended_attributes)
+	{
+	  ie = xmalloc(ROZOFS_IENTRY_LARGE_SZ);
+	  ie->ientry_long = 1;
+	}
+	else
+	{
+	  ie = xmalloc(sizeof(ientry_t));
+	  ie->ientry_long = 0;
+	}
 	memcpy(ie->fid, fid, sizeof(fid_t));
         memset(ie->pfid, 0, sizeof(fid_t));
 	ie->inode = inode_p->fid[1]; //fid_hash(fid);
@@ -393,13 +429,28 @@ static inline ientry_t *alloc_ientry(fid_t fid) {
 	ie->file_extend_running = 0;
 	ie->mtime_locked        = 0;
 	ie->timestamp_wr_block = 0;
+	ie->xattr_timestamp = 0;
 	ie->symlink_target = NULL;
         ie->symlink_ts     = 0;
 	ie->pending_getattr_cnt= 0;
 	put_ientry(ie);
+	/*
+	** when the ientry stores the extended attributes we should initialize the ext_mattr section
+	*/
+	if (ie->ientry_long)
+	{
+	   lv2_entry_t *fake_lv2_p;
+	   fake_lv2_p = (lv2_entry_t*)&ie->attrs;
+	   	
+	   memset(fake_lv2_p,0,sizeof(lv2_entry_t));   
+	   fake_lv2_p->attributes.s.i_extra_isize = ROZOFS_I_EXTRA_ISIZE;	
+	}
 
 	return ie;
 }
+
+
+
 static inline ientry_t *recycle_ientry(ientry_t * ie, fid_t fid) {
 
 	memcpy(ie->fid, fid, sizeof(fid_t));

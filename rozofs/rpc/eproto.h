@@ -772,6 +772,33 @@ struct epgw_getxattr_ret_t {
 };
 typedef struct epgw_getxattr_ret_t epgw_getxattr_ret_t;
 
+struct ep_getxattr_raw_ret_val_t {
+	struct {
+		u_int inode_xattr_len;
+		char *inode_xattr_val;
+	} inode_xattr;
+	struct {
+		u_int inode_xattr_block_len;
+		char *inode_xattr_block_val;
+	} inode_xattr_block;
+};
+typedef struct ep_getxattr_raw_ret_val_t ep_getxattr_raw_ret_val_t;
+
+struct ep_getxattr_raw_ret_t {
+	ep_status_t status;
+	union {
+		ep_getxattr_raw_ret_val_t raw;
+		int error;
+	} ep_getxattr_raw_ret_t_u;
+};
+typedef struct ep_getxattr_raw_ret_t ep_getxattr_raw_ret_t;
+
+struct epgw_getxattr_raw_ret_t {
+	struct ep_gateway_t hdr;
+	ep_getxattr_raw_ret_t status_gw;
+};
+typedef struct epgw_getxattr_raw_ret_t epgw_getxattr_raw_ret_t;
+
 struct ep_removexattr_arg_t {
 	uint32_t eid;
 	ep_uuid_t fid;
@@ -988,6 +1015,9 @@ extern  epgw_mount_msite_ret_t * ep_mount_msite_1_svc(epgw_mount_arg_t *, struct
 #define EP_LIST_CLUSTER2 35
 extern  epgw_cluster2_ret_t * ep_list_cluster2_1(epgw_cluster_arg_t *, CLIENT *);
 extern  epgw_cluster2_ret_t * ep_list_cluster2_1_svc(epgw_cluster_arg_t *, struct svc_req *);
+#define EP_GETXATTR_RAW 36
+extern  epgw_getxattr_raw_ret_t * ep_getxattr_raw_1(epgw_getxattr_arg_t *, CLIENT *);
+extern  epgw_getxattr_raw_ret_t * ep_getxattr_raw_1_svc(epgw_getxattr_arg_t *, struct svc_req *);
 extern int export_program_1_freeresult (SVCXPRT *, xdrproc_t, caddr_t);
 
 #else /* K&R C */
@@ -1096,6 +1126,9 @@ extern  epgw_mount_msite_ret_t * ep_mount_msite_1_svc();
 #define EP_LIST_CLUSTER2 35
 extern  epgw_cluster2_ret_t * ep_list_cluster2_1();
 extern  epgw_cluster2_ret_t * ep_list_cluster2_1_svc();
+#define EP_GETXATTR_RAW 36
+extern  epgw_getxattr_raw_ret_t * ep_getxattr_raw_1();
+extern  epgw_getxattr_raw_ret_t * ep_getxattr_raw_1_svc();
 extern int export_program_1_freeresult ();
 #endif /* K&R C */
 
@@ -1207,6 +1240,9 @@ extern  bool_t xdr_epgw_getxattr_arg_t (XDR *, epgw_getxattr_arg_t*);
 extern  bool_t xdr_ep_getxattr_t (XDR *, ep_getxattr_t*);
 extern  bool_t xdr_ep_getxattr_ret_t (XDR *, ep_getxattr_ret_t*);
 extern  bool_t xdr_epgw_getxattr_ret_t (XDR *, epgw_getxattr_ret_t*);
+extern  bool_t xdr_ep_getxattr_raw_ret_val_t (XDR *, ep_getxattr_raw_ret_val_t*);
+extern  bool_t xdr_ep_getxattr_raw_ret_t (XDR *, ep_getxattr_raw_ret_t*);
+extern  bool_t xdr_epgw_getxattr_raw_ret_t (XDR *, epgw_getxattr_raw_ret_t*);
 extern  bool_t xdr_ep_removexattr_arg_t (XDR *, ep_removexattr_arg_t*);
 extern  bool_t xdr_epgw_removexattr_arg_t (XDR *, epgw_removexattr_arg_t*);
 extern  bool_t xdr_ep_listxattr_arg_t (XDR *, ep_listxattr_arg_t*);
@@ -1328,6 +1364,9 @@ extern bool_t xdr_epgw_getxattr_arg_t ();
 extern bool_t xdr_ep_getxattr_t ();
 extern bool_t xdr_ep_getxattr_ret_t ();
 extern bool_t xdr_epgw_getxattr_ret_t ();
+extern bool_t xdr_ep_getxattr_raw_ret_val_t ();
+extern bool_t xdr_ep_getxattr_raw_ret_t ();
+extern bool_t xdr_epgw_getxattr_raw_ret_t ();
 extern bool_t xdr_ep_removexattr_arg_t ();
 extern bool_t xdr_epgw_removexattr_arg_t ();
 extern bool_t xdr_ep_listxattr_arg_t ();

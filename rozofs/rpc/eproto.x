@@ -676,6 +676,25 @@ struct  epgw_getxattr_ret_t
 };
 
 
+struct ep_getxattr_raw_ret_val_t
+{
+  opaque          inode_xattr<>;
+  opaque          inode_xattr_block<>;
+};
+
+union ep_getxattr_raw_ret_t switch (ep_status_t status) {
+    case EP_SUCCESS:    ep_getxattr_raw_ret_val_t  raw;
+    case EP_FAILURE:    int             error;
+    default:            void;
+};
+
+
+struct  epgw_getxattr_raw_ret_t 
+{
+  struct ep_gateway_t hdr;
+  ep_getxattr_raw_ret_t    status_gw;
+};
+
 struct ep_removexattr_arg_t {
     uint32_t          eid;
     ep_uuid_t         fid;
@@ -872,6 +891,9 @@ program EXPORT_PROGRAM {
 
         epgw_cluster2_ret_t
         EP_LIST_CLUSTER2(epgw_cluster_arg_t)       = 35;
+
+        epgw_getxattr_raw_ret_t
+        EP_GETXATTR_RAW(epgw_getxattr_arg_t)       = 36;
 
 	
     } = 1;

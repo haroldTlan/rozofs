@@ -3928,7 +3928,7 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
       */
       if (exp_metadata_inode_is_del_pending(parent))
       {
-         plv2->attributes.s.hpc_reserved--;          
+	 plv2->attributes.s.hpc_reserved--;          
       }    
     }
 
@@ -5148,6 +5148,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     if (!(lv2_old_parent = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, pfid))) {
         goto out;
     }
+    exp_metadata_inode_del_deassert(pfid);
 
     // Verify that the old parent is a directory
     if (!S_ISDIR(lv2_old_parent->attributes.s.attrs.mode)) {
@@ -5442,11 +5443,14 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     if (memcmp(pfid, npfid, sizeof (fid_t)) != 0) {
 
         lv2_new_parent->attributes.s.attrs.children++;
-        lv2_old_parent->attributes.s.attrs.children--;
+        if (deleted_object) lv2_old_parent->attributes.s.hpc_reserved--;
+        else lv2_old_parent->attributes.s.attrs.children--;
+
 
         if (S_ISDIR(lv2_to_rename->attributes.s.attrs.mode)) {
             lv2_new_parent->attributes.s.attrs.nlink++;
-            lv2_old_parent->attributes.s.attrs.nlink--;
+	    if (deleted_object) lv2_old_parent->attributes.s.hpc_reserved--;
+            else lv2_old_parent->attributes.s.attrs.nlink--;
         }
 
         lv2_new_parent->attributes.s.attrs.mtime = lv2_new_parent->attributes.s.attrs.ctime = time(NULL);
@@ -5465,6 +5469,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
 	*/
 	if (deleted_object)
 	{
+	  lv2_old_parent->attributes.s.hpc_reserved--;
           lv2_new_parent->attributes.s.attrs.children++;
           if (S_ISDIR(lv2_to_rename->attributes.s.attrs.mode)) {
               lv2_new_parent->attributes.s.attrs.nlink++;
@@ -6731,7 +6736,63 @@ out:
     STOP_PROFILING(export_getxattr);
 
     return status;
-}	       
+}
+
+/*
+**______________________________________________________________________________
+*/
+/** retrieve an extended attribute value in raw mode.
+ *
+ * @param e: the export managing the file or directory.
+ * @param fid: the id of the file or directory.
+ * @param name: the extended attribute name.
+ * @param value: the value of this extended attribute.
+ * @param size: the size of a buffer to hold the value associated
+ * @param ret: pointer to the array where extended attributes must be returned
+ *  with this extended attribute.
+ * 
+ * @return: On success, the size of the extended attribute value.
+ * On failure, -1 is returned and errno is set appropriately.
+ */
+ssize_t export_getxattr_raw(export_t *e, fid_t fid, const char *name, void *value, size_t size,epgw_getxattr_raw_ret_t *ret_p) {
+    ssize_t status = -1;
+    int ret;
+    lv2_entry_t *lv2 = 0;
+
+    START_PROFILING(export_getxattr);
+
+
+    if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid))) {
+        severe("export_getattr failed: %s", strerror(errno));
+        goto out;
+    }
+    
+    ret = ext4_xattr_ibody_get_raw(lv2,
+                                   ret_p->status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_val,
+				   &ret_p->status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_len);
+    if (ret < 0) {
+      status = 0;
+      goto out;
+    } 
+    errno = 0;
+    ext4_xattr_block_get_raw(lv2,
+                             ret_p->status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr_block.inode_xattr_block_val,
+			     &ret_p->status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr_block.inode_xattr_block_len);
+    if (errno== 0) status = 0;
+
+out:
+    /*
+    ** release the memory allocated for exetnded block if it exists
+    */
+    if (lv2->extended_attr_p != NULL) 
+    {
+      free(lv2->extended_attr_p);
+      lv2->extended_attr_p = NULL;
+    }
+    STOP_PROFILING(export_getxattr);
+
+    return status;
+}	    	       
 /*
 **______________________________________________________________________________
 */

@@ -220,6 +220,8 @@ static void usage() {
     fprintf(stderr, "    -o mojThreadThreshold=<bytes>\t\t\tset the byte threshold to use Mojette threads in storcli\n");
     fprintf(stderr, "    -o localPreference\t\t\tFavor local storage on read to save network bandwith in case of poor network connection\n");
     fprintf(stderr, "    -o noReadFaultTolerant\t\t\tGive back blocks with 0 on read for corrupted block instead of EIO\n");
+    fprintf(stderr, "    -o xattrcache\t\t\tpermits to cache the extended attribute on client(same timer as attributes)\n");
+    fprintf(stderr, "    -o asyncsetattr\t\t\toperates asynchronous mode for setattr operations)\n");
 
 
 }
@@ -279,6 +281,8 @@ static struct fuse_opt rozofs_opts[] = {
     MYFS_OPT("mojThreadThreshold=%u",mojThreadThreshold,-1),
     MYFS_OPT("no0trunc", no0trunc, 1),
     MYFS_OPT("onlyWriter", onlyWriter, 1),
+    MYFS_OPT("xattrcache", xattrcache, 0),
+    MYFS_OPT("asyncsetattr", asyncsetattr,0),
    
     FUSE_OPT_KEY("-H ", KEY_EXPORT_HOST),
     FUSE_OPT_KEY("-E ", KEY_EXPORT_PATH),
@@ -426,6 +430,9 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(mojThreadThreshold);  
   DISPLAY_UINT32_CONFIG(localPreference);
   DISPLAY_UINT32_CONFIG(noReadFaultTolerant);
+  DISPLAY_UINT32_CONFIG(xattrcache);
+  DISPLAY_UINT32_CONFIG(asyncsetattr);
+
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 } 
 /*__________________________________________________________________________
@@ -2125,6 +2132,8 @@ int main(int argc, char *argv[]) {
     conf.noXattr = 0;   // By default extended attributes are supported
     conf.no0trunc = 0;  // By default truncate to zero are sent to exportd and storages
     conf.onlyWriter = 0;  // By default this client is not the only writer of the file it writes to
+    conf.xattrcache = 0;  // By default this client does not cache extended attributes
+    conf.asyncsetattr = 0;  // By default this client operates in synchronous mode for setattr
     conf.site = -1;
     conf.conf_site_file = -1; /* no site file  */
     conf.mojThreadWrite     = -1; // By default, do not modify the storli default

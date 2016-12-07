@@ -1113,12 +1113,14 @@ void ep_readlink_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 
     START_PROFILING(ep_readlink);
 
-    xdr_free((xdrproc_t) xdr_epgw_readlink_ret_t, (char *) &ret);
 
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
 
-    ret.status_gw.ep_readlink_ret_t_u.link = xmalloc(ROZOFS_PATH_MAX);
+    if (ret.status_gw.ep_readlink_ret_t_u.link == NULL)
+    {
+      ret.status_gw.ep_readlink_ret_t_u.link = xmalloc(ROZOFS_PATH_MAX);
+    }
 
     if (export_readlink(exp, (unsigned char *) arg->arg_gw.fid,
             ret.status_gw.ep_readlink_ret_t_u.link) != 0)
@@ -1751,10 +1753,11 @@ void ep_getxattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
 
-    xdr_free((xdrproc_t) xdr_epgw_getxattr_ret_t, (char *) &ret);
-
-    ret.status_gw.ep_getxattr_ret_t_u.value.value_val = xmalloc(ROZOFS_XATTR_VALUE_MAX);
-
+    if (ret.status_gw.ep_getxattr_ret_t_u.value.value_val == NULL)
+    {
+      ret.status_gw.ep_getxattr_ret_t_u.value.value_val = xmalloc(ROZOFS_XATTR_VALUE_MAX);
+    }
+    ret.status_gw.ep_getxattr_ret_t_u.value.value_len = 0;
     if ((size = export_getxattr(exp, (unsigned char *) arg->arg_gw.fid, arg->arg_gw.name,
             ret.status_gw.ep_getxattr_ret_t_u.value.value_val, arg->arg_gw.size)) == -1) {
         goto error;
@@ -1769,6 +1772,65 @@ error:
         free(ret.status_gw.ep_getxattr_ret_t_u.value.value_val);
     ret.status_gw.status = EP_FAILURE;
     ret.status_gw.ep_getxattr_ret_t_u.error = errno;
+out:
+    EXPORTS_SEND_REPLY(req_ctx_p);
+    STOP_PROFILING(ep_getxattr);
+    return ;
+}
+
+/*
+**______________________________________________________________________________
+*/
+/**
+*   exportd getxattr: get extended attributes in raw mode
+
+    @param args : fid of the object, extended attribute name 
+    
+    @retval: EP_SUCCESS : extended attribute value
+    @retval: EP_FAILURE :error code associated with the operation (errno)
+*/
+
+void ep_getxattr_raw_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    static epgw_getxattr_raw_ret_t ret;
+    epgw_getxattr_arg_t * arg = (epgw_getxattr_arg_t*)pt; 
+    export_t *exp;
+    ssize_t size = -1;
+    DEBUG_FUNCTION;
+
+    // Set profiler export index
+    export_profiler_eid = arg->arg_gw.eid;
+    /*
+    ** Check if the buffers have been allocated: check only the first one
+    */
+    
+   if (ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_val == NULL)
+   {
+ 
+      ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_val = xmalloc(4096);
+      ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr_block.inode_xattr_block_val = xmalloc(4096);
+   }
+
+
+    START_PROFILING(ep_getxattr);
+    
+    ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_len = 0;
+    ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr_block.inode_xattr_block_len = 0;
+
+
+    if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
+        goto error;
+
+
+    if ((size = export_getxattr_raw(exp, (unsigned char *) arg->arg_gw.fid, arg->arg_gw.name,
+            NULL, arg->arg_gw.size,&ret
+	    )) == -1) {
+        goto error;
+    }
+    ret.status_gw.status = EP_SUCCESS;
+    goto out;
+error:
+    ret.status_gw.status = EP_FAILURE;
+    ret.status_gw.ep_getxattr_raw_ret_t_u.error = errno;
 out:
     EXPORTS_SEND_REPLY(req_ctx_p);
     STOP_PROFILING(ep_getxattr);

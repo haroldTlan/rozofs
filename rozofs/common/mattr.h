@@ -93,32 +93,7 @@ typedef union
    } dist_t;
 } rozofs_mover_sids_t;
 
-#if 0
-/**
-*  extended attributes structure
-*/
-#define ROZOFS_OBJ_NAME_MAX 96
-#define ROZOFS_OBJ_MAX_SUFFIX 8
-typedef union
-{
-   char inode_buf[512];
-   struct {
-     mattr_t attrs;  /**< standard attributes       */
-     fid_t   pfid;   /**< parent fid                */
-     uint32_t i_extra_isize;  /**< array reserved for extended attributes */
-     uint32_t i_state;     /**< inode state               */
-     uint64_t i_file_acl;  /**< extended inode */
-     uint64_t i_link_name;  /**< symlink block */
-     mdirent_fid_name_info_t fname;  /**< reference of the name within the dentry file */
-     char     suffix[ROZOFS_OBJ_MAX_SUFFIX];
-//     char    name[ROZOFS_OBJ_NAME_MAX]; 
-   } s;
-} ext_mattr_t;
 
-#define ROZOFS_I_EXTRA_ISIZE (sizeof(mattr_t)+sizeof(fid_t)+ \
-                              2*sizeof(uint32_t)+sizeof(uint64_t)+\
-			      ROZOFS_OBJ_NAME_MAX)
-#else
 #define ROZOFS_OBJ_NAME_MAX 60
 #define ROZOFS_OBJ_MAX_SUFFIX 16
 /**
@@ -161,8 +136,14 @@ typedef union
      fid_t   pfid;   /**< parent fid                */
      uint32_t hash1;   /**< parent/name hash1  */
      uint32_t hash2;   /**< parent/name hash2  */
-     uint32_t i_extra_isize;  /**< array reserved for extended attributes */
-     uint32_t i_state;     /**< inode state               */
+     uint8_t i_extra_isize;  /**< array reserved for extended attributes */
+     uint8_t filler1;  /**< reserve fot future use */
+     uint8_t filler2;  /**< reserved for future use */
+     uint8_t filler3;  /**<reserve for future use */
+     uint8_t i_state;     /**< inode state               */
+     uint8_t filler4;  /**< reserve fot future use */
+     uint8_t filler5;  /**< reserved for future use */
+     uint8_t filler6;  /**<reserve for future use */
      uint64_t i_file_acl;  /**< extended inode */
      uint64_t i_link_name;  /**< symlink block */
      uint64_t hpc_reserved;  /**< reserved for hpc */
@@ -173,7 +154,7 @@ typedef union
 #define ROZOFS_I_EXTRA_ISIZE (sizeof(struct inode_internal_t))
 
 #define ROZOFS_I_EXTRA_ISIZE_BIS (sizeof(ext_mattr_t) -sizeof(struct inode_internal_t))
-#endif
+
 
 /** initialize mattr_t
  *

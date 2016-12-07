@@ -20,7 +20,9 @@
 #include <rozofs/core/rozofs_host_list.h>
 #include "rozofs_fuse_api.h"
 #include "rozofs_xattr_flt.h"
-#include "rozofs_acl.h"
+#include "rozofs_ext4.h"
+#include "xattr.h"
+#include "xattr_main.h"
 
 DECLARE_PROFILING(mpp_profiler_t);
 
@@ -28,6 +30,7 @@ DECLARE_PROFILING(mpp_profiler_t);
 #define ROZOFS_USER_XATTR "user.rozofs"
 #define ROZOFS_ROOT_XATTR "trusted.rozofs"
 
+void rozofs_ll_getxattr_raw_cbk(void *this,void *param);
 
 /*
 **__________________________________________________________________
@@ -96,6 +99,10 @@ void rozofs_ll_setxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, con
     ** Set xattr indicator in ientry
     */
     rozofs_set_xattr_flag(&ie->attrs.mode);
+    /*
+    ** clear the timestamp
+    */
+    ie->xattr_timestamp = 0;
     
     /*
     ** fill up the structure that will be used for creating the xdr message
@@ -272,6 +279,35 @@ out:
 **__________________________________________________________________
 */
 /**
+   Check if the client uses raw api for gettingh extended atttributes
+   
+   @param name: name of the extended attribute
+   @param ie: ientry of the inode
+   
+   @retval 0 : not raw
+   @retval 1: raw
+*/
+#define ROZOFS_XATTR "rozofs"
+#define ROZOFS_USER_XATTR "user.rozofs"
+#define ROZOFS_ROOT_XATTR "trusted.rozofs"
+#define ROZOFS_EXPORT_XATTR "rozofs.export"
+#define ROZOFS_USER_EXPORT_XATTR "user.rozofs.export"
+
+int rozofs_ll_getxattr_check_for_raw_getxattr(const char *name,ientry_t *ie)
+{
+
+    if (ie->ientry_long == 0) return 0;
+
+    if ((strncmp(name,ROZOFS_XATTR,6)==0)||(strncmp(name,ROZOFS_USER_XATTR,11)==0)||(strncmp(name,ROZOFS_ROOT_XATTR,14)==0))      
+    {
+       return 0;
+    }  
+    return 1;
+}
+/*
+**__________________________________________________________________
+*/
+/**
  * 
  * Get the value of an extended attribute of a file
  *
@@ -285,11 +321,7 @@ out:
  * @param size the size of the attribute
  */
  void rozofs_ll_getxattr_cbk(void *this,void *param);
-#define ROZOFS_XATTR "rozofs"
-#define ROZOFS_USER_XATTR "user.rozofs"
-#define ROZOFS_ROOT_XATTR "trusted.rozofs"
-#define ROZOFS_EXPORT_XATTR "rozofs.export"
-#define ROZOFS_USER_EXPORT_XATTR "user.rozofs.export"
+
 static char buf_export_attr[4096];
 void rozofs_ll_getxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, size_t size) 
 {
@@ -297,6 +329,11 @@ void rozofs_ll_getxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, siz
     int               ret;        
     void             *buffer_p = NULL;
     epgw_getxattr_arg_t arg;
+    lv2_entry_t *fake_lv2_p = NULL;
+    int value_size;
+    char *buffer;
+
+    uint64_t attr_us = rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino));
     /*
     ** allocate a context for saving the fuse parameters
     */
@@ -312,6 +349,8 @@ void rozofs_ll_getxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, siz
     SAVE_FUSE_PARAM(buffer_p,size);
     SAVE_FUSE_PARAM(buffer_p,ino);
     SAVE_FUSE_PARAM(buffer_p,trc_idx);
+    SAVE_FUSE_STRING(buffer_p,name);
+
     
     START_PROFILING_NB(buffer_p,rozofs_ll_getxattr);
 
@@ -349,7 +388,7 @@ void rozofs_ll_getxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, siz
          (((ie->timestamp+rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino))) > rozofs_get_ticker_us())&&(S_ISREG(ie->attrs.mode))) ||
 	 (((ie->timestamp+500) > rozofs_get_ticker_us())&&(S_ISDIR(ie->attrs.mode)))
 	 )
-    {	 
+    {
       /*
       ** Check if the i-node has extended attributs that are not the rozofs extended attributes
       */
@@ -394,18 +433,27 @@ void rozofs_ll_getxattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name, siz
     arg.arg_gw.name = (char *)name;
     arg.arg_gw.size = size;  
     
-    /*
-    ** now initiates the transaction towards the remote end
-    */
-#if 1
-    ret = rozofs_expgateway_send_routing_common(arg.arg_gw.eid,(unsigned char*)arg.arg_gw.fid,EXPORT_PROGRAM, EXPORT_VERSION,
-                              EP_GETXATTR,(xdrproc_t) xdr_epgw_getxattr_arg_t,(void *)&arg,
-                              rozofs_ll_getxattr_cbk,buffer_p); 
-#else    
-    ret = rozofs_export_send_common(&exportclt,ROZOFS_TMR_GET(TMR_EXPORT_PROGRAM),EXPORT_PROGRAM, EXPORT_VERSION,
-                              EP_GETXATTR,(xdrproc_t) xdr_epgw_getxattr_arg_t,(void *)&arg,
-                              rozofs_ll_getxattr_cbk,buffer_p); 
-#endif
+    if (rozofs_ll_getxattr_check_for_raw_getxattr(name,ie) == 0)
+    {
+    
+      /*
+      ** now initiates the transaction towards the remote end
+      */
+      ret = rozofs_expgateway_send_routing_common(arg.arg_gw.eid,(unsigned char*)arg.arg_gw.fid,EXPORT_PROGRAM, EXPORT_VERSION,
+                        	EP_GETXATTR,(xdrproc_t) xdr_epgw_getxattr_arg_t,(void *)&arg,
+                        	rozofs_ll_getxattr_cbk,buffer_p); 
+    }
+    else
+    {
+      if ((ie->xattr_timestamp+attr_us) > rozofs_get_ticker_us()) goto local_getxattr;
+      /*
+      ** now initiates the transaction towards the remote end
+      */
+      ret = rozofs_expgateway_send_routing_common(arg.arg_gw.eid,(unsigned char*)arg.arg_gw.fid,EXPORT_PROGRAM, EXPORT_VERSION,
+                        	EP_GETXATTR_RAW,(xdrproc_t) xdr_epgw_getxattr_arg_t,(void *)&arg,
+                        	rozofs_ll_getxattr_raw_cbk,buffer_p); 
+    }
+
     if (ret < 0) goto error;
     
     /*
@@ -423,6 +471,39 @@ out:
     STOP_PROFILING_NB(buffer_p,rozofs_ll_getxattr);
     if (buffer_p != NULL) rozofs_fuse_release_saved_context(buffer_p);
     return;
+
+local_getxattr:
+    /*
+    ** Now search for the requested extended attribute
+    */
+    {
+      struct dentry entry;
+      fake_lv2_p = (lv2_entry_t*)&ie->attrs;
+      entry.d_inode = fake_lv2_p;
+      /*
+      ** check if the request is just for the xattr len: if it the case set the buffer to NULL
+      */
+      if (size == 0) buffer = 0;
+      else buffer = buf_export_attr;
+    
+      if ((value_size = rozofs_getxattr(&entry, name, buffer, size)) < 0) {
+          goto error;
+      }
+    }    
+    if (size == 0) {
+        fuse_reply_xattr(req, value_size);
+	errno = EAGAIN;
+        goto out;
+    }       
+    
+    if (value_size > size) {
+        errno = ERANGE;
+        goto error;
+    }
+
+    fuse_reply_buf(req, (char *)buf_export_attr, value_size);
+    errno = EAGAIN;
+    goto out;
 }
 
 
@@ -550,6 +631,223 @@ out:
    
     return;
 }
+
+
+/**
+*  Getxattr in raw mode callback
+*
+ @param this : pointer to the transaction context
+ @param param: pointer to the associated rozofs_fuse_context
+ 
+ @return none
+ */
+void rozofs_ll_getxattr_raw_cbk(void *this,void *param)
+{
+   fuse_req_t req; 
+   epgw_getxattr_raw_ret_t ret ;
+   int status;
+   uint8_t  *payload;
+   void     *recv_buf = NULL;   
+   XDR       xdrs;    
+   int      bufsize;
+   struct rpc_msg  rpc_reply;
+   int value_size = 0;
+   xdrproc_t decode_proc = (xdrproc_t)xdr_epgw_getxattr_raw_ret_t;
+   size_t size;
+   int    trc_idx;
+   fuse_ino_t ino;
+   char *buffer;
+   char *name;
+   ientry_t *ie = 0;
+   lv2_entry_t *fake_lv2_p;
+
+   errno = 0;          
+   rpc_reply.acpted_rply.ar_results.proc = NULL;
+   RESTORE_FUSE_PARAM(param,req);
+   RESTORE_FUSE_PARAM(param,size);   
+   RESTORE_FUSE_PARAM(param,ino);   
+   RESTORE_FUSE_PARAM(param,trc_idx);   
+   RESTORE_FUSE_STRUCT_PTR(param,name);
+    /*
+    ** get the pointer to the transaction context:
+    ** it is required to get the information related to the receive buffer
+    */
+    rozofs_tx_ctx_t      *rozofs_tx_ctx_p = (rozofs_tx_ctx_t*)this;     
+    /*    
+    ** get the status of the transaction -> 0 OK, -1 error (need to get errno for source cause
+    */
+    status = rozofs_tx_get_status(this);
+    if (status < 0)
+    {
+       /*
+       ** something wrong happened
+       */
+       errno = rozofs_tx_get_errno(this);  
+       goto error; 
+    }
+    /*
+    ** get the pointer to the receive buffer payload
+    */
+    recv_buf = rozofs_tx_get_recvBuf(this);
+    if (recv_buf == NULL)
+    {
+       /*
+       ** something wrong happened
+       */
+       errno = EFAULT;  
+       goto error;         
+    }
+
+
+    payload  = (uint8_t*) ruc_buf_getPayload(recv_buf);
+    payload += sizeof(uint32_t); /* skip length*/
+    /*
+    ** OK now decode the received message
+    */
+    bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
+    /*
+    ** decode the rpc part
+    */
+    if (rozofs_xdr_replymsg(&xdrs,&rpc_reply) != TRUE)
+    {
+     TX_STATS(ROZOFS_TX_DECODING_ERROR);
+     errno = EPROTO;
+     goto error;
+    }
+    /*
+    ** ok now call the procedure to encode the message
+    */
+    memset(&ret,0, sizeof(ret));
+    if (decode_proc(&xdrs,&ret) == FALSE)
+    {
+       TX_STATS(ROZOFS_TX_DECODING_ERROR);
+       errno = EPROTO;
+       xdr_free(decode_proc, (char *) &ret);
+       goto error;
+    }   
+    if (ret.status_gw.status == EP_FAILURE) {
+        errno = ret.status_gw.ep_getxattr_raw_ret_t_u.error;
+        xdr_free(decode_proc, (char *) &ret);    
+        goto error;
+    }
+    /*
+    ** Get the arrays that contain the extended attributes associated with the inode
+    */
+    {
+      char *dst;
+        
+
+      if (!(ie = get_ientry_by_inode(ino))) {
+          errno = ENOENT;
+          goto error;
+      }
+      if (ie->ientry_long == 0)
+      {
+          errno = EINVAL;
+          goto error;
+      }
+      /*
+      ** update the timestamp of the xattr
+      */
+      ie->xattr_timestamp = rozofs_get_ticker_us();
+      fake_lv2_p = (lv2_entry_t*)&ie->attrs;
+      dst = (char*)fake_lv2_p;
+      dst += ROZOFS_I_EXTRA_ISIZE;
+      /*
+      ** check if there some data in the inode
+      */
+      if (ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_len == 0)
+      {
+         /*
+	 ** clear the array
+	 */
+         memset(dst,0,ROZOFS_INODE_SZ - ROZOFS_I_EXTRA_ISIZE);
+	 if (fake_lv2_p->extended_attr_p != NULL) xfree(fake_lv2_p->extended_attr_p);    
+	 fake_lv2_p->extended_attr_p = NULL;
+	 fake_lv2_p->attributes.s.i_file_acl = 0; 
+	 ext4_clear_inode_state(fake_lv2_p, EXT4_STATE_XATTR);
+      } 
+      else
+      {
+        /*
+	** copy it on the ientry on the inode section
+	*/
+	memcpy(dst,ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_val,ROZOFS_INODE_SZ - ROZOFS_I_EXTRA_ISIZE);
+	ext4_set_inode_state(fake_lv2_p, EXT4_STATE_XATTR);
+      
+      }             
+      if (ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr_block.inode_xattr_block_len == 0)
+      {
+         /*
+	 ** clear the array: release the extended block if one was allocated
+	 */
+	 if (fake_lv2_p->extended_attr_p != NULL) xfree(fake_lv2_p->extended_attr_p);    
+	 fake_lv2_p->extended_attr_p = NULL;
+	 fake_lv2_p->attributes.s.i_file_acl = 0;      
+      } 
+      else
+      {
+        /*
+	** allocated a 4KB block for storing the extended attributes & copy the data
+	*/
+	if (fake_lv2_p->extended_attr_p == NULL) fake_lv2_p->extended_attr_p = xmalloc(ROZOFS_XATTR_BLOCK_SZ);
+	memcpy(fake_lv2_p->extended_attr_p,ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr_block.inode_xattr_block_val,ROZOFS_XATTR_BLOCK_SZ);
+	/*
+	** indicates that there is an extension block for the xattributes
+	*/
+	fake_lv2_p->attributes.s.i_file_acl = 1;	      
+      }   
+
+    }
+    /*
+    ** Now search for the requested extended attribute
+    */
+    {
+      struct dentry entry;
+      entry.d_inode = fake_lv2_p;
+      /*
+      ** check if the request is just for the xattr len: if it the case set the buffer to NULL
+      */
+      if (size == 0) buffer = 0;
+      else buffer = buf_export_attr;
+    
+      if ((value_size = rozofs_getxattr(&entry, name, buffer, size)) < 0) {
+          goto error;
+      }
+    }    
+    if (size == 0) {
+        fuse_reply_xattr(req, value_size);
+	errno = 0;
+        goto out;
+    }       
+    
+    if (value_size > size) {
+        errno = ERANGE;
+        xdr_free(decode_proc, (char *) &ret);    
+        goto error;
+    }
+
+    fuse_reply_buf(req, (char *)buf_export_attr, value_size);
+    xdr_free(decode_proc, (char *) &ret);   
+    errno = 0;
+    goto out;
+    
+error:
+    fuse_reply_err(req, errno);
+out:
+    /*
+    ** release the transaction context and the fuse context
+    */
+    rozofs_trc_rsp(srv_rozofs_ll_getxattr,ino,NULL,status,trc_idx);
+    STOP_PROFILING_NB(param,rozofs_ll_getxattr);
+    rozofs_fuse_release_saved_context(param);
+    if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    
+    if (recv_buf != NULL) ruc_buf_freeBuffer(recv_buf);   
+   
+    return;
+}
+
 /*
 **__________________________________________________________________
 */
@@ -597,6 +895,10 @@ void rozofs_ll_removexattr_nb(fuse_req_t req, fuse_ino_t ino, const char *name)
         errno = ENOENT;
         goto error;
     }
+    /*
+    ** clear the timestamp
+    */
+    ie->xattr_timestamp = 0;
 
     /*
     ** fill up the structure that will be used for creating the xdr message

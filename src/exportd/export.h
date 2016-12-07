@@ -538,6 +538,20 @@ int export_readdir(export_t * e, fid_t fid, uint64_t * cookie, child_t **childre
  */
 ssize_t export_getxattr(export_t *e, fid_t fid, const char *name, void *value, size_t size);
 
+
+/** retrieve an extended attribute value in raw mode.
+ *
+ * @param e: the export managing the file or directory.
+ * @param fid: the id of the file or directory.
+ * @param name: the extended attribute name.
+ * @param value: the value of this extended attribute.
+ * @param size: the size of a buffer to hold the value associated
+ *  with this extended attribute.
+ * 
+ * @return: On success, the size of the extended attribute value.
+ * On failure, -1 is returned and errno is set appropriately.
+ */
+ssize_t export_getxattr_raw(export_t *e, fid_t fid, const char *name, void *value, size_t size,epgw_getxattr_raw_ret_t *ret);
 /** set an extended attribute value for a file or directory.
  *
  * @param e: the export managing the file or directory.

@@ -113,6 +113,12 @@ typedef struct _common_config_global_t {
   uint32_t    archive_file_dentry_timeout;
   // attribute cache timeout for archive file type (unit is second)
   uint32_t    archive_file_attr_timeout;
+  // When that flag is asserted, the rozofsmount client can cache the extended attributes
+  uint32_t    client_xattr_cache;
+  // When that flag is asserted, the rozofsmount client performs setattr in asynchronous mode
+  uint32_t    async_setattr;
+  // statfs period in seconds. minimum is 0.
+  uint32_t    statfs_period;
 
   /*
   ** storage scope configuration elements

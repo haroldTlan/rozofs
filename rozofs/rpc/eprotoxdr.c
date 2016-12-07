@@ -1637,6 +1637,52 @@ xdr_epgw_getxattr_ret_t (XDR *xdrs, epgw_getxattr_ret_t *objp)
 }
 
 bool_t
+xdr_ep_getxattr_raw_ret_val_t (XDR *xdrs, ep_getxattr_raw_ret_val_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_bytes (xdrs, (char **)&objp->inode_xattr.inode_xattr_val, (u_int *) &objp->inode_xattr.inode_xattr_len, ~0))
+		 return FALSE;
+	 if (!xdr_bytes (xdrs, (char **)&objp->inode_xattr_block.inode_xattr_block_val, (u_int *) &objp->inode_xattr_block.inode_xattr_block_len, ~0))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_ep_getxattr_raw_ret_t (XDR *xdrs, ep_getxattr_raw_ret_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_status_t (xdrs, &objp->status))
+		 return FALSE;
+	switch (objp->status) {
+	case EP_SUCCESS:
+		 if (!xdr_ep_getxattr_raw_ret_val_t (xdrs, &objp->ep_getxattr_raw_ret_t_u.raw))
+			 return FALSE;
+		break;
+	case EP_FAILURE:
+		 if (!xdr_int (xdrs, &objp->ep_getxattr_raw_ret_t_u.error))
+			 return FALSE;
+		break;
+	default:
+		break;
+	}
+	return TRUE;
+}
+
+bool_t
+xdr_epgw_getxattr_raw_ret_t (XDR *xdrs, epgw_getxattr_raw_ret_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_gateway_t (xdrs, &objp->hdr))
+		 return FALSE;
+	 if (!xdr_ep_getxattr_raw_ret_t (xdrs, &objp->status_gw))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_ep_removexattr_arg_t (XDR *xdrs, ep_removexattr_arg_t *objp)
 {
 	//register int32_t *buf;

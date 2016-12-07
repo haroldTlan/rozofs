@@ -1824,6 +1824,24 @@ out:
 **______________________________________________________________________________
 */
 /**
+*   exportd getxattr: get extended attributes in raw mode (stub)
+
+    @param args : fid of the object, extended attribute name 
+    
+    @retval: EP_SUCCESS : extended attribute value
+    @retval: EP_FAILURE :error code associated with the operation (errno)
+*/
+epgw_getxattr_raw_ret_t * ep_getxattr_raw_1_svc(epgw_getxattr_arg_t * arg, struct svc_req * req) {
+    static epgw_getxattr_raw_ret_t ret;
+
+    ret.status_gw.status = EP_FAILURE;
+    ret.status_gw.ep_getxattr_raw_ret_t_u.error = ENOTSUP;
+    return &ret;
+}
+/*
+**______________________________________________________________________________
+*/
+/**
 *   exportd removexattr: remove extended attribute
 
     @param args : fid of the object, extended attribute name 

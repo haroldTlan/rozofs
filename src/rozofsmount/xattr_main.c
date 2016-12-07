@@ -5,7 +5,7 @@
 #include "xattr.h"
 #include "xattr_main.h"
 
-export_tracking_table_t *xattr_trk_p;
+//export_tracking_table_t *xattr_trk_p;
 
 static const char *
 strcmp_prefix(const char *a, const char *a_prefix)
@@ -89,35 +89,7 @@ rozofs_getxattr(struct dentry *dentry, const char *name, void *buffer, size_t si
 	{
 	  ret = -1;
 	}
-	rozofs_xattr_extended_release(dentry->d_inode);
-	return ret;
-}
-
-/*
- * Find the handler for the prefix and dispatch its get() operation.
-   Caution: the allocated buffer used for storing the extended attributes is not released by this function
- */
-ssize_t
-rozofs_getxattr_raw(struct dentry *dentry, const char *name, void *buffer, size_t size)
-{
-	const struct xattr_handler *handler;
-	int ret;
-	/*
-	** save the current tracking context needed for allocation
-	*/
-	xattr_set_tracking_context(dentry);
-
-	handler = xattr_resolve_name(ext4_xattr_handlers, &name);
-	if (!handler)
-	{
-	   errno = EOPNOTSUPP;
-           return -1;
-	}
-	ret = handler->get(dentry, name, buffer, size, handler->flags);
-	if (ret < 0 )
-	{
-	  ret = -1;
-	}
+//	rozofs_xattr_extended_release(dentry->d_inode);
 	return ret;
 }
 

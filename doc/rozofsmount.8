@@ -142,6 +142,14 @@ Tells the client that it is the only writter on the files it writes, and so need
 \fB\-o localPreference
 Favor local storage on read to save network bandwith in case of poor network connection.
 .PP
+.TP
+\fB\-o xattrcache
+When asserted, it permits to cache the extended attributes on the client. The timer used for caching the same as the one defined for the attributes caching.
+.PP
+.TP
+\fB\-o asyncsetattr
+When asserted,rozofsmount operates asynchronous mode for setattr operations.
+.PP
 .SH "REPORTING BUGS"
 Report bugs to <bugs@fizians.org>.
 .SH COPYRIGHT

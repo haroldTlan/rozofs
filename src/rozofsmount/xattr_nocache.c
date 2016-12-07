@@ -59,7 +59,7 @@
 #include "rozofs_ext4.h"
 #include "xattr.h"
 #include <rozofs/common/acl.h>
-#include "exp_cache.h"
+//#include "exp_cache.h"
 
 
 
@@ -399,89 +399,6 @@ cleanup:
 /*
 **_____________________________________________________________________________
 */
-/**
-*  Get  all the extended attributes from the root inode
-
-   @param inode 
-   @param buffer : buffer for storing extended attributes
-   @param buffer_size : size of the buffer
-   
-   @retval >=0 size on success
-   @retval < 0 on error
-*/
-int
-ext4_xattr_ibody_get_raw(lv2_entry_t *inode,void *buffer, u_int *buffer_size)
-{
-	struct ext4_xattr_ibody_header *header;
-	struct ext4_inode *raw_inode;
-	struct ext4_iloc iloc;
-	void *end;
-	int error;
-	*buffer_size = 0;
-
-	if (!ext4_test_inode_state(inode, EXT4_STATE_XATTR))
-		return -ENODATA;
-	error = ext4_get_inode_loc(inode, &iloc);
-	if (error)
-		return error;
-	raw_inode = ext4_raw_inode(&iloc);
-	header = IHDR(inode, raw_inode);
-	end = (void *)raw_inode + ROZOFS_INODE_SZ;
-	*buffer_size = (char*)end-(char*)header;
-	memcpy(buffer,header,*buffer_size);
-	return 0;
-}
-/*
-**_____________________________________________________________________________
-*/
-/**
-*  Get the block that contains an extended attribute in raw mode
-
-   @param inode 
-   @param buffer : buffer for storing extended attriute value
-   @param buffer_size : size of the buffer
-   
-   @retval >=0 size on success
-   @retval < 0 on error
-*/
-int
-ext4_xattr_block_get_raw(lv2_entry_t *inode,void *buffer, u_int *buffer_size)
-{
-	struct buffer_head *bh = NULL;
-	int error;
-	
-        *buffer_size = 0;
-	error = 0;
-	/*
-	** check if the extended inode exist
-	*/
-	if (!inode->attributes.s.i_file_acl)
-		goto cleanup;
-	/*
-	** attempt top read the extended inode block: it might be either
-	** already in memory or we have to read it on disk
-	*/
-	bh = sb_bread(inode, inode->attributes.s.i_file_acl);
-	if (!bh)
-		goto cleanup;
-	/*
-	** copy the extended attributes from that 4KB block
-	*/
-        if (inode->extended_attr_p != NULL)
-	{
-	  memcpy(buffer,inode->extended_attr_p,ROZOFS_XATTR_BLOCK_SZ);
-	  *buffer_size = ROZOFS_XATTR_BLOCK_SZ;
-	  error = 0;
-	}
-
-cleanup:
-	brelse(bh);
-	return error;
-}
-
-/*
-**_____________________________________________________________________________
-*/
 /*
  * ext4_xattr_get()
  *
@@ -660,44 +577,7 @@ static void
 ext4_xattr_release_block(void  *handle, lv2_entry_t *inode,
 			 struct buffer_head *bh)
 {
-   export_tracking_table_t *trk_tb_p;
-   rozofs_inode_t fake_inode; 
-   fid_t fid;     
-   
 
-   trk_tb_p = xattr_get_tracking_context();  
-   /*
-   ** get the reference of the extendsed block to release
-   */
-   fake_inode.fid[1] = bh->b_blocknr;
-   memcpy(fid,&fake_inode.fid[0],sizeof(fid_t));
-   exp_attr_delete(trk_tb_p,fid);
- 
-#if 0
-	int error = 0;
-
-	lock_buffer(bh);
-	if (BHDR(bh)->h_refcount == cpu_to_le32(1)) {
-		ea_bdebug(bh, "refcount now=0; freeing");
-		get_bh(bh);
-		ext4_free_blocks(handle, inode, bh, 0, 1,
-				 EXT4_FREE_BLOCKS_METADATA |
-				 EXT4_FREE_BLOCKS_FORGET);
-		unlock_buffer(bh);
-	} else {
-		le32_add_cpu(&BHDR(bh)->h_refcount, -1);
-		unlock_buffer(bh);
-		error = ext4_handle_dirty_metadata(handle, inode, bh);
-		if (IS_SYNC(inode))
-			ext4_handle_sync(handle);
-		dquot_free_block(inode, EXT4_C2B(EXT4_SB(inode->i_sb), 1));
-		ea_bdebug(bh, "refcount now=%d; releasing",
-			  le32_to_cpu(BHDR(bh)->h_refcount));
-	}
-out:
-	ext4_std_error(inode->i_sb, error);
-	return;
-#endif
 }
 
 /*

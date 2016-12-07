@@ -139,6 +139,12 @@ char * show_module_client(char * pChar) {
   COMMON_CONFIG_SHOW_INT_OPT(archive_file_dentry_timeout,30,"0:300");
   pChar += rozofs_string_append(pChar,"// attribute cache timeout for archive file type (unit is second)\n");
   COMMON_CONFIG_SHOW_INT_OPT(archive_file_attr_timeout,30,"0:300");
+  pChar += rozofs_string_append(pChar,"// When that flag is asserted, the rozofsmount client can cache the extended attributes\n");
+  COMMON_CONFIG_SHOW_BOOL(client_xattr_cache,False);
+  pChar += rozofs_string_append(pChar,"// When that flag is asserted, the rozofsmount client performs setattr in asynchronous mode\n");
+  COMMON_CONFIG_SHOW_BOOL(async_setattr,False);
+  pChar += rozofs_string_append(pChar,"// statfs period in seconds. minimum is 0.\n");
+  COMMON_CONFIG_SHOW_INT(statfs_period,10);
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -374,6 +380,12 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_INT_MINMAX(archive_file_dentry_timeout,30,0,300);
   // attribute cache timeout for archive file type (unit is second) 
   COMMON_CONFIG_READ_INT_MINMAX(archive_file_attr_timeout,30,0,300);
+  // When that flag is asserted, the rozofsmount client can cache the extended attributes 
+  COMMON_CONFIG_READ_BOOL(client_xattr_cache,False);
+  // When that flag is asserted, the rozofsmount client performs setattr in asynchronous mode 
+  COMMON_CONFIG_READ_BOOL(async_setattr,False);
+  // statfs period in seconds. minimum is 0. 
+  COMMON_CONFIG_READ_INT(statfs_period,10);
   /*
   ** storage scope configuration elements
   */
