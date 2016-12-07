@@ -6770,7 +6770,8 @@ ssize_t export_getxattr_raw(export_t *e, fid_t fid, const char *name, void *valu
     ret = ext4_xattr_ibody_get_raw(lv2,
                                    ret_p->status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_val,
 				   &ret_p->status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_len);
-    if (ret < 0) {
+    if ((ret < 0)&&(ret!= -ENODATA)) {
+      
       status = 0;
       goto out;
     } 
@@ -6784,11 +6785,13 @@ out:
     /*
     ** release the memory allocated for exetnded block if it exists
     */
-    if (lv2->extended_attr_p != NULL) 
-    {
-      free(lv2->extended_attr_p);
-      lv2->extended_attr_p = NULL;
-    }
+    if (lv2) {
+      if (lv2->extended_attr_p != NULL) 
+      {
+        free(lv2->extended_attr_p);
+        lv2->extended_attr_p = NULL;
+      }
+    }  
     STOP_PROFILING(export_getxattr);
 
     return status;

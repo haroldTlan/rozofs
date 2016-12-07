@@ -355,6 +355,7 @@ int do_check_max_xattr(char * file, int symlink) {
   int  ret = 0;
   char max_attr[MAX_XATTR_SIZE+1];
   int  i;
+  int loop;
     
   for (i=0; i<MAX_XATTR_SIZE; i++) {
     max_attr[i] = ('A'+ (i%26));
@@ -390,25 +391,33 @@ int do_check_max_xattr(char * file, int symlink) {
     return 1;
   } 
   
-  if (symlink) {
-    /* Apply on symbolic link and not the target */
-    ret = lgetxattr(file,"system.MAX",max_attr,4097);   
-  } 
-  else {   
-    ret = getxattr(file,"user.MAX",max_attr,4097);
-  }  
-  if (ret <= 0) {
-    printf("LINE %d file %s %d %s\n",__LINE__,file,ret,strerror(errno));
-    return 1;
-  } 
+  
+  for (loop=0; loop<4; loop++) {
+    if (symlink) {
+      /* Apply on symbolic link and not the target */
+      ret = lgetxattr(file,"system.MAX",max_attr,MAX_XATTR_SIZE);   
+      if (ret <= 0) {
+        printf("LINE %d file %s %d %s\n",__LINE__,file,ret,strerror(errno));
+        return 1;
+      } 
+    } 
+    else {   
+      ret = getxattr(file,"user.MAX",max_attr,MAX_XATTR_SIZE);
+      if (ret <= 0) {
+        printf("LINE %d file %s %d %s\n",__LINE__,file,ret,strerror(errno));
+        return 1;
+      } 
+    }  
 
-  for (i=0; i<MAX_XATTR_SIZE; i++) {
-    if (max_attr[i] != ('A'+ (i%26))){
-      printf("LINE %d file %s %d\n",__LINE__,file,i);
-      return i;    
+
+
+    for (i=0; i<MAX_XATTR_SIZE; i++) {
+      if (max_attr[i] != ('A'+ (i%26))){
+        printf("LINE %d file %s %d\n",__LINE__,file,i);
+        return i;    
+      }
     }
   }
-
 
   if (symlink) {
     /* Apply on symbolic link and not the target */
