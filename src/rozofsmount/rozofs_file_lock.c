@@ -699,6 +699,11 @@ void rozofs_ll_flock_nb(fuse_req_t req,
     struct flock flock;
 
 
+    /*
+    ** Just keep significant bits
+    ** and clear all other
+    */
+    op = op & (LOCK_NB|LOCK_SH|LOCK_EX|LOCK_UN);
     
     /*
     ** Blocking or not blocking ? 
@@ -728,6 +733,9 @@ void rozofs_ll_flock_nb(fuse_req_t req,
         break;
       default:
 	lock_stat.einval++;      
+        if (lock_stat.einval%1024==1) {
+          severe("rozofs_ll_flock_nb op = 0x%x",(unsigned int)op);
+        }
         fuse_reply_err(req, EINVAL);
         return;
     }
