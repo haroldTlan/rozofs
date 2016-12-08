@@ -689,8 +689,8 @@ RBS_EXE_CODE_E rbs_restore_one_rb_entry(rbs_storage_config_t * st,
 	   char fidString[64];
 	   status = RBS_EXE_ENOENT;
 	   rbs_error.nom_read_enoent++;
-	   rozofs_fid2string(re->fid,fidString);
-	   warning("@rozofs_uuid@%s has no projection available",fidString);
+	   //rozofs_fid2string(re->fid,fidString);
+	   //warning("@rozofs_uuid@%s has no projection available",fidString);
 	   goto out;
         }
 	
