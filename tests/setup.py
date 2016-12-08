@@ -1022,7 +1022,7 @@ def display_config_bool(name,val):
 class rozofs_class:
 
   def __init__(self):
-    self.threads = 4
+    self.threads = 0
     self.nb_core_file = 2
     self.crc32 = True
     self.device_selfhealing_mode  = "relocate"
@@ -1133,8 +1133,6 @@ class rozofs_class:
 
   def create_loopback_device(self,path,mark,content=None):  
     if rozofs.disk_size_mb == None: return
-
-    print "Create create_loopback_device %s %s %s"%(path,mark,content)
     
     # Need a working directory
     tmpdir="/tmp/setup"
@@ -1150,7 +1148,11 @@ class rozofs_class:
       syslog.syslog( "Can not find /dev/loop for %s %s"%(path,mark))
       return
     loop=output[0].split('\n')[0]
-
+    if content == None:
+      print "%s %s %s"%(loop,path,mark)
+    else:
+      print "%s %s %s(%s)"%(loop,path,mark,content)
+      
     # Create the file with the given path
     os.system("dd if=/dev/zero of=%s bs=1MB count=%s > /dev/null 2>&1"%(path,rozofs.disk_size_mb))
     
@@ -1233,6 +1235,8 @@ class rozofs_class:
     display_config_int("device_selfhealing_delay",rozofs.device_selfhealing_delay)
     display_config_string("device_selfhealing_mode",rozofs.device_selfhealing_mode)
     display_config_string("export_hosts",exportd.export_host)
+    display_config_bool("client_xattr_cache",True)
+#    display_config_bool("async_setattr",True)
     if self.deletion_delay != None :
       display_config_int("deletion_delay",self.deletion_delay)
     if self.client_fast_reconnect == True: display_config_bool("client_fast_reconnect",True)
