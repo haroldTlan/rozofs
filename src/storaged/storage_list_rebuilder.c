@@ -686,7 +686,7 @@ RBS_EXE_CODE_E rbs_restore_one_rb_entry(rbs_storage_config_t * st,
 	}
         if (nb_blocks_read_distant == 0) break; // End of file
         if (nb_blocks_read_distant == -1) { // File deleted
-	   char fidString[64];
+	   //char fidString[64];
 	   status = RBS_EXE_ENOENT;
 	   rbs_error.nom_read_enoent++;
 	   //rozofs_fid2string(re->fid,fidString);
