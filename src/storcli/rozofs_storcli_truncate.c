@@ -48,6 +48,7 @@
 
 
 int rozofs_storcli_get_position_of_first_byte2write_in_truncate();
+int fdl_truncate_debug = 0;
 
 DECLARE_PROFILING(stcpp_profiler_t);
 
@@ -152,6 +153,7 @@ void rozofs_storcli_truncate_req_init(uint32_t  socket_ctx_idx, void *recv_buf,r
    /*
    ** allocate a context for the duration of the write
    */
+   fdl_truncate_debug++;
    working_ctx_p = rozofs_storcli_alloc_context();
    if (working_ctx_p == NULL)
    {
@@ -162,12 +164,7 @@ void rozofs_storcli_truncate_req_init(uint32_t  socket_ctx_idx, void *recv_buf,r
      goto failure;
    }
    storcli_truncate_rq_p = &working_ctx_p->storcli_truncate_arg;
-   STORCLI_START_NORTH_PROF(working_ctx_p,truncate,0);
-
-   memcpy(working_ctx_p->fid_key, storcli_truncate_rq_p->fid, sizeof (sp_uuid_t));
-   working_ctx_p->opcode_key = STORCLI_TRUNCATE;
-
-   
+   STORCLI_START_NORTH_PROF(working_ctx_p,truncate,0);   
    /*
    ** Get the full length of the message and adjust it the the length of the applicative part (RPC header+application msg)
    */
@@ -220,7 +217,12 @@ void rozofs_storcli_truncate_req_init(uint32_t  socket_ctx_idx, void *recv_buf,r
       severe("rpc trucnate request decoding error");
       goto failure;
       
-   }   
+   } 
+   /*
+   ** store the key for ring insertion
+   */  
+   memcpy(working_ctx_p->fid_key, storcli_truncate_rq_p->fid, sizeof (sp_uuid_t));
+   working_ctx_p->opcode_key = STORCLI_TRUNCATE; 
    /*
    ** init of the load balancing group/ projection association table:
    ** That table is ordered: the first corresponds to the storage associated with projection 0, second with 1, etc..
@@ -326,7 +328,7 @@ void rozofs_storcli_truncate_req_init(uint32_t  socket_ctx_idx, void *recv_buf,r
        nb_blocks--;
        int ret;
        ret = stc_rng_insert((void*)working_ctx_p,
-               STORCLI_READ,working_ctx_p->fid_key,
+               STORCLI_TRUNCATE,working_ctx_p->fid_key,
                0,nb_blocks,
                &working_ctx_p->sched_idx);
        if (ret == 0)
@@ -334,6 +336,7 @@ void rozofs_storcli_truncate_req_init(uint32_t  socket_ctx_idx, void *recv_buf,r
            /*
             ** there is a current request that is processed with the same fid and there is a collision
             */
+	    info("FDL truncate is queued");
            return;
        }
        /*
@@ -898,6 +901,8 @@ void rozofs_storcli_truncate_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
   ** the case, we must read the block from the disk to then remove the extra data at
   ** the end of the block.
   */
+  info("FDL storcli TRUNCATE");
+
   if (storcli_truncate_rq_p->last_seg != 0) {
     /*
     ** Release the pre-allocated storcli contexts
