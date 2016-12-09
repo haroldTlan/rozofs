@@ -155,6 +155,7 @@ typedef struct ientry {
     char      * symlink_target;
     uint64_t    symlink_ts;
     int         pending_getattr_cnt;   /**< pending get attr count  */
+    int         pending_setattr_with_size_update; /**< number of pending setattr triggered by a truncate callback */
     mattr_t attrs;   /**< attributes caching for fs_mode = block mode   */
     /* !!!WARNING !!! DO NOT ADD ANY FIELD BELOW attrs since that array can be extended for storing extended attributes */
 } ientry_t;
@@ -433,6 +434,7 @@ static inline ientry_t *alloc_ientry(fid_t fid) {
 	ie->symlink_target = NULL;
         ie->symlink_ts     = 0;
 	ie->pending_getattr_cnt= 0;
+	ie->pending_setattr_with_size_update = 0;
 	put_ientry(ie);
 	/*
 	** when the ientry stores the extended attributes we should initialize the ext_mattr section

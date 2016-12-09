@@ -416,6 +416,7 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
     int trc_idx;
     int lkup_cpt = 0;
     struct stat o_stbuf;
+    uint32_t readahead = 0;
 
     uint32_t bbytes = ROZOFS_BSIZE_BYTES(exportclt.bsize);    
     /*
@@ -437,6 +438,7 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
     SAVE_FUSE_PARAM(buffer_p,req);
     SAVE_FUSE_PARAM(buffer_p,ino);
     SAVE_FUSE_PARAM(buffer_p,trc_idx);
+    SAVE_FUSE_PARAM(buffer_p,readahead);
     SAVE_FUSE_STRUCT(buffer_p,fi,sizeof( struct fuse_file_info));
     START_PROFILING_NB(buffer_p,rozofs_ll_setattr);
     /*
@@ -563,6 +565,16 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
 	args.bid      = bid;
 	args.last_seg = last_seg;
   //      lbg_id = storcli_lbg_get_lbg_from_fid(ie->fid);
+        /*
+	** indicates that there is a pending truncate: so the settattr that will come later on, will have
+	** the readahead flag asserted
+	*/
+	readahead = 1;
+	SAVE_FUSE_PARAM(buffer_p,readahead);
+	/*
+	** increment the number of pending setattr for which the file size is impacted
+	*/
+	ie->pending_setattr_with_size_update++;
 	/*
 	** get the storcli to use for the transaction
 	*/      
@@ -664,6 +676,17 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
     */
     return;    
 error:
+    if ((readahead) && (ie!=NULL))
+    {
+      /*
+      ** decrement the number of pending setattr for which the file size is impacted
+      */
+      ie->pending_setattr_with_size_update--;
+      if ( ie->pending_setattr_with_size_update <= 0)
+      {
+	ie->pending_setattr_with_size_update = 0;
+      }    
+    }
     fuse_reply_err(req, errno);
     /*
     ** release the buffer if has been allocated
@@ -702,6 +725,7 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     fuse_req_t req; 
     epgw_mattr_ret_t ret ;
     mattr_t  attr;
+    uint32_t readahead = 0;
 
     int status;
     uint8_t  *payload;
@@ -723,6 +747,7 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     RESTORE_FUSE_PARAM(param,ino);
     RESTORE_FUSE_PARAM(param,trc_idx);
     RESTORE_FUSE_PARAM(param,lkup_cpt);   
+    RESTORE_FUSE_PARAM(param,readahead);   
     
 //    RESTORE_FUSE_STRUCT_PTR(param,fi);
     /*
@@ -730,6 +755,10 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     ** it is required to get the information related to the receive buffer
     */
     rozofs_tx_ctx_t      *rozofs_tx_ctx_p = (rozofs_tx_ctx_t*)this;     
+    /*
+    ** get the ientry associated with the inode (will be used later)
+    */
+    ie = get_ientry_by_inode(ino);
     /*    
     ** get the status of the transaction -> 0 OK, -1 error (need to get errno for source cause
     */
@@ -840,22 +869,31 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     /*
     ** get the ientry associated with the fuse_inode
     */
-
-    if (!(ie = get_ientry_by_inode(ino))) {
+    if (ie== NULL) {
         errno = ENOENT;
         goto error;
-    }
-    /*
-    ** clear the running flag in case of a time modification
-    */
-    if (ie->mtime_locked) {  
-      ie->file_extend_running = 0;
     }
     /*
     ** update the attributes in the ientry
     */
     rozofs_ientry_update(ie,&attr);    
-
+    /*
+    ** clear the running flag in case of a time modification
+    */
+    if (readahead)
+    {
+      /*
+      ** decrement the number of pending setattr for which the file size is impacted
+      */
+      ie->pending_setattr_with_size_update--;
+      if ( ie->pending_setattr_with_size_update <= 0)
+      {
+	ie->pending_setattr_with_size_update = 0;
+      }    
+    }
+    if (ie->mtime_locked) {  
+      if (ie->pending_setattr_with_size_update == 0) ie->file_extend_running = 0;
+    }
     /*
     ** update the size in the buffer returned to fuse
     */
@@ -869,6 +907,18 @@ void rozofs_ll_setattr_cbk(void *this,void *param)
     goto out;
 error:
     if (lkup_cpt == 0) fuse_reply_err(req, errno);
+    
+    if ((readahead) && (ie!=NULL))
+    {
+      /*
+      ** decrement the number of pending setattr for which the file size is impacted
+      */
+      ie->pending_setattr_with_size_update--;
+      if ( ie->pending_setattr_with_size_update <= 0)
+      {
+	ie->pending_setattr_with_size_update = 0;
+      }    
+    }
 out:
     rozofs_trc_rsp_attr(srv_rozofs_ll_setattr,ino,(ie==NULL)?NULL:ie->attrs.fid,status,(ie==NULL)?-1:ie->attrs.size,trc_idx);
     STOP_PROFILING_NB(param,rozofs_ll_setattr);
@@ -910,7 +960,9 @@ void rozofs_ll_truncate_cbk(void *this,void *param)
    storcli_status_ret_t ret;
    int retcode;
    int lkup_cpt=0;
+   int trc_idx;
    xdrproc_t decode_proc = (xdrproc_t)xdr_storcli_status_ret_t;
+   uint32_t readahead = 0;
 
    rpc_reply.acpted_rply.ar_results.proc = NULL;
    /*
@@ -923,6 +975,8 @@ void rozofs_ll_truncate_cbk(void *this,void *param)
    RESTORE_FUSE_PARAM(param,to_set);
    RESTORE_FUSE_STRUCT_PTR(param,stbuf);      
    RESTORE_FUSE_PARAM(param,lkup_cpt);   
+    RESTORE_FUSE_PARAM(param,trc_idx);
+    RESTORE_FUSE_PARAM(param,readahead);
     /*
     ** Update the exportd with the filesize if that one has changed
     */ 
@@ -1014,6 +1068,8 @@ void rozofs_ll_truncate_cbk(void *this,void *param)
         errno = ENOENT;
         goto error;
     }
+    rozofs_trc_rsp(srv_rozofs_ll_setattr,ino,NULL,1,trc_idx);
+
     /*
     ** set to attr the attributes that must be set: indicated by to_set
     */
@@ -1045,13 +1101,23 @@ void rozofs_ll_truncate_cbk(void *this,void *param)
     ** is the one found in the ientry context
     */
     ie->file_extend_running = 1;
-   
     /*
     ** now wait for the response of the exportd
     */
     return;
 
 error:
+    if ((readahead) && (ie!=NULL))
+    {
+      /*
+      ** decrement the number of pending setattr for which the file size is impacted
+      */
+      ie->pending_setattr_with_size_update--;
+      if ( ie->pending_setattr_with_size_update <= 0)
+      {
+	ie->pending_setattr_with_size_update = 0;
+      }    
+    }
     /*
     ** reply to fuse and release the transaction context and the fuse context
     */
