@@ -336,7 +336,6 @@ void rozofs_storcli_truncate_req_init(uint32_t  socket_ctx_idx, void *recv_buf,r
            /*
             ** there is a current request that is processed with the same fid and there is a collision
             */
-	    info("FDL truncate is queued");
            return;
        }
        /*
@@ -901,7 +900,6 @@ void rozofs_storcli_truncate_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
   ** the case, we must read the block from the disk to then remove the extra data at
   ** the end of the block.
   */
-  info("FDL storcli TRUNCATE");
 
   if (storcli_truncate_rq_p->last_seg != 0) {
     /*
