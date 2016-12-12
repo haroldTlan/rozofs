@@ -999,11 +999,13 @@ int storaged_rebuild_list(char * fid_list, char * statFilename) {
     if (local_index == -1) {
       if      (errno==EINVAL) file_entry.error = rozofs_rbs_error_no_such_cluster;
       else if (errno==EPROTO) file_entry.error = rozofs_rbs_error_not_enough_storages_up;
-      else                    file_entry.error = rozofs_rbs_error_unknown;
-      severe( "rbs_get_rb_entry_cnts failed cid/sid %d/%d %s", 
-	          storage_config.cid,
-			  storage_config.sid,
-			  strerror(errno));
+      else {                  
+        file_entry.error = rozofs_rbs_error_unknown;
+        severe( "rbs_get_rb_entry_cnts failed cid/sid %d/%d %s", 
+	            storage_config.cid,
+			    storage_config.sid,
+			    strerror(errno));
+      }                            
       continue; // Try with the next
     }
     
