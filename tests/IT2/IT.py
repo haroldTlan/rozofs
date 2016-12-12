@@ -22,7 +22,7 @@ STORCLI_SID_NB=int(8)
 nbGruyere=int(256)
 stopOnFailure=True
 fuseTrace=False
-DEFAULT_RETRIES=int(20)
+DEFAULT_RETRIES=int(40)
 tst_file="tst_file"
 device_number=""
 mapper_modulo=""
@@ -169,7 +169,7 @@ def export_count_sid_up ():
 #___________________________________________________
   global vid
   
-  string="./build/src/rozodiag/rozodiag -T export -c vfstat_stor"
+  string="./build/src/rozodiag/rozodiag -T export:1 -t 12 -c vfstat_stor"
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
