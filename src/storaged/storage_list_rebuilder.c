@@ -365,15 +365,15 @@ RBS_EXE_CODE_E rbs_restore_one_spare_entry(rbs_storage_config_t * st,
 	  if (nb_blocks_read_distant == 0) break; // End of chunk
 	  
           if (nb_blocks_read_distant == -1) {
-  	     char fidString[64];
+  	     //char fidString[64];
 	     /*
 	     ** File has been deleted
 	     */
 	     errno = ENOENT;
 	     rbs_error.spare_read_enoent++;
 	     status = RBS_EXE_ENOENT;
-	     rozofs_fid2string(re->fid,fidString);
-	     warning("@rozofs_uuid@%s has no projection available",fidString); 
+	     //rozofs_fid2string(re->fid,fidString);
+	     //warning("@rozofs_uuid@%s has no projection available",fidString); 
 	     goto out;
           }	  	
 
@@ -1052,9 +1052,9 @@ int storaged_rebuild_list(char * fid_list, char * statFilename) {
       */
       if (ret == RBS_EXE_FAILED) {
         if (check_fid_deleted_from_export(file_entry.fid)) {   
-	  char fidString[64];
-	  rozofs_fid2string(re.fid,fidString);
-	  warning("@rozofs_uuid@%s does no more exist",fidString); 	
+	  //char fidString[64];
+	  //rozofs_fid2string(re.fid,fidString);
+	  //warning("@rozofs_uuid@%s does no more exist",fidString); 	
 	  ret = RBS_EXE_ENOENT;
 	}  
       }
