@@ -31,8 +31,8 @@
 #include <dirent.h>
 #include <signal.h>
 #include <errno.h>
+#include <syslog.h>
 #include <sys/resource.h>
-#include <rozofs/common/log.h>
 #include <rozofs/core/rozofs_core_files.h>
 #include <rozofs/core/uma_dbg_api.h>
 #include <rozofs/common/common_config.h>
@@ -100,6 +100,7 @@ void rozofs_attach_hgup_cbk(rozofs_attach_crash_cbk_t entryPoint) {
   . sig : the signal value
   RETURN: a character string giving the signal name
   ==========================================================================*/
+static char sig_num[32];
 char * rozofs_signal(int sig) {
   switch(sig) {
   case SIGHUP    : return "SIGHUP";   /* Hangup (POSIX)                                      */
@@ -133,7 +134,9 @@ char * rozofs_signal(int sig) {
   case SIGIO     : return "SIGIO";    /* I/O now possible (4.2 BSD)                          */
   case SIGPWR    : return "SIGPWR";   /* Power failure restart (System V)                    */
   case SIGSYS    : return "SIGSYS";
-  default        : return "?";      
+  default        : 
+    rozofs_i32_append(sig_num,sig);
+    return sig_num;      
   }
 }
 /*__________________________________________________________________________
@@ -256,9 +259,11 @@ void rozofs_clean_core(void) {
   - sig : the signal received 
   RETURN: none
   ==========================================================================*/
+#define ROZOFS_SIGNAL_STRING "RozoFS signal " 
 void rozofs_catch_error(int sig){
   int idx;
   int ret = -1;
+  char msg[128];
 
   if  (rozofs_fatal_error_processing != 0) raise (sig);
   rozofs_fatal_error_processing++;
@@ -267,19 +272,24 @@ void rozofs_catch_error(int sig){
 
 
   /* Write the information in the trace file */
-  info("Receive signal %d = %s", sig, rozofs_signal(sig));
-
+  if (sig != SIGABRT) {
+    char * pChar = msg;
+    pChar += rozofs_string_append(pChar,ROZOFS_SIGNAL_STRING);
+    pChar += rozofs_string_append(pChar,rozofs_signal(sig));
+    syslog(LOG_INFO, msg); 
+  }
+  
   /* Call the crash call back */
   for (idx = 0; idx <rozofs_crash_cbk_nb; idx++) {
     rozofs_crash_cbk[idx](sig);
   }
   
-/* Set current directory on the core directory */
+  /* Set current directory on the core directory */
   if (rozofs_core_file_path[0]) {
     ret = chdir(rozofs_core_file_path);
     if (ret == -1){
-        severe("chdir to %s failed: %s", rozofs_core_file_path,
-                strerror(errno));
+//        severe("chdir to %s failed: %s", rozofs_core_file_path,
+//                strerror(errno));
     }
   }
   /* Adios */
