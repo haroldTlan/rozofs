@@ -276,7 +276,7 @@ void rozofs_catch_error(int sig){
     char * pChar = msg;
     pChar += rozofs_string_append(pChar,ROZOFS_SIGNAL_STRING);
     pChar += rozofs_string_append(pChar,rozofs_signal(sig));
-    syslog(LOG_INFO, msg); 
+    syslog(LOG_INFO, "%s", msg); 
   }
   
   /* Call the crash call back */
