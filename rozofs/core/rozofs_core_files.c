@@ -259,24 +259,18 @@ void rozofs_clean_core(void) {
   - sig : the signal received 
   RETURN: none
   ==========================================================================*/
-#define ROZOFS_SIGNAL_STRING "RozoFS signal " 
 void rozofs_catch_error(int sig){
   int idx;
   int ret = -1;
-  char msg[128];
 
   if  (rozofs_fatal_error_processing != 0) raise (sig);
   rozofs_fatal_error_processing++;
 
   signal (SIGTERM, SIG_IGN);
 
-
   /* Write the information in the trace file */
-  if (sig != SIGABRT) {
-    char * pChar = msg;
-    pChar += rozofs_string_append(pChar,ROZOFS_SIGNAL_STRING);
-    pChar += rozofs_string_append(pChar,rozofs_signal(sig));
-    syslog(LOG_INFO, "%s", msg); 
+  if (sig == SIGTERM) {
+    syslog(LOG_INFO, "%s", "SIGTERM"); 
   }
   
   /* Call the crash call back */
