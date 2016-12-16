@@ -408,6 +408,7 @@ int rozofs_rpc_non_blocking_req_send (int lbg_id,uint32_t prog,uint32_t vers,
     ** create the xdr_mem structure for encoding the message
     */
     bufsize = ruc_buf_getMaxPayloadLen(xmit_buf);
+    bufsize -= sizeof(uint32_t);
     xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
     /*
     ** fill in the rpc header
@@ -573,6 +574,7 @@ void rozofs_rpc_generic_reply_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t);    
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part

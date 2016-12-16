@@ -313,6 +313,7 @@ void rozofs_ll_open_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     if (rozofs_xdr_replymsg(&xdrs,&rpc_reply) != TRUE)
     {

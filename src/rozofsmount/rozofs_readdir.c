@@ -326,6 +326,7 @@ void rozofs_ll_readdir_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part

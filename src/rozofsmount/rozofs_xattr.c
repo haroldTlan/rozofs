@@ -210,6 +210,7 @@ void rozofs_ll_setxattr_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -574,6 +575,7 @@ void rozofs_ll_getxattr_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -705,6 +707,7 @@ void rozofs_ll_getxattr_raw_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -1003,6 +1006,7 @@ void rozofs_ll_removexattr_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -1206,6 +1210,7 @@ void rozofs_ll_listxattr_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part

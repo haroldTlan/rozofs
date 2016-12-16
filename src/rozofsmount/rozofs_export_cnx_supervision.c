@@ -144,6 +144,7 @@ int rozofs_export_poll_tx(af_unix_ctx_generic_t  *sock_p,
     ** create the xdr_mem structure for encoding the message
     */
     bufsize = (int)ruc_buf_getMaxPayloadLen(xmit_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
     /*
     ** fill in the rpc header
@@ -361,6 +362,7 @@ void rozofs_export_poll_cbk(void *this,void *param)
    ** OK now decode the received message
    */
    bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+   bufsize -= sizeof(uint32_t); /* skip length*/
    xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
    /*
    ** decode the rpc part

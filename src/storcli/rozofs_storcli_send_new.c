@@ -135,6 +135,7 @@ int rozofs_sorcli_send_rq_common(uint32_t lbg_id,uint32_t timeout_sec, uint32_t 
     ** create the xdr_mem structure for encoding the message
     */
     bufsize = (int)ruc_buf_getMaxPayloadLen(xmit_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
     /*
     ** fill in the rpc header

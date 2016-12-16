@@ -326,6 +326,7 @@ void geo_cli_sync_req_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -512,6 +513,7 @@ void geo_cli_geo_sync_get_next_req_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -699,6 +701,7 @@ void geo_cli_geo_sync_delete_req_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -808,6 +811,7 @@ void geo_cli_geo_sync_close_req_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part

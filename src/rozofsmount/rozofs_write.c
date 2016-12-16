@@ -1370,6 +1370,7 @@ void rozofs_ll_write_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -1759,6 +1760,7 @@ void rozofs_asynchronous_flush_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -1906,6 +1908,7 @@ void rozofs_ll_flush_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -2254,6 +2257,7 @@ void rozofs_ll_release_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/   
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -2469,6 +2473,7 @@ void export_force_write_block_cbk(void *this,void *param)
   ** OK now decode the received message
   */
   bufsize = rozofs_tx_get_small_buffer_size();
+  bufsize -= sizeof(uint32_t); /* skip length*/  
   xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
   /*
   ** decode the rpc part
@@ -2714,6 +2719,7 @@ void export_write_block_retry_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/   
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -3234,6 +3240,7 @@ void export_write_block_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
