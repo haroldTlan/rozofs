@@ -350,7 +350,7 @@ int remove_attr (char * file, int exist, int symlink) {
   }  
   return 0;
 }   
-#define MAX_XATTR_SIZE 3996
+#define MAX_XATTR_SIZE 3992
 int do_check_max_xattr(char * file, int symlink) {
   int  ret = 0;
   char max_attr[MAX_XATTR_SIZE+1];

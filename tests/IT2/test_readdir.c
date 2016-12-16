@@ -17,7 +17,7 @@
 #define FILE_BASE_NAME "This_is_a_pretty_long_base_file_name_in_order_to_trigger_readdir_not_just_in_one_exchange_with_the_export_but_in_several_runs_toward_the_export______This_should_make_this_test_a_better_test_"
 
 #define DEFAULT_NB_PROCESS    20
-#define DEFAULT_LOOP         32
+#define DEFAULT_LOOP         16
 
 int shmid;
 #define SHARE_MEM_NB 7541
@@ -116,7 +116,7 @@ create_file(int nb) {
   system(cmd);  
 }
 
-#define NB_FILES 64
+#define NB_FILES 80
 
 int read_directory(char * d,int nbFiles,int count) {
   DIR * dir;
@@ -185,6 +185,13 @@ int read_directory(char * d,int nbFiles,int count) {
       ret = -1;      
     }
   }
+  for (i; i<NB_FILES;i++) {
+    if (exist[i] != 0) {
+      printf("file %d exist in directory level %d\n",i,count);
+      ret = -1;      
+    }
+  }
+  
   if (subdir == 0) {
     printf("subdir %s is missing in directory level %d\n",d,count);
     ret = -1;      
@@ -208,9 +215,13 @@ int do_one_test(int count) {
   ret = read_directory(d,0,count);  
   for (i=0; i< NB_FILES; i++) {
     create_file(i);
+    ret = read_directory(d,i+1,count);
+    if (ret < 0) return ret;
   }        
+  
   ret = read_directory(d,NB_FILES,count);
-
+  if (ret < 0) return ret;
+  
   if (count > 0) {
 
     ret = chdir(d);
@@ -229,8 +240,11 @@ int do_one_test(int count) {
     }      
   }
   for (; i>=0; i--) {
-    remove_file(i);        
+    remove_file(i);      
+    ret = read_directory(d,i,count);
+    if (ret < 0) return ret;      
   }
+  
   ret = read_directory(d,0,count);
   if (ret < 0) return ret;
   
