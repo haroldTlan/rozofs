@@ -938,6 +938,7 @@ int rozofs_fuse_init(struct fuse_chan *ch,struct fuse_session *se,int rozofs_fus
     */
     return -1;
   }
+  memset(rozofs_fuse_ctx_p,0,sizeof (rozofs_fuse_ctx_t));
   /*
   ** clear read/write merge stats table
   */

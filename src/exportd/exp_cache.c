@@ -998,6 +998,8 @@ int exp_trash_entry_create(export_tracking_table_t *trk_tb_p,uint32_t slice,void
    exp_trck_top_header_t *p = NULL;
    rmfentry_disk_t *global_attr_p = (rmfentry_disk_t *)ptr;
    
+   fake_inode.fid[0] = 0;
+   fake_inode.fid[1] = 0;   
    fake_inode.s.key = ROZOFS_TRASH;
    fake_inode.s.usr_id = slice; 
    fake_inode.s.eid = trk_tb_p->eid;   

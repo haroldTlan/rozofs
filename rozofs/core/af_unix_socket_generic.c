@@ -796,7 +796,9 @@ int af_unix_socket_set_datagram_socket_len(int len) {
   char value[64];
   int fd;
   int ret = 0;
-  int old_value;
+  int old_value = 0;
+  
+  memset(value,0,64);
   
   if ((fd=open(QLEN_FILE, O_RDWR)) < 0) {
     severe("set_datagram_socket_len(%d) open(%s) %s", len, QLEN_FILE,strerror(errno));
@@ -806,7 +808,7 @@ int af_unix_socket_set_datagram_socket_len(int len) {
   /*
   ** Read old value
   */
-  if (read(fd, &value, 64) < 0) {
+  if (read(fd, value, 64) < 0) {
     severe("read(%s) %s",QLEN_FILE,strerror(errno));
     goto out;
   }

@@ -115,7 +115,7 @@ int exportclt_msite_initialize(exportclt_t * clt, const char *host, char *root,i
 	int xerrno = 0;	
     DEBUG_FUNCTION;
 
-
+    memset(&args,0,sizeof(epgw_mount_arg_t));
     /* Prepare mount request */
     strncpy(clt->host, host, ROZOFS_HOSTNAME_MAX);
     clt->root = strdup(root);

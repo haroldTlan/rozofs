@@ -1587,6 +1587,7 @@ error:
 void rozofs_ll_clear_client_file_lock(int eid, uint64_t client_hash) {
     epgw_lock_arg_t arg;
 
+    memset(&arg,0,sizeof(epgw_lock_arg_t));
     arg.arg_gw.eid             = exportclt.eid;
     arg.arg_gw.lock.client_ref = rozofs_client_hash; 
     strncpy(arg.arg_gw.client_info.vers,VERSION,ROZOFS_VERSION_STRING_LENGTH);    
