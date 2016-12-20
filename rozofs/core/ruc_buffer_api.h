@@ -214,6 +214,7 @@ static inline void * ruc_buf_poolCreate(uint32_t nbBuf,uint32_t bufsize)
         madvise(pusrData, alloc_size, MADV_HUGEPAGE);
 #endif
     }
+    memset(pusrData,0,alloc_size);
    /*
    ** store the pointer address on the head
    */
