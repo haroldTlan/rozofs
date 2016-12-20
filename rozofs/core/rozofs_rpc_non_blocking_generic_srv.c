@@ -493,7 +493,6 @@ int rozorpc_srv_getargs_with_position (void *recv_buf,xdrproc_t xdr_argument, vo
    return (int) ret;
 }
 
-
 /*
 **__________________________________________________________________________
 */
@@ -511,7 +510,7 @@ int rozorpc_srv_getargs_with_position (void *recv_buf,xdrproc_t xdr_argument, vo
   @retval none
 
 */
-void rozorpc_srv_forward_reply (rozorpc_srv_ctx_t *p,char * arg_ret)
+void rozorpc_srv_forward_reply_with_extra_len (rozorpc_srv_ctx_t *p,char * arg_ret,int extra_len)
 {
    int ret;
    uint8_t *pbuf;           /* pointer to the part that follows the header length */
@@ -550,10 +549,11 @@ void rozorpc_srv_forward_reply (rozorpc_srv_ctx_t *p,char * arg_ret)
     ** the ruc buffer to take care of the header length of the rpc message.
     */
     int total_len = xdr_getpos(&xdrs) ;
+    total_len +=extra_len;
     *header_len_p = htonl(0x80000000 | total_len);
     total_len +=sizeof(uint32_t);
     ruc_buf_setPayloadLen(p->xmitBuf,total_len);
-
+//    STOP_PROFILING(forward_reply);
 
     /*
     ** Get the callback for sending back the response:
@@ -577,6 +577,30 @@ error:
     STOP_PROFILING(forward_reply);
     return;
 }
+
+/*
+**__________________________________________________________________________
+*/
+/**
+* send a rpc reply: the encoding function MUST be found in xdr_result 
+ of the gateway context
+
+  It is assumed that the xmitBuf MUST be found in xmitBuf field
+  
+  In case of a success it is up to the called function to release the xmit buffer
+  
+  @param p : pointer to the root transaction context used for the read
+  @param arg_ret : returned argument to encode 
+  
+  @retval none
+
+*/
+void rozorpc_srv_forward_reply (rozorpc_srv_ctx_t *p,char * arg_ret)
+{
+   return rozorpc_srv_forward_reply_with_extra_len(p,arg_ret,0);
+}
+
+
 
 
 /*

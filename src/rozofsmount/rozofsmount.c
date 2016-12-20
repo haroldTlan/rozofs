@@ -1433,7 +1433,7 @@ void show_trc_fuse(char * argv[], uint32_t tcpRef, void *bufRef) {
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
  }
 
-static struct fuse_lowlevel_ops rozofs_ll_operations = {
+struct fuse_lowlevel_ops rozofs_ll_operations = {
     .init = rozofs_ll_init,
     //.destroy = rozofs_ll_destroy,
     .lookup = rozofs_ll_lookup_nb, /** non blocking */
@@ -1453,9 +1453,9 @@ static struct fuse_lowlevel_ops rozofs_ll_operations = {
     .write = rozofs_ll_write_nb, /**non blocking */
     .flush = rozofs_ll_flush_nb, /**non blocking */
     .release = rozofs_ll_release_nb, /**non blocking */
-    //.opendir = rozofs_ll_opendir, /** non blocking by construction */
+    .opendir = rozofs_ll_opendir_nb, /** non blocking by construction */
     .readdir = rozofs_ll_readdir_nb, /** non blocking */
-    //.releasedir = rozofs_ll_releasedir, /** non blocking by construction */
+    .releasedir = rozofs_ll_releasedir_nb, /** non blocking by construction */
     //.fsyncdir = rozofs_ll_fsyncdir, /** non blocking by construction */
     .statfs = rozofs_ll_statfs_nb, /** non blocking */
     .setxattr = rozofs_ll_setxattr_nb, /** non blocking */
@@ -2084,6 +2084,8 @@ int main(int argc, char *argv[]) {
     int fg = 0;
     int res;
     struct rlimit core_limit;
+    
+    memset(&exportclt,0,sizeof(exportclt_t ));
 
     ALLOC_PROFILING(mpp_profiler_t) ;
     /*
@@ -2473,7 +2475,6 @@ int main(int argc, char *argv[]) {
     rozofs_tmr_configure(TMR_FUSE_ENTRY_ARCH_CACHE,common_config.archive_file_dentry_timeout);          
 
     gprofiler->uptime = time(0);
-
     res = fuseloop(&args, fg);
 
     fuse_opt_free_args(&args);

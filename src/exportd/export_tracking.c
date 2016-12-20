@@ -5821,6 +5821,58 @@ out:
 
     return status;
 }
+
+/*
+**______________________________________________________________________________
+*/
+/** read a directory (version 2)
+ *
+ * @param e: the export managing the file
+ * @param fid: the id of the directory
+ * @param children: pointer to pointer where the first children we will stored
+ * @param cookie: index mdirentries where we must begin to list the mdirentries
+ * @param eof: pointer that indicates if we list all the entries or not
+ *
+ * @return: 0 on success -1 otherwise (errno is set)
+ */
+int export_readdir2(export_t * e, fid_t fid, uint64_t * cookie,
+        char *buf_readdir, uint8_t * eof) {
+    int status = -1;
+    lv2_entry_t *parent = NULL;
+    int fdp = -1;
+    
+        
+    START_PROFILING(export_readdir);
+
+    // Get the lv2 inode
+    if (!(parent = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid))) {
+        severe("export_readdir failed: %s", strerror(errno));
+        goto out;
+    }
+    /*
+    ** load the root_idx bitmap of the old parent
+    */
+    export_dir_load_root_idx_bitmap(e,fid,parent);
+    
+    // Verify that the target is a directory
+    if (!S_ISDIR(parent->attributes.s.attrs.mode)) {
+        severe("export_readdir failed: %s", strerror(errno));
+        errno = ENOTDIR;
+        goto out;
+    }
+
+    /*
+    ** set global variables associated with the export
+    */
+    fdp = export_open_parent_directory(e,fid);
+    status =list_mdirentries2(parent->dirent_root_idx_p,fdp, fid, buf_readdir, cookie, eof,&parent->attributes);
+out:
+    if (parent != NULL) export_dir_flush_root_idx_bitmap(e,fid,parent->dirent_root_idx_p);
+
+    if (fdp != -1) close(fdp);
+    STOP_PROFILING(export_readdir);
+    return status;
+}
 /*
 **______________________________________________________________________________
 */

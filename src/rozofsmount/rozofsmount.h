@@ -58,6 +58,7 @@ extern int rozofs_bugwatch;
 extern uint16_t rozofsmount_diag_port;
 extern int rozofs_max_storcli_tx ;  /**< depends on the number of storcli processes */
 
+extern struct fuse_lowlevel_ops rozofs_ll_operations;
 
 typedef struct rozofsmnt_conf {
     char *host;
@@ -114,12 +115,6 @@ typedef struct rozofsmnt_conf {
 } rozofsmnt_conf_t;
 rozofsmnt_conf_t conf;
 
-typedef struct dirbuf {
-    char *p;
-    size_t size;
-    uint8_t eof;
-    uint64_t cookie;
-} dirbuf_t;
 
 /** entry kept locally to map fuse_inode_t with rozofs fid_t */
 typedef struct ientry {
@@ -650,6 +645,10 @@ void rozofs_ll_flock_nb(fuse_req_t req, fuse_ino_t ino,
 		struct fuse_file_info *fi, int op);
 
 void init_write_flush_stat(int max_write_pending);
+
+void rozofs_ll_opendir_nb(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi);
+void rozofs_ll_releasedir_nb(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
+
 /*
 **__________________________________________________________________
 */

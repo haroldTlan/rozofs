@@ -54,8 +54,13 @@ DECLARE_PROFILING(epp_profiler_t);
     req_ctx_p->recv_buf = NULL; \
     rozorpc_srv_forward_reply(req_ctx_p,(char*)ret); \
     rozorpc_srv_release_context(req_ctx_p);
+ 
+#define  EXPORTS_SEND_REPLY_WITH_LEN(req_ctx_p,len) \
+    req_ctx_p->xmitBuf  = req_ctx_p->recv_buf; \
+    req_ctx_p->recv_buf = NULL; \
+    rozorpc_srv_forward_reply_with_extra_len(req_ctx_p,(char*)&ret,len); \
+    rozorpc_srv_release_context(req_ctx_p);
     
-
 ep_cnf_storage_node_t exportd_storage_host_table[STORAGE_NODES_MAX]; /**< configuration for each storage */
 epgw_conf_ret_t export_storage_conf; /**< preallocated area to build storage configuration message */
 
@@ -1546,6 +1551,69 @@ error:
     ret.status_gw.ep_readdir_ret_t_u.error = errno;
 out:
     EXPORTS_SEND_REPLY(req_ctx_p);
+    STOP_PROFILING(ep_readdir);
+    return ;
+}
+/*
+**______________________________________________________________________________
+*/
+/**
+*   exportd readdir: list the content of a directory
+
+    @param args : fid of the directory
+    
+    @retval: EP_SUCCESS :set of name and fid associated with the directory and cookie for next readdir
+    @retval: EP_FAILURE :error code associated with the operation (errno)
+*/
+void ep_readdir2_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    static epgw_readdir2_nodata_ret_t ret;
+    epgw_readdir_arg_t * arg = (epgw_readdir_arg_t*)pt;
+    export_t *exp;
+    int len= 0;
+    char *pbuf = NULL;
+    DEBUG_FUNCTION;
+
+    // Set profiler export index
+    export_profiler_eid = arg->arg_gw.eid;
+
+    START_PROFILING(ep_readdir);
+
+    ret.status_gw.ep_readdir2_nodata_ret_t_u.reply.len = 0;
+    ret.status_gw.ep_readdir2_nodata_ret_t_u.reply.eof = 0;
+
+    if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
+        goto error;
+
+   /*
+   ** generate a fake RPC reply
+   */
+   {
+      pbuf = ruc_buf_getPayload(req_ctx_p->recv_buf);
+      int position;
+      position =  sizeof(uint32_t); /* length header of the rpc message */
+      position += rozofs_rpc_get_min_rpc_reply_hdr_len();
+      position += (4*sizeof(uint32_t));   /* eid+nb_gateways+gateway_rank+hash_config field */
+      position += (4*sizeof(uint32_t));   /* eof + cookie */
+      position += sizeof(uint32_t);   /* length of the bins len field */
+      pbuf +=position;      
+   }
+    len =export_readdir2(exp, (unsigned char *) arg->arg_gw.fid, &arg->arg_gw.cookie,
+        	(char*) pbuf,
+        	(uint8_t *) & ret.status_gw.ep_readdir2_nodata_ret_t_u.reply.eof);
+    if (len < 0)
+        goto error;
+
+    ret.status_gw.ep_readdir2_nodata_ret_t_u.reply.cookie = arg->arg_gw.cookie;
+    ret.status_gw.ep_readdir2_nodata_ret_t_u.reply.len = len;
+
+    ret.status_gw.status = EP_SUCCESS;
+    goto out;
+error:
+    ret.status_gw.status = EP_FAILURE;
+    ret.status_gw.ep_readdir2_nodata_ret_t_u.error = errno;
+    len = 0;
+out:
+    EXPORTS_SEND_REPLY_WITH_LEN(req_ctx_p,len);
     STOP_PROFILING(ep_readdir);
     return ;
 }

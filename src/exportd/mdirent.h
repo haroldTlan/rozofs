@@ -29,7 +29,7 @@
 #include <rozofs/common/htable.h>
 #include <rozofs/core/rozofs_string.h>
 #include "mdir.h"
-
+#include <rozofs/common/mattr.h>
 #ifdef __i386__
 #define PTR2INT (uint32_t)
 #else
@@ -3573,6 +3573,7 @@ int del_mdirentry(void *root_idx_bitmap_p,int dirfd, fid_t fid_parent, char * na
 int list_mdirentries(void *root_idx_bitmap_p,int dir_fd, fid_t fid_parent, child_t ** children,
         uint64_t *cookie, uint8_t * eof);
 
+int list_mdirentries2(void *root_idx_bitmap_p,int dir_fd, fid_t fid_parent_in, char *buf_readdir_in, uint64_t *cookie, uint8_t * eof,ext_mattr_t *parent);
 /*
  *___________________________________________________________________
  DIRENT CACHE  API

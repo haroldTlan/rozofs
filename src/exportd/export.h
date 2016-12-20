@@ -524,6 +524,9 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
  */
 int export_readdir(export_t * e, fid_t fid, uint64_t * cookie, child_t **children, uint8_t *eof);
 
+int export_readdir2(export_t * e, fid_t fid, uint64_t * cookie,
+        char *buf_readdir, uint8_t * eof);
+	
 /** retrieve an extended attribute value.
  *
  * @param e: the export managing the file or directory.

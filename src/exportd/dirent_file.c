@@ -1928,6 +1928,52 @@ out:
 
 
 #if 1
+ 
+struct rozofs_fuse_dirent {
+	uint64_t	ino;
+	uint64_t	off;
+	uint32_t	namelen;
+	uint32_t	type;
+	char name[];
+};
+
+#define FUSE_NAME_OFFSET offsetof(struct rozofs_fuse_dirent, name)
+#define FUSE_DIRENT_ALIGN(x) (((x) + sizeof(uint64_t) - 1) & ~(sizeof(uint64_t) - 1))
+#define FUSE_DIRENT_SIZE(d) \
+	FUSE_DIRENT_ALIGN(FUSE_NAME_OFFSET + (d)->namelen)
+
+
+static inline size_t rozofs_fuse_dirent_size(size_t namelen)
+{
+	return FUSE_DIRENT_ALIGN(FUSE_NAME_OFFSET + namelen);
+}
+/**
+  add an entry in the readdir buffer
+  
+  @param buf: pointer to the readdir buffer
+  @param ino: inode value
+  @param name: pointer to the name to insert
+  @param off: cookie associated to the entry
+  
+  @reval: pointer to the next free entry
+*/
+char *rozofs_fuse_add_dirent(char *buf, uint64_t ino,const char *name,uint32_t namelen,off_t off)
+{
+	unsigned entlen = FUSE_NAME_OFFSET + namelen;
+	unsigned entsize = rozofs_fuse_dirent_size(namelen);
+	unsigned padlen = entsize - entlen;
+	struct rozofs_fuse_dirent *dirent = (struct rozofs_fuse_dirent *) buf;
+
+	dirent->ino = ino;
+	dirent->off = off;
+	dirent->namelen = namelen;
+	dirent->type = 0;
+	strncpy(dirent->name, name, namelen);
+	if (padlen)
+		memset(buf + entlen, 0, padlen);
+
+	return buf + entsize;
+}
 /*
  **______________________________________________________________________________
  */
@@ -1951,7 +1997,8 @@ typedef union _dirent_list_cookie_t {
         uint64_t root_idx : 12; /**< currenr root file index                   */
         uint64_t coll_idx : 11; /**< index of the next collision file to test  */
         uint64_t hash_entry_idx : 10; /**< index of the next bitmap entry to test    */
-        uint64_t filler : 30; /**< for future usage                         */
+        uint64_t valid_entry : 1; /**< always 1                         */
+        uint64_t filler : 29; /**< for future usage                         */
 
     } s;
 } dirent_list_cookie_t;
@@ -1998,6 +2045,7 @@ int list_mdirentries(void *root_idx_bitmap_p,int dir_fd, fid_t fid_parent_in, ch
      ** load up the cookie to figure out where to start the read
      */
     dirent_cookie.val64 = *cookie;
+    dirent_cookie.s.filler = 0;
     iterator = children;
 
     /*
@@ -2331,8 +2379,6 @@ get_next_collidx:
             memset(*iterator, 0, sizeof (child_t));
             memcpy((*iterator)->fid, name_entry_p->fid, sizeof (fid_t));
             (*iterator)->name = strndup(name_entry_p->name, name_entry_p->len);
-
-
             // Go to next entry
             iterator = &(*iterator)->next;
             /*
@@ -2410,3 +2456,518 @@ get_next_collidx:
 }
 
 #endif
+
+/*
+ **______________________________________________________________________________
+ */
+
+/**
+ * API for get a mdirentry in one parent directory (version2)
+ *
+ * @param mdir: pointer to the mdirent structure for directory specific attributes
+ * @param name: (key) pointer to the name to search
+ * @param *fid: pointer to the unique identifier for this mdirentry
+ * @param *type: pointer to the type for this mdirentry
+ *
+ * @retval  0 on success
+ * @retval -1 on failure
+ */
+
+#define ROZOFS_READDIR_MAX_BYTES (64*1024-4096)
+#define MAX_DIR_ENTRIES_VERS2 (128+64)
+
+int list_mdirentries2(void *root_idx_bitmap_p,int dir_fd, fid_t fid_parent_in, char *buf_readdir_in, uint64_t *cookie, uint8_t * eof,ext_mattr_t *parent) {
+    int root_idx = 0;
+    int cached = 0;
+    dirent_list_cookie_t dirent_cookie;
+    mdirents_header_new_t dirent_hdr;
+    mdirents_cache_entry_t *root_entry_p = NULL;
+    mdirents_cache_entry_t *cache_entry_p;
+    mdirents_hash_entry_t *hash_entry_p = NULL;
+    mdirent_sector0_not_aligned_t *sect0_p;
+    int hash_entry_idx = 0;
+    int index_level = 0;
+    int read_file = 0;
+    int coll_idx;
+    int loop_cnt = 0;
+    int next_coll_idx = 0;
+    int bit_idx;
+    int chunk_u8_idx;
+    char *buf_readdir_p = buf_readdir_in;
+    uint8_t *coll_bitmap_p;
+    int next_hash_entry_idx;
+    int root_idx_bit;
+    int deleted_dir;
+    int deleted_obj;
+    fid_t fid_parent;
+    rozofs_inode_t *inode_p ;
+    fid_t      null_fid = {0};
+        
+    START_PROFILING(list_mdirentries);
+    /*
+    ** check if the delete pending flag is asserted on the parent directory
+    */
+    memcpy(fid_parent,fid_parent_in,sizeof(fid_t));
+    deleted_dir = exp_metadata_inode_is_del_pending(fid_parent);
+    exp_metadata_inode_del_deassert(fid_parent);
+   /*
+   ** set the pointer to the root idx bitmap
+   */
+   dirent_set_root_idx_bitmap_ptr(root_idx_bitmap_p);
+
+    dirent_readdir_stats_call_count++;
+    /*
+     ** load up the cookie to figure out where to start the read
+     */
+    dirent_cookie.val64 = *cookie;
+    /*
+    ** check if we start from the beginning because in that case we must provide
+    ** the fid for "." and ".."
+    */
+    if ((dirent_cookie.s.index_level == 0) && 
+        (dirent_cookie.s.root_idx == 0) &&
+        (dirent_cookie.s.coll_idx == 0) &&
+        (dirent_cookie.s.hash_entry_idx == 0))
+    {
+      if (dirent_cookie.s.filler == 0) 
+      {
+	      inode_p = (rozofs_inode_t*) parent->s.attrs.fid;
+	      dirent_cookie.s.filler = 1;
+	      buf_readdir_p = rozofs_fuse_add_dirent(buf_readdir_p,inode_p->fid[1],".",1,dirent_cookie.val64);	    
+      }
+      if (dirent_cookie.s.filler == 1) 
+      {    
+
+	 if (memcmp(parent->s.pfid,null_fid,sizeof(fid_t))==0) {
+           inode_p = (rozofs_inode_t*)parent->s.attrs.fid;	      
+	 }
+	 else {
+	  inode_p = (rozofs_inode_t*)parent->s.pfid;
+	 }
+	 dirent_cookie.s.filler = 2;
+	 buf_readdir_p = rozofs_fuse_add_dirent(buf_readdir_p,inode_p->fid[1],"..",2,dirent_cookie.val64);	    
+      }
+    }
+    dirent_cookie.s.filler = 0;
+    /*
+     ** set the different parameter
+     */
+    root_idx = dirent_cookie.s.root_idx;
+    hash_entry_idx = dirent_cookie.s.hash_entry_idx;
+    index_level = dirent_cookie.s.index_level;
+    coll_idx = dirent_cookie.s.coll_idx;
+    *eof = 0;
+    /*
+     **___________________________________________________________
+     **  loop through the potential root file index
+     **  We exit fro the while loop once one has been found or if
+     **  the last dirent root file index has been reached
+     **___________________________________________________________
+     */
+    while ((read_file < MAX_DIR_ENTRIES_VERS2) && ((int)(buf_readdir_p -buf_readdir_in) < ROZOFS_READDIR_MAX_BYTES)) {
+        while (root_idx < DIRENT_ROOT_FILE_IDX_MAX) {
+
+	   /*
+	   ** Allow a priori to read and write on the root cache entry
+	   ** In case of some error while reading the dirent files from 
+	   ** disk, the rigths may be downgraded to read only.
+	   */
+	   DIRENT_ROOT_SET_READ_WRITE();
+	   
+	   /*
+	   ** check if the bit is asserted for the root_idx
+	   */
+	   root_idx_bit = dirent_check_root_idx_bit(root_idx);
+	   if (root_idx_bit == 1)
+	   {
+              /*
+               ** attempt to get the dirent root file from the cache
+               */
+              root_entry_p = dirent_get_root_entry_from_cache(fid_parent, root_idx);
+              if (root_entry_p == NULL) {
+                  /*
+                   ** dirent file is not in the cache need to read it from disk
+                   */
+                  dirent_hdr.type = MDIRENT_CACHE_FILE_TYPE;
+                  dirent_hdr.level_index = 0;
+                  dirent_hdr.dirent_idx[0] = root_idx;
+                  dirent_hdr.dirent_idx[1] = 0;
+                  root_entry_p = read_mdirents_file(dir_fd, &dirent_hdr,fid_parent);
+              } else {
+                  /*
+                   ** found one, so process its content
+                   */
+                  cached = 1;
+                  break;
+              }
+              /*
+               ** ok now it depends if the entry exist on not
+               */
+              if (root_entry_p != NULL) {
+                  break;
+              }
+	    }
+            /*
+             ** That root file does not exist-> need to check the next root_idx
+             */
+            root_idx++;
+        }
+        /*
+         **_____________________________________________
+         ** Either there is an entry or there is nothing
+         **_____________________________________________
+         */
+        if (root_entry_p == NULL) {
+            /*
+             ** we are done
+             */
+            *eof = 1;
+            break;
+        }
+        /*
+         ** There is a valid entry, but before doing the job, check if the entry has
+         **  been extract from the cache or read from disk. If entry has been read
+         ** from disk, we attempt to insert it in the cache.
+         */
+        if (cached == 0) {
+            /**
+             * fill up the key associated with the file
+             */
+            memcpy(root_entry_p->key.dir_fid, fid_parent, sizeof (fid_t));
+            root_entry_p->key.dirent_root_idx = root_idx;
+            /*
+             ** attempt to insert it in the cache if not in cache
+             */
+            if (dirent_put_root_entry_to_cache(fid_parent, root_idx, root_entry_p) == 0) {
+                /*
+                 ** indicates that entry is present in the cache
+                 */
+                cached = 1;
+            }
+        }
+        /*
+         **___________________________________________________________________________
+         ** OK, now start the real job where we start scanning the collision file and
+         ** the allocated hash entries. Here there is no readon to follow the link list
+         ** of the bucket, checking the bitmap of the hash entries is enough.
+         ** There is the same approach for the case of the collision file
+         **___________________________________________________________________________
+         */
+        /*
+         ** Need to get the pointer to the hash entry bitmap to figure out which
+         ** entries are allocated
+         */
+        sect0_p = DIRENT_VIRT_TO_PHY_OFF(root_entry_p, sect0_p);
+        if (sect0_p == (mdirent_sector0_not_aligned_t*) NULL) {
+            DIRENT_SEVERE("list_mdirentries sector 0 ptr does not exist( line %d\n)", __LINE__);
+	    if (cached == 1) 
+	    {
+	      /*
+	      ** the content of the dirent file (root+ collision) is in the cache
+	      ** need to remove from cache if read only is asserted
+	      */
+	      if (DIRENT_ROOT_IS_READ_ONLY())
+	      {
+        	dirent_remove_root_entry_from_cache(fid_parent, root_idx);
+		dirent_cache_release_entry(root_entry_p);
+	      }
+	      cached = 0;
+	    }
+            root_idx++;
+            root_entry_p = NULL;
+            continue;
+        }
+        coll_bitmap_p = (uint8_t*) & sect0_p->coll_bitmap;
+        cache_entry_p = root_entry_p;
+
+get_next_collidx:
+        if (index_level != 0) {
+            /*
+             ** case of the collision file, so need to go through the bitmap of the
+             ** dirent root file
+             */
+            cache_entry_p = NULL;
+            while (coll_idx < MDIRENTS_MAX_COLLS_IDX) {
+                chunk_u8_idx = coll_idx / 8;
+                bit_idx = coll_idx % 8;
+                /*
+                 ** there is no collision dirent entry or the collision dirent entry exist and is not full
+                 */
+                if ((coll_bitmap_p[chunk_u8_idx] & (1 << bit_idx)) != 0) {
+                    /*
+                     ** That entry is free, need to find out the next entry that is busy (0: busy, 1:free)
+                     */
+                    if (coll_idx % 8 == 0) {
+                        next_coll_idx = check_bytes_val(coll_bitmap_p, coll_idx, MDIRENTS_MAX_COLLS_IDX, &loop_cnt, 1);
+                        if (next_coll_idx < 0) break;
+                        /*
+                         ** next  chunk
+                         */
+                        if (next_coll_idx == coll_idx) coll_idx++;
+                        else coll_idx = next_coll_idx;
+                        continue;
+                    }
+                    /*
+                     ** next chunk
+                     */
+                    hash_entry_idx = 0;
+                    coll_idx++;
+                    continue;
+                }
+                /*
+                 ** one collision idx has been found
+                 ** need to get the entry associated with the collision index
+                 */
+                cache_entry_p = dirent_cache_get_collision_ptr(root_entry_p, coll_idx);
+                if (cache_entry_p == NULL) {
+                    /*
+                     ** something is rotten in the cache since the pointer to the collision dirent cache
+                     ** does not exist
+                     */
+                    DIRENT_SEVERE("list_mdirentries not collisiob file %d\n", coll_idx);
+                    /*
+                     ** OK, do not break the analysis, skip that collision entry and try the next if any
+                     */
+                    hash_entry_idx = 0;
+                    coll_idx++;
+                    continue;
+                }
+                break;
+            }
+        }
+        /*
+         ** OK either we have one dirent entry or nothing: for the nothing case we go to
+         ** the next root_idx
+         */
+        if (cache_entry_p == NULL) {
+            /*
+             ** check the next root index
+             */
+            coll_idx = 0;
+            hash_entry_idx = 0;
+            index_level = 0;
+	    if (cached == 1) 
+	    {
+	      /*
+	      ** the content of the dirent file (root+ collision) is in the cache
+	      ** need to remove from cache if read only is asserted
+	      */
+	      if (DIRENT_ROOT_IS_READ_ONLY())
+	      {
+        	dirent_remove_root_entry_from_cache(fid_parent, root_idx);
+		dirent_cache_release_entry(root_entry_p);
+	      }
+	      cached = 0;
+	    }
+            root_entry_p = NULL;
+            root_idx++;
+            continue;
+        }
+        sect0_p = DIRENT_VIRT_TO_PHY_OFF(cache_entry_p, sect0_p);
+        if (sect0_p == (mdirent_sector0_not_aligned_t*) NULL) {
+            DIRENT_SEVERE("list_mdirentries sector 0 ptr does not exist( line %d\n)", __LINE__);
+            /*
+             ** do break the walktrhough, try either the next root entry and collision entry
+             */
+            cache_entry_p = NULL;
+            hash_entry_idx = 0;
+            if (index_level == 0) {
+                coll_idx = 0;
+                index_level = 1;
+                goto get_next_collidx;
+            }
+            coll_idx++;
+            goto get_next_collidx;
+        }
+        /*
+         ** Get the pointer to the hash entry bitmap
+         */
+        while (
+	       (hash_entry_idx < MDIRENTS_ENTRIES_COUNT) 
+	       && 
+	       ((read_file < MAX_DIR_ENTRIES_VERS2) &&((int)(buf_readdir_p -buf_readdir_in) < ROZOFS_READDIR_MAX_BYTES))
+	       ) {
+            next_hash_entry_idx = DIRENT_CACHE_GETNEXT_ALLOCATED_HASH_ENTRY_IDX(&sect0_p->hash_bitmap, hash_entry_idx);
+            if (next_hash_entry_idx < 0) {
+                /*
+                 ** all the entry of that dirent cache entry have been scanned, need to check the next collision file if
+                 ** any
+                 */
+                cache_entry_p = NULL;
+                hash_entry_idx = 0;
+                /*
+                 ** check the next
+                 */
+                if (index_level == 0) {
+                    coll_idx = 0;
+                    index_level = 1;
+                    goto get_next_collidx;
+                }
+                coll_idx++;
+                goto get_next_collidx;
+            }
+            hash_entry_idx = next_hash_entry_idx;
+            /*
+             ** need to get the hash entry context and then the pointer to the name entry. The hash entry context is
+             ** needed since it contains the reference of the starting chunk of the name entry
+             */
+            hash_entry_p = (mdirents_hash_entry_t*) DIRENT_CACHE_GET_HASH_ENTRY_PTR(cache_entry_p, hash_entry_idx);
+            if (hash_entry_p == NULL) {
+                /*
+                 ** something wrong!! (either the index is out of range and the memory array has been released
+                 */
+                DIRENT_SEVERE("list_mdirentries pointer does not exist at %d\n", __LINE__);
+                /*
+                 ** ok, let check the next hash_entry
+                 */
+                hash_entry_idx++;
+                continue;
+            }
+
+            /*
+            ** something wrong that must not occur !!!
+            ** A dentry is allocated but no chunk has been allocated
+            */
+ 	        if (hash_entry_p->nb_chunk==0) {
+                hash_entry_idx++;
+                continue;
+	        }
+		     
+            /*
+             ** OK, now, get the pointer to the name array
+             */
+            mdirents_name_entry_t *name_entry_p;
+            name_entry_p = (mdirents_name_entry_t*) dirent_get_entry_name_ptr(dir_fd, cache_entry_p, hash_entry_p->chunk_idx, DIRENT_CHUNK_NO_ALLOC);
+            if (name_entry_p == (mdirents_name_entry_t*) NULL) {
+                /*
+                 ** something wrong that must not occur
+                 */
+                severe("list_mdirentries: pointer does not exist");
+                /*
+                 ** ok, let check the next hash_entry
+                 */
+                hash_entry_idx++;
+                continue;
+            }
+
+            /**
+             *  that's songs good, copy the content of the name in the result buffer
+             */
+            /*
+	    ** check the length of the filename, if the length is 0, it indicates that we read a truncate dirent file
+	    ** so we skip that entry and goes to the next one
+	    */
+	    if (name_entry_p->len == 0)
+	    {
+	       char fidstr[37];
+	       rozofs_uuid_unparse(fid_parent, fidstr);
+
+                severe("empty name entry in directory %s at hash_idx %d in file d_%d collision idx %d chunk_idx %d",
+		        fidstr,hash_entry_idx,root_idx,coll_idx,hash_entry_p->chunk_idx);
+                hash_entry_idx++;
+                continue;	    
+	    
+	    }
+	    /*
+	    ** check if the entry has to be reported to the caller according the state of the delete pending
+	    ** flag of the object and of the parent
+	    */
+	    deleted_obj = exp_metadata_inode_is_del_pending(name_entry_p->fid);
+#if 1
+	    if (deleted_dir != deleted_obj) 
+	    {
+                hash_entry_idx++;
+                continue;	    
+	    }
+#endif
+	    {
+		/*
+		** fill up the reference of the entry within the dirent file
+		*/
+		dirent_cookie.s.root_idx = root_idx;
+		/*
+		** to set the pointer to the next entry
+		*/
+		dirent_cookie.s.hash_entry_idx = hash_entry_idx+1;
+		dirent_cookie.s.index_level = index_level;
+		dirent_cookie.s.coll_idx = coll_idx;
+		dirent_cookie.s.valid_entry = 1;
+		/*
+		** get the inode value for that entry
+		*/
+		inode_p = (rozofs_inode_t*) name_entry_p->fid;
+		buf_readdir_p = rozofs_fuse_add_dirent(buf_readdir_p,inode_p->fid[1],name_entry_p->name,name_entry_p->len,dirent_cookie.val64);
+	    }
+            /*
+             ** increment the number of file and try to get the next one
+             */
+            hash_entry_idx++;
+            read_file++;
+            dirent_readdir_stats_file_count++;
+
+        }
+        /*
+         ** Check if the amount of file has been read
+         */
+        if ((read_file >= MAX_DIR_ENTRIES_VERS2) || ((int)(buf_readdir_p -buf_readdir_in) >= ROZOFS_READDIR_MAX_BYTES)) {
+            /*
+             ** We are done
+             */
+            break;
+        }
+        /*
+         ** No the end and there still some room in the output buffer
+         ** Here we need to check the next collision entry if any
+         */
+        cache_entry_p = NULL;
+        hash_entry_idx = 0;
+        /*
+         ** check the next
+         */
+        if (index_level == 0) {
+            coll_idx = 0;
+            index_level = 1;
+            goto get_next_collidx;
+        }
+        coll_idx++;
+        goto get_next_collidx;
+    }
+    /*
+     ** done
+     */
+    /*
+     ** set the different parameter
+     */
+    dirent_cookie.s.root_idx = root_idx;
+    dirent_cookie.s.hash_entry_idx = hash_entry_idx;
+    dirent_cookie.s.index_level = index_level;
+    dirent_cookie.s.coll_idx = coll_idx;
+    *cookie = dirent_cookie.val64;
+
+    /*
+     ** check the cache status to figure out if root entry need to be released
+     */
+    if (cached == 1) 
+    {
+      /*
+      ** the content of the dirent file (root+ collision) is in the cache
+      ** need to remove from cache if read only is asserted
+      */
+      if (DIRENT_ROOT_IS_READ_ONLY())
+      {
+        dirent_remove_root_entry_from_cache(fid_parent, root_idx);
+	dirent_cache_release_entry(root_entry_p);
+      }
+      STOP_PROFILING(list_mdirentries);
+      return (int)(buf_readdir_p -buf_readdir_in);
+    }
+    if (root_entry_p != NULL) {
+        int ret = 0;
+        ret = dirent_cache_release_entry(root_entry_p);
+        if (ret < 0) {
+            DIRENT_SEVERE(" get_mdirentry failed to release cache entry\n");
+        }
+    }
+    STOP_PROFILING(list_mdirentries);
+    return  (int)(buf_readdir_p -buf_readdir_in);;
+}
