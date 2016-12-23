@@ -1836,8 +1836,6 @@ void ep_getxattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     ret.status_gw.status = EP_SUCCESS;
     goto out;
 error:
-    if (ret.status_gw.ep_getxattr_ret_t_u.value.value_val != NULL)
-        free(ret.status_gw.ep_getxattr_ret_t_u.value.value_val);
     ret.status_gw.status = EP_FAILURE;
     ret.status_gw.ep_getxattr_ret_t_u.error = errno;
 out:
