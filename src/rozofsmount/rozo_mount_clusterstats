@@ -9,28 +9,37 @@
 #  WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 #  General Public License for more details.
+
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see
 #  <http://www.gnu.org/licenses/>.
 
-mountpoint=$1
-instance=$2
+#
+# setup.sh will generates a full working rozofs locally
+# it's a useful tool for testing and debugging purposes. 
+#
+where=`pwd`
+res=`attr -qg rozofs.export .`
+ip=`echo $res | awk '{print $1}'`
+case "$ip" in
+  "") echo "$where is not a rozofs mount point !"; exit;;
+esac
+eid=`echo $res | awk '{print $2}'`
 
 
+path=`echo $res | awk '{print $3}'`
+echo "export identifier $eid (path $path)"
+echo
 
-reload_everybody ()
-{
-  count=0
-  for pid in `ps -ef | grep "exportd -i $instance" | grep " $mountpoint" | grep -v "exports_starter.sh" | awk '{print $2}'`
-  do
-    kill -1 $pid
-    count=$((count+1))
-  done
-  
-  case $count in
-    "0") exit;;
-  esac
-}
-
-
-reload_everybody 
+addrs=$(echo $ip | tr "/" " ")
+for addr in $addrs
+do
+  res=`rozodiag -i $addr -T export:0 -c who`
+  case "$res" in
+    *exportd-M*){
+       rozodiag -i $addr -T export:0 -c system "rozo_clusterstats -p $path " | grep -v "\[exportd-M\]"
+       exit 0
+    };;
+  esac  
+done
+exit 1

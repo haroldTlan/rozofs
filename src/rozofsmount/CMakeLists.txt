@@ -95,7 +95,7 @@ install(TARGETS rozofsmount
 # Create symbolic link /sbin/mount.rozofs -> /sbin/mount.fuse (mount.rozofs command)
 install(CODE "MESSAGE(\"Create symbolic link /sbin/mount.rozofs -> /sbin/mount.fuse\")")
 install(CODE "EXECUTE_PROCESS (COMMAND ln -sf /sbin/mount.fuse /sbin/mount.rozofs)" COMPONENT client)
-install(PROGRAMS rozo_clusterstats.sh DESTINATION bin)
+install(PROGRAMS rozo_mount_clusterstats DESTINATION bin)
 install(PROGRAMS rozo_repquota.sh DESTINATION bin)
 install(PROGRAMS rozo_distribution_check DESTINATION bin)
 install(PROGRAMS rozo_mount_cleanup DESTINATION bin)
