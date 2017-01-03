@@ -1573,7 +1573,7 @@ int rbs_storio_reinit(cid_t cid, sid_t sid, uint8_t dev, uint8_t reinit) {
 /** 
 ** Build storage list from export
 **
-** python script rozo_make_rebuild_lists.py will request export to build the
+** python script rozo_make_rebuild_lists will request export to build the
 ** list of FID supported by a list of ci:sid
 ** At the end of the script directory /tmp/rbs.<rebuildRef> should contain
 ** the job lists.
@@ -1633,7 +1633,7 @@ int rbs_build_job_list_from_export() {
     rbs_write_storage_config_file(parameter.rebuildRef, &storage_config);
 	
     if (first) {	
-      pChar += sprintf(pChar,"rozo_make_rebuild_lists.py -d -e %s -p %d -r %d -E %s -S %s -u %s ",
+      pChar += sprintf(pChar,"rozo_make_rebuild_lists -d -e %s -p %d -r %d -E %s -S %s -u %s ",
                        pExport_host, 
 		       (int) parameter.parallel, 
 		       (int) parameter.rebuildRef,
