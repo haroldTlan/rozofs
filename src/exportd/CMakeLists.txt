@@ -367,4 +367,4 @@ install(TARGETS rozo_rebalance
 )
 install(FILES export.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(FILES export.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
-install(PROGRAMS rozo_geoReplicationReinitialize.sh DESTINATION bin)
+install(PROGRAMS rozo_geoReplicationReinitialize DESTINATION bin)
