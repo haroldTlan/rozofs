@@ -159,7 +159,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_quotaon
 %{_bindir}/rozo_warnquota
 %{_bindir}/rozo_setquota
-%{_bindir}/rozo_repquota
+%{_bindir}/rozo_mount_repquota
 %{_bindir}/rozo_fid2pathname
 %{_bindir}/rozo_clusterstats
 %{_bindir}/rozo_rebalance
@@ -181,7 +181,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_mandir}/man8/rozo_quotaon.8.gz
 %{_mandir}/man8/rozo_warnquota.8.gz
 %{_mandir}/man8/rozo_setquota.8.gz
-%{_mandir}/man8/rozo_repquota.8.gz
+%{_mandir}/man8/rozo_mount_repquota.8.gz
 %{_mandir}/man8/rozo_rebalance.8.gz
 
 %files storaged
@@ -210,7 +210,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozofsmount
 %{_bindir}/storcli
 %{_bindir}/rozo_mount_clusterstats
-%{_bindir}/rozo_repquota.sh
+%{_bindir}/rozo_mount_repquota
 %{_bindir}/rozo_mount_cleanup
 %{_bindir}/rozo_distribution_check
 %{_bindir}/rozofsmount_wrapper
