@@ -106,12 +106,12 @@ Use
 .I <//>
 processes in parallel for rebuilding. The greater is 
 .I <//>
-the faster is the rebuild, but the more CPU and network/disk bandwith consuming it is. Use --help option to get the default as well as the maximum value.
+the faster is the rebuild, but the more CPU and network/disk bandwidth consuming it is. Use --help option to get the default as well as the maximum value.
 .RE
 .IP "-t, --throughput <MB/s>"
 .RE
 .RS
-Limit the network bandwith used for reading data from the logical storages for each of the processes run in parallel. The value is in MB/s units. When 4 processes are used with a throughput limitation of 10, no more than 40MB/s of network bandwith will be consummed for reading during this rebuild. Default is not to have any bandwith limitation.
+Limit the network bandwidth used for reading data from the logical storages for each of the processes run in parallel. The value is in MB/s units. When 4 processes are used with a throughput limitation of 10, no more than 40MB/s of network bandwidth will be consummed for reading during this rebuild. Default is not to have any bandwidth limitation.
 .RE
 .IP "-l, --loop <loop>"
 .RE
@@ -151,12 +151,12 @@ To re-initialize the satus of a device that has been set out of service after an
 .IP "-q, --quiet"
 .RE
 .RS
-This optionnal parameter enables to avoid any display on the terminal except immediate errors.
+This optional parameter enables to avoid any display on the terminal except immediate errors.
 .RE
 .IP "-fg"
 .RE
 .RS
-This optionnal parameter enables to run the rebuild in foreground while the default is to run it in background mode.
+This optional parameter enables to run the rebuild in foreground while the default is to run it in background mode.
 .RE
 .IP "-bg"
 .RE
@@ -167,7 +167,7 @@ This parameter enables to run a resume in background mode when the target rebuil
 .RS
 Use 
 .I <cfg>
-as storage node configuration file. This is optionnal parameter should not to be used in production.
+as storage node configuration file. This is optional parameter should not to be used in production.
 .RE
 .IP "-h, --help"
 .RS
