@@ -159,7 +159,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %{_bindir}/rozo_quotaon
 %{_bindir}/rozo_warnquota
 %{_bindir}/rozo_setquota
-%{_bindir}/rozo_mount_repquota
+%{_bindir}/rozo_repquota
 %{_bindir}/rozo_fid2pathname
 %{_bindir}/rozo_clusterstats
 %{_bindir}/rozo_rebalance
