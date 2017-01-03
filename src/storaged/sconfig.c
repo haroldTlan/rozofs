@@ -293,7 +293,7 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
 	  ** Create directory if it does not yet exist
 	  */
 	  if (access(root, F_OK) != 0) {	  
-	    mkpath ((char*)root,S_IRUSR | S_IWUSR | S_IXUSR);
+	    rozofs_mkpath ((char*)root,S_IRUSR | S_IWUSR | S_IXUSR);
 	  }  
 
 	  /*

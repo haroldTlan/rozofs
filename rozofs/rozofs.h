@@ -34,6 +34,12 @@
 #include <rozofs/common/common_config.h>
 #include <rozofs/core/rozofs_string.h>
 
+#define ROZOFS_RUNDIR                "/var/run/rozofs/"
+#define ROZOFS_RUNDIR_RBS            ROZOFS_RUNDIR"rbs/"
+#define ROZOFS_RUNDIR_RBS_SPARE      ROZOFS_RUNDIR_RBS"spare/"
+#define ROZOFS_RUNDIR_RBS_REBUILD    ROZOFS_RUNDIR_RBS"rebuild/"
+
+
 #define ROZOFS_KPI_ROOT_PATH "/var/run/rozofs_kpi"
 //#include <rozofs/common/log.h>
 /*
@@ -621,8 +627,8 @@ static inline char * fid2string(fid_t fid , char * string) {
   
   char * p = string;
   
-  rozofs_uuid_unparse(fid,p);
-  p += 36;
+  p += rozofs_fid_append(p,fid);
+
   *p++ = ' ';
   
   rozofs_inode_t * fake_inode_p =  (rozofs_inode_t *) fid;
@@ -759,7 +765,7 @@ typedef struct _rozofs_rebuild_entry_file_t {
 ** Some declaration for file rebuild
 */
 typedef enum _rbs_file_type_e {
-  rbs_file_type_nominal,
+  rbs_file_type_nominal=0,
   rbs_file_type_spare,
   rbs_file_type_all  
 } rbs_file_type_e;
@@ -869,6 +875,55 @@ static inline void *rozofs_kpi_map(char *path,char *name,int size,void *init_buf
  }
  return p;
 }
-
+/*
+*______________________________________________________________________
+* Create a directory, recursively creating all the directories on the path 
+* when they do not exist
+*
+* @param path2create      The directory path to create
+* @param mode             The rights
+*
+* retval 0 on success -1 else
+*/
+static inline int rozofs_mkpath(char * path2create, mode_t mode) {
+  char* p;
+  int  isZero=1;
+  int  status = -1;
+  char  directory_path[ROZOFS_PATH_MAX+1];
+  
+  strcpy(directory_path,path2create);
+    
+  p = directory_path;
+  p++; 
+  while (*p!=0) {
+  
+    while((*p!='/')&&(*p!=0)) p++;
+    
+    if (*p==0) {
+      isZero = 1;
+    }  
+    else {
+      isZero = 0;      
+      *p = 0;
+    }
+    
+    if (access(directory_path, F_OK) != 0) {
+      if (mkdir(directory_path, mode) != 0) {
+	severe("mkdir(%s) %s", directory_path, strerror(errno));
+        goto out;
+      }      
+    }
+    
+    if (isZero==0) {
+      *p ='/';
+      p++;
+    }       
+  }
+  status = 0;
+  
+out:
+  if (isZero==0) *p ='/';
+  return status;
+}
 
 #endif

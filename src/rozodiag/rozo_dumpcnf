@@ -178,6 +178,9 @@ do_dump() {
   # Add core files to the result tar file
   add_tarlist "/var/run/rozofs_core"
 
+  # Add rozofs run files
+  add_tarlist "/var/run/rozofs"
+
   # tar the working directory
   tar cfz ${RESULT}.tgz ${TARLIST} > /dev/null 2>&1
 

@@ -3370,8 +3370,8 @@ int storage_enumerate_devices(char * workDir, int unmount) {
   ** Create the working directory to mount the devices on
   */
   if (access(workDir,F_OK)!=0) {
-    if (mkpath(workDir,S_IRUSR | S_IWUSR | S_IXUSR)!=0) {
-      severe("mkpath(%s) %s", workDir, strerror(errno));
+    if (rozofs_mkpath(workDir,S_IRUSR | S_IWUSR | S_IXUSR)!=0) {
+      severe("rozofs_mkpath(%s) %s", workDir, strerror(errno));
       return storage_enumerated_device_nb;
     }
   }      

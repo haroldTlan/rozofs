@@ -1761,7 +1761,7 @@ TST_RW=['read_parallel','write_parallel','rw2','wr_rd_total','wr_rd_partial','wr
 TST_BASIC=['readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','compil']
 TST_BASIC_NFS=['readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','compil']
 # Rebuild test list
-TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','gruyere_reread','gruyere','rebuild_1node_parts','gruyere_reread']
+TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','gruyere_reread']
 # File locking
 TST_FLOCK=['lock_posix_passing','lock_posix_blocking','lock_bsd_passing','lock_bsd_blocking','lock_race']
 
