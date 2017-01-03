@@ -1275,53 +1275,7 @@ int storage_list_bins_files_to_rebuild(storage_t * st, sid_t sid,  uint8_t * dev
         bins_file_rebuild_t ** children, uint8_t * eof);
 
 
-/*
-*______________________________________________________________________
-* Create a directory, recursively creating all the directories on the path 
-* when they do not exist
-*
-* @param directory_path   The directory path
-* @param mode             The rights
-*
-* retval 0 on success -1 else
-*/
-static inline int mkpath(char * directory_path, mode_t mode) {
-  char* p;
-  int  isZero=1;
-  int  status = -1;
-    
-  p = directory_path;
-  p++; 
-  while (*p!=0) {
-  
-    while((*p!='/')&&(*p!=0)) p++;
-    
-    if (*p==0) {
-      isZero = 1;
-    }  
-    else {
-      isZero = 0;      
-      *p = 0;
-    }
-    
-    if (access(directory_path, F_OK) != 0) {
-      if (mkdir(directory_path, mode) != 0) {
-	severe("mkdir(%s) %s", directory_path, strerror(errno));
-        goto out;
-      }      
-    }
-    
-    if (isZero==0) {
-      *p ='/';
-      p++;
-    }       
-  }
-  status = 0;
-  
-out:
-  if (isZero==0) *p ='/';
-  return status;
-}
+
 /*
  ** Create a directory if it does not yet exist
   @param path : path toward the directory

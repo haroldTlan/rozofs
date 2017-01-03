@@ -299,7 +299,7 @@ int create() {
       }
       ret = close(fd);
       if (ret < 0) { 	    
-	printf("CREATE close(%s) %s\n", fname, strerror(errno));
+	printf("CREATE close(%s) loop %d %s\n", fname,loop, strerror(errno));
 	exit(-1);
       }
     }

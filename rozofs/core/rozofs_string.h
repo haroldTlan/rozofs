@@ -214,6 +214,10 @@ static inline void rozofs_uuid_unparse(uuid_t fid, char * pChar) {
 
   *pChar = 0;  
 }
+static inline int rozofs_fid_append(char * pChar, uuid_t fid) {
+  rozofs_uuid_unparse(fid,pChar);
+  return 36;
+}  
 
 
 

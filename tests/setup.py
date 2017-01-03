@@ -1236,11 +1236,10 @@ class rozofs_class:
     display_config_string("device_selfhealing_mode",rozofs.device_selfhealing_mode)
     display_config_string("export_hosts",exportd.export_host)
     display_config_bool("client_xattr_cache",True)
-#    display_config_bool("async_setattr",True)
+    display_config_bool("async_setattr",True)
     if self.deletion_delay != None :
       display_config_int("deletion_delay",self.deletion_delay)
     if self.client_fast_reconnect == True: display_config_bool("client_fast_reconnect",True)
-    os.system("mkdir -p /root/tmp/export; mkdir -p /root/tmp/storage;")
     
   def create_common_config(self):
     try: os.remove('/usr/local/etc/rozofs/rozofs.conf');
@@ -1315,6 +1314,7 @@ class rozofs_class:
   def resume(self):
 #    self.create_config()  
     check_build()  
+    os.system("rm -rf /root/tmp/export; mkdir -p /root/tmp/export; rm -rf /root/tmp/storage; mkdir -p /root/tmp/storage;")
     for h in hosts: h.start()
     exportd.start()
     for m in mount_points: m.start() 
