@@ -117,7 +117,6 @@ add_subdirectory(rozofs)
 add_subdirectory(src)
 add_subdirectory(doc)
 add_subdirectory(tests EXCLUDE_FROM_ALL)
-add_subdirectory(tests/fs_ops/fileop EXCLUDE_FROM_ALL)
 add_subdirectory(tests/fs_ops/pjd-fstest EXCLUDE_FROM_ALL)
 add_subdirectory(manager)
 
