@@ -209,7 +209,7 @@ mkdir -p %{buildroot}%{_initrddir}
 %defattr(-,root,root)
 %{_bindir}/rozofsmount
 %{_bindir}/storcli
-%{_bindir}/rozo_clusterstats.sh
+%{_bindir}/rozo_mount_clusterstats
 %{_bindir}/rozo_repquota.sh
 %{_bindir}/rozo_mount_cleanup
 %{_bindir}/rozo_distribution_check

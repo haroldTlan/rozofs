@@ -29,4 +29,17 @@ eid=`echo $res | awk '{print $2}'`
 
 path=`echo $res | awk '{print $3}'`
 echo "export identifier $eid (path $path)"
-rozodiag -i $ip -T export:0 -c system "rozo_clusterstats -p $path " | grep -v "\[exportd-M\]"
+echo
+
+addrs=$(echo $ip | tr "/" " ")
+for addr in $addrs
+do
+  res=`rozodiag -i $addr -T export:0 -c who`
+  case "$res" in
+    *exportd-M*){
+       rozodiag -i $addr -T export:0 -c system "rozo_clusterstats -p $path " | grep -v "\[exportd-M\]"
+       exit 0
+    };;
+  esac  
+done
+exit 1
