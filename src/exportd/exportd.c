@@ -70,7 +70,7 @@
 /* Maximum open file descriptor number for exportd daemon */
 #define EXPORTD_MAX_OPEN_FILES 5000
 
-econfig_t exportd_config;
+extern econfig_t exportd_config;
 pthread_rwlock_t config_lock;
 export_reload_conf_status_t export_reload_conf_status;
 int export_instance_id;    /**< instance id of the export  : 0 is the master   */
@@ -107,7 +107,7 @@ static SVCXPRT *exportd_svc = NULL;
 
 extern void export_program_1(struct svc_req *rqstp, SVCXPRT * ctl_svc);
 
-DEFINE_PROFILING(epp_profiler_t) = {0};
+DEFINE_PROFILING(epp_profiler_t);
 
 
 exportd_start_conf_param_t  expgwc_non_blocking_conf;  /**< configuration of the non blocking side */
@@ -723,7 +723,8 @@ static void *export_tracking_thread(void *v) {
 	      {
         	for (type = 0;type < ROZOFS_MAXATTR; type++)
 		{
-		  if ((type == ROZOFS_TRASH)||(type == ROZOFS_DIR_FID)||(type == ROZOFS_RECYCLE))continue;
+		  if ((type == ROZOFS_TRASH)||(type == ROZOFS_DIR_FID)||(type == ROZOFS_RECYCLE)||(type == ROZOFS_REG_S_MOVER) ||
+		      (type == ROZOFS_REG_D_MOVER))continue;
         	  if (exp_trck_inode_release_poll(&entry->export, type) != 0) {
                       severe("export_tracking_thread failed (eid: %"PRIu32"): %s",
                               entry->export.eid, strerror(errno));
@@ -743,7 +744,7 @@ static void *export_tracking_thread(void *v) {
  *_______________________________________________________________________
  */
 static void *monitoring_thread(void *v) {
-    struct timespec ts = {2, 0};
+    struct timespec ts = {30, 0};
     list_t *p;
 
     uma_dbg_thread_add_self("Monitor");
@@ -757,13 +758,13 @@ static void *monitoring_thread(void *v) {
             continue;
         }
 
-        gprofiler.nb_volumes = 0;
+        gprofiler->nb_volumes = 0;
 
         list_for_each_forward(p, &volumes) {
             if (monitor_volume(&list_entry(p, volume_entry_t, list)->volume) != 0) {
                 severe("monitor thread failed: %s", strerror(errno));
             }
-            gprofiler.nb_volumes++;
+            gprofiler->nb_volumes++;
         }
 
         if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
@@ -778,13 +779,13 @@ static void *monitoring_thread(void *v) {
             continue;
         }
 
-        gprofiler.nb_exports = 0;
+        gprofiler->nb_exports = 0;
 
         list_for_each_forward(p, &exports) {
             if (monitor_export(&list_entry(p, export_entry_t, list)->export) != 0) {
                 severe("monitor thread failed: %s", strerror(errno));
             }
-            gprofiler.nb_exports++;
+            gprofiler->nb_exports++;
         }
 
         if ((errno = pthread_rwlock_unlock(&exports_lock)) != 0) {
@@ -815,13 +816,13 @@ static void *monitoring_thread_slave(void *v) {
             continue;
         }
 
-        gprofiler.nb_volumes = 0;
+        gprofiler->nb_volumes = 0;
 
         list_for_each_forward(p, &volumes) {
             if (monitor_volume_slave(&list_entry(p, volume_entry_t, list)->volume) != 0) {
                 severe("monitor thread failed: %s", strerror(errno));
             }
-            gprofiler.nb_volumes++;
+            gprofiler->nb_volumes++;
         }
 
         if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
@@ -835,13 +836,13 @@ static void *monitoring_thread_slave(void *v) {
             continue;
         }
 
-        gprofiler.nb_exports = 0;
+        gprofiler->nb_exports = 0;
 
         list_for_each_forward(p, &exports) {
             if (monitor_export(&list_entry(p, export_entry_t, list)->export) != 0) {
                 severe("monitor thread failed: %s", strerror(errno));
             }
-            gprofiler.nb_exports++;
+            gprofiler->nb_exports++;
         }
 
         if ((errno = pthread_rwlock_unlock(&exports_lock)) != 0) {
@@ -1081,7 +1082,7 @@ void exports_release() {
 
     list_for_each_forward_safe(p, q, &exports) {
         export_entry_t *entry = list_entry(p, export_entry_t, list);
-	export_profiler_free(entry->export.eid);
+//	export_profiler_free(entry->export.eid);
 	geo_profiler_free(entry->export.eid);
         export_release(&entry->export);
         list_remove(p);
@@ -1218,9 +1219,9 @@ static int load_exports_conf() {
 	info("initializing export %d path %s",econfig->eid,econfig->root);
 
         // Initialize export
-        if (export_initialize(&entry->export, volume,econfig->bsize,
+        if (export_initialize(&entry->export, volume, econfig->layout, econfig->bsize,
                 &cache, econfig->eid, econfig->root, econfig->md5,
-                econfig->squota, econfig->hquota) != 0) {
+                econfig->squota, econfig->hquota, econfig->filter_name) != 0) {
             severe("can't initialize export with path %s: %s\n",
                     econfig->root, strerror(errno));
             goto out;
@@ -1403,6 +1404,11 @@ static void on_start() {
     export_profiler_allocate(0);
     geo_profiler_allocate(0);
 
+    /*
+    ** IPv4 filtering initialization
+    */
+    rozofs_ip4_ftl_init();
+
 
     uma_dbg_thread_add_self("Blocking");
 
@@ -1428,7 +1434,7 @@ static void on_start() {
 
     if (exportd_initialize() != 0) {
         fatal("can't initialize exportd.");
-    }
+    }    
     
     /*
     ** Configuration has been processes and data structures have been set up
@@ -1525,12 +1531,12 @@ static void on_start() {
 
       if (!svc_register
               (exportd_svc, EXPORT_PROGRAM, EXPORT_VERSION, export_program_1,
-              IPPROTO_TCP)) {
-          fatal("can't register service %s", strerror(errno));
+                      IPPROTO_TCP)) {
+          fatal("can't register EXPORT_PROGRAM service in rpcbind");
       }
 
       SET_PROBE_VALUE(uptime, time(0));
-      strncpy((char *) gprofiler.vers, VERSION, 20);
+      strncpy((char *) gprofiler->vers, VERSION, 20);
       /*
       ** start all the slave exportds
       */
@@ -1881,6 +1887,8 @@ int main(int argc, char *argv[]) {
         {"slave", no_argument, 0, 's'},
         {0, 0, 0, 0}
     };
+    
+    ALLOC_PROFILING(epp_profiler_t);
     /*
     ** Change local directory to "/"
     */
@@ -1988,8 +1996,30 @@ int main(int argc, char *argv[]) {
     }
     if ( expgwc_non_blocking_conf.slave == 0)
     {
-    uma_dbg_record_syslog_name("exportd");
-    daemon_start("exportd",common_config.nb_core_file,EXPORTD_PID_FILE, on_start, on_stop, on_hup);
+        uma_dbg_record_syslog_name("exportd");
+
+        /*
+         * Check if rpcbind service is running
+         */
+        struct sockaddr_in addr;
+        struct pmaplist *plist = NULL;
+
+        get_myaddress(&addr);
+        plist = (struct pmaplist *) pmap_getmaps(&addr);
+        if (plist == NULL) {
+            fprintf(stderr,
+                    "failed to contact rpcbind service (%s)."
+                    " The rpcbind service must be started before.\n",
+                    strerror(errno));
+            severe(
+                    "Cannot start exportd: "
+                    "unable to contact rpcbind service (%s).\n",
+                    strerror(errno));
+            goto error;
+        }
+
+        daemon_start("exportd", common_config.nb_core_file, EXPORTD_PID_FILE,
+                on_start, on_stop, on_hup);
     }
     else
     {

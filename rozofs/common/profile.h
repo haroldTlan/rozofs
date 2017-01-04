@@ -21,16 +21,35 @@
 
 #include <sys/time.h>
 #include <stdint.h>
-
+#include <string.h>
+#include <stdlib.h>
 #include <rozofs/rpc/spproto.h>
 #include <rozofs/rpc/mpproto.h>
+
 
 #ifndef MICROLONG
 #define MICROLONG(time) ((unsigned long long)time.tv_sec * 1000000 + time.tv_usec)
 #endif
 
-#define DECLARE_PROFILING(the_type) extern the_type gprofiler
-#define DEFINE_PROFILING(the_type) the_type gprofiler
+#define DECLARE_PROFILING(the_type) extern the_type *gprofiler
+#define DEFINE_PROFILING(the_type) the_type *gprofiler=NULL;
+#define ALLOC_PROFILING(the_type) \
+{ \
+  gprofiler = malloc(sizeof(the_type));\
+  memset(gprofiler,0,sizeof(the_type));\
+}
+
+#define ALLOC_KPI_FILE_PROFILING(path,name,the_type) \
+{ \
+  void *p;\
+  p = rozofs_kpi_map(path,name,sizeof(the_type),gprofiler); \
+  if (p != NULL)\
+  { \
+    if (gprofiler != NULL) free(gprofiler);\
+    gprofiler = p;\
+  }\
+}
+  
 
 #ifndef P_COUNT
 #define P_COUNT     0
@@ -43,7 +62,7 @@
     uint64_t tic, toc;\
     struct timeval tv;\
     {\
-        gprofiler.the_probe[P_COUNT]++;\
+        gprofiler->the_probe[P_COUNT]++;\
         gettimeofday(&tv,(struct timezone *)0);\
         tic = MICROLONG(tv);\
     }
@@ -54,10 +73,10 @@
     uint64_t tic, toc;\
     struct timeval tv;\
     {\
-        gprofiler.the_probe[P_COUNT]++;\
+        gprofiler->the_probe[P_COUNT]++;\
         gettimeofday(&tv,(struct timezone *)0);\
         tic = MICROLONG(tv);\
-        gprofiler.the_probe[P_BYTES] += the_bytes;\
+        gprofiler->the_probe[P_BYTES] += the_bytes;\
     }
 #endif
 
@@ -66,7 +85,7 @@
     {\
         gettimeofday(&tv,(struct timezone *)0);\
         toc = MICROLONG(tv);\
-        gprofiler.the_probe[P_ELAPSE] += (toc - tic);\
+        gprofiler->the_probe[P_ELAPSE] += (toc - tic);\
     }
 #endif
 
@@ -75,24 +94,25 @@
     {\
         gettimeofday(&tv,(struct timezone *)0);\
         toc = MICROLONG(tv);\
-        gprofiler.the_probe[P_ELAPSE] += (toc - tic);\
-        gprofiler.the_probe[P_BYTES]  += the_bytes;\
+        gprofiler->the_probe[P_ELAPSE] += (toc - tic);\
+        gprofiler->the_probe[P_BYTES]  += the_bytes;\
 }
 #endif
 
 #ifndef SET_PROBE_VALUE
 #define SET_PROBE_VALUE(the_probe, the_value)\
     {\
-        gprofiler.the_probe = the_value;\
+        gprofiler->the_probe = the_value;\
     }
 #endif
 
 #ifndef CLEAR_PROBE
 #define CLEAR_PROBE(the_probe)\
     {\
-        memset(gprofiler.the_probe, 0, sizeof(gprofiler.the_probe));\
+        memset(gprofiler->the_probe, 0, sizeof(gprofiler->the_probe));\
     }
 #endif
+
 
 
 #endif

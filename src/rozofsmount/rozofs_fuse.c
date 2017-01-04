@@ -377,7 +377,7 @@ uint32_t rozofs_fuse_rcvReadysock(void * rozofs_fuse_ctx_p,int socketId)
     /*
     ** check the number of requests towards the storcli
     */
-    if (rozofs_storcli_pending_req_count >= ROZOFSMOUNT_MAX_STORCLI_TX)
+    if (rozofs_storcli_pending_req_count >= rozofs_max_storcli_tx)
     {
       status = rozofs_xoff();
       rozofs_storcli_buffer_depletion_count++;
@@ -445,7 +445,7 @@ uint32_t rozofs_fuse_rcvMsgsock(void * rozofs_fuse_ctx_p,int socketId)
        /*
        ** check the number of requests towards the storcli
        */
-       if (rozofs_storcli_pending_req_count >= ROZOFSMOUNT_MAX_STORCLI_TX)
+       if (rozofs_storcli_pending_req_count >= rozofs_max_storcli_tx)
        {
 	 status = rozofs_xoff();
 	 if (status== FALSE) 

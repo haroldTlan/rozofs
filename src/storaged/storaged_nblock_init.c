@@ -85,16 +85,16 @@ void * storaged_decoded_rpc_buffer_pool = NULL;
 #define sp_display_probe(the_profiler, the_probe){\
   uint64_t rate;\
   uint64_t cpu;\
-  if ((the_profiler.the_probe[P_COUNT] == 0) || (the_profiler.the_probe[P_ELAPSE] == 0) ){\
+  if ((the_profiler->the_probe[P_COUNT] == 0) || (the_profiler->the_probe[P_ELAPSE] == 0) ){\
       cpu = rate = 0;\
   } else {\
-      rate = (the_profiler.the_probe[P_COUNT] * 1000000 / the_profiler.the_probe[P_ELAPSE]);\
-      cpu = the_profiler.the_probe[P_ELAPSE] / the_profiler.the_probe[P_COUNT];\
+      rate = (the_profiler->the_probe[P_COUNT] * 1000000 / the_profiler->the_probe[P_ELAPSE]);\
+      cpu = the_profiler->the_probe[P_ELAPSE] / the_profiler->the_probe[P_COUNT];\
   }\
   *pChar++ = ' ';\
   pChar += rozofs_string_padded_append(pChar,16, rozofs_left_alignment,#the_probe);\
   pChar += rozofs_string_append(pChar," | ");\
-  pChar += rozofs_u64_padded_append(pChar,15, rozofs_right_alignment,the_profiler.the_probe[P_COUNT]);\
+  pChar += rozofs_u64_padded_append(pChar,15, rozofs_right_alignment,the_profiler->the_probe[P_COUNT]);\
   pChar += rozofs_string_append(pChar," | ");\
   pChar += rozofs_u64_padded_append(pChar,12, rozofs_right_alignment,rate);\
   pChar += rozofs_string_append(pChar," | ");\
@@ -104,8 +104,8 @@ void * storaged_decoded_rpc_buffer_pool = NULL;
 
 #define sp_clear_probe(the_profiler, the_probe)\
     {\
-      the_profiler.the_probe[P_COUNT] = 0;\
-      the_profiler.the_probe[P_ELAPSE] = 0;\
+      the_profiler->the_probe[P_COUNT] = 0;\
+      the_profiler->the_probe[P_ELAPSE] = 0;\
     }
     
 
@@ -122,18 +122,18 @@ static void show_profile_storaged_master_display(char * argv[], uint32_t tcpRef,
 
 
     // Compute uptime for storaged process
-    elapse = (int) (this_time - gprofiler.uptime);
+    elapse = (int) (this_time - gprofiler->uptime);
     days = (int) (elapse / 86400);
     hours = (int) ((elapse / 3600) - (days * 24));
     mins = (int) ((elapse / 60) - (days * 1440) - (hours * 60));
     secs = (int) (elapse % 60);
-    pChar += sprintf(pChar, "GPROFILER version %s uptime =  %d days, %2.2d:%2.2d:%2.2d\n", gprofiler.vers,days, hours, mins, secs);
+    pChar += sprintf(pChar, "GPROFILER version %s uptime =  %d days, %2.2d:%2.2d:%2.2d\n", gprofiler->vers,days, hours, mins, secs);
 
     // Print general profiling values for storaged
     pChar += rozofs_string_append(pChar, "storaged: ");
-    pChar += rozofs_string_append(pChar, (char*)gprofiler.vers);
+    pChar += rozofs_string_append(pChar, (char*)gprofiler->vers);
     pChar += rozofs_string_append(pChar, " - ");
-    pChar += rozofs_u64_padded_append(pChar, 16, rozofs_right_alignment,gprofiler.nb_io_processes);
+    pChar += rozofs_u64_padded_append(pChar, 16, rozofs_right_alignment,gprofiler->nb_io_processes);
     pChar += rozofs_string_append(pChar, " IO process(es)\n");
 
     // Print header for operations profiling values for storaged
@@ -154,7 +154,7 @@ static void show_profile_storaged_master_display(char * argv[], uint32_t tcpRef,
             sp_clear_probe(gprofiler, remove);
             sp_clear_probe(gprofiler, list_bins_files);
 	    pChar += sprintf(pChar,"Reset Done\n");  
-	    gprofiler.uptime = this_time;  	      
+	    gprofiler->uptime = this_time;  	      
         }
         else {
           pChar = show_profile_storaged_master_display_help(pChar);
@@ -162,7 +162,12 @@ static void show_profile_storaged_master_display(char * argv[], uint32_t tcpRef,
     }
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }
-
+static void man_storio_nb(char * pChar) {
+  pChar += rozofs_string_append(pChar, "Display some information related to the storio(s) of this storaged\n");
+  pChar += rozofs_string_append(pChar, "  storio_nb     the number of storio it manages.\n");
+  pChar += rozofs_string_append(pChar, "  mode          multiple(1 storio per cluster)/single(1 storio for every cluster).\n");
+  pChar += rozofs_string_append(pChar, "  cids          list of cluster identifiers present on this storage node..\n");
+}
 static void show_storio_nb(char * argv[], uint32_t tcpRef, void *bufRef) {
     char *pChar = uma_dbg_get_buffer();
     uint64_t  bitmask[4] = {0};
@@ -200,6 +205,23 @@ static void show_storio_nb(char * argv[], uint32_t tcpRef, void *bufRef) {
     pChar += rozofs_eol(pChar);
    
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+}
+static void man_storage_device_status(char * pChar) {    
+  pChar += rozofs_string_append(pChar, "Display the list of devices. One array per logical storage (cid/sid).\nFor each device is displayed the follwonig columns:\n");
+  pChar += rozofs_string_append(pChar, "  cid         the cluster identifier the device belongs to.\n");
+  pChar += rozofs_string_append(pChar, "  sid         the logical storage identifier within the cluster the device belongs to.\n");
+  pChar += rozofs_string_append(pChar, "  dev         the device number within the logical storage.\n");
+  pChar += rozofs_string_append(pChar, "  status      the device status IS(In Service)/FAILED/DEG(DEGraded)/OOS-(Out Of Service).\n");
+  pChar += rozofs_string_append(pChar, "  free size   the free size available on the device.\n");
+  pChar += rozofs_string_append(pChar, "  max size    the total size of the device.\n");
+  pChar += rozofs_string_append(pChar, "  free %      the percent of free size remaining on the device.\n");
+  pChar += rozofs_string_append(pChar, "  dev name    the device name under /dev.\n");
+  pChar += rozofs_string_append(pChar, "  busy %      the % of usage of the device (check iostat).\n");
+  pChar += rozofs_string_append(pChar, "  rd/s        the number of read per second (check iostat).\n");
+  pChar += rozofs_string_append(pChar, "  Avg rd usec the average delay for a read (check iostat).\n");
+  pChar += rozofs_string_append(pChar, "  rw/s        the number of write per second (check iostat).\n");
+  pChar += rozofs_string_append(pChar, "  Avg rd usec the average delay for a write (check iostat).\n");
+  pChar += rozofs_string_append(pChar, "  last access the delay since the last access to the disk.\n");
 }
 static void show_storage_device_status(char * argv[], uint32_t tcpRef, void *bufRef) {
     char                * pChar = uma_dbg_get_buffer();
@@ -348,6 +370,53 @@ static void show_storage_device_status(char * argv[], uint32_t tcpRef, void *buf
       } 
       pChar += rozofs_string_append(pChar,"                     |________|________|____|\n"); 
     }  
+    uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+}
+static void man_storage_json_device_status(char * pChar) {    
+  pChar += rozofs_string_append(pChar, "Display the list of devices. For each device is displayed:\n");
+  pChar += rozofs_string_append(pChar, "  cid     the cluster identifier the device belongs to.\n");
+  pChar += rozofs_string_append(pChar, "  sid     the logical storage identifier within the cluster the device belongs to.\n");
+  pChar += rozofs_string_append(pChar, "  device  the device number within the logical storage.\n");
+  pChar += rozofs_string_append(pChar, "  name    the device name under /dev.\n");
+  pChar += rozofs_string_append(pChar, "  status  the device status IS(In Service)/FAILED/DEG(DEGraded)/OOS-(Out Of Service).\n");
+  pChar += rozofs_string_append(pChar, "  free    the free size in bytes available on the device.\n");
+  pChar += rozofs_string_append(pChar, "  total   the total size in bytes of the device.\n");
+}
+static void show_storage_json_device_status(char * argv[], uint32_t tcpRef, void *bufRef) {
+    char                * pChar = uma_dbg_get_buffer();
+    storage_t           * st=NULL;
+    int                   device;
+    storage_share_t     * share;
+    uint32_t              period;
+    
+    
+    pChar += sprintf(pChar, "{ \"devices\" : [\n");
+    
+    while((st = storaged_next(st)) != NULL) {
+      /* 
+      ** Resolve the share memory address|
+      */
+      share = storage_get_share(st);
+      period = share->monitoring_period;
+      if (period == 0) continue;     
+
+      if (share != NULL) {
+	for (device=0; device < st->device_number; device++) {
+	  storage_device_info_t *pdev = &share->dev[device];
+	  
+	  pChar += sprintf(pChar, "    { \"cid\" : %3d, \"sid\" : %2d, \"device\" : %2d, "
+                                        "\"name\" : \"%s\", \"mount-path\" : \"%s/%d\", "
+                                        "\"status\" : \"%s\", \"free\" : %llu, \"total\" : %llu },\n",
+	                          st->cid, st->sid, device, 
+                                  pdev->devName, st->root, device, 
+                                  storage_device_status2string(pdev->status),
+			          (long long unsigned int)pdev->free ,(long long unsigned int)pdev->size);   
+	}
+      }	
+    }  
+    
+    pChar -= 2;
+    pChar += sprintf(pChar,"\n  ]\n}\n");  
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
 }
 // For trace purpose
@@ -562,8 +631,9 @@ int storaged_start_nb_th(void *args) {
     uma_dbg_addTopic_option("profiler", show_profile_storaged_master_display,UMA_DBG_OPTION_RESET);
     
     storio_nb = args_p->nb_storio;
-    uma_dbg_addTopic("storio_nb", show_storio_nb);
-    uma_dbg_addTopic("device",show_storage_device_status);
+    uma_dbg_addTopicAndMan("storio_nb", show_storio_nb,man_storio_nb,0);
+    uma_dbg_addTopicAndMan("device",show_storage_device_status,man_storage_device_status,0);
+    uma_dbg_addTopicAndMan("dstatus",show_storage_json_device_status,man_storage_json_device_status,0);
     
     if (pHostArray[0] != NULL) {
         info("storaged non-blocking thread started (host: %s, dbg port: %d).",

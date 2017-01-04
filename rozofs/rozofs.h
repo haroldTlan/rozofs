@@ -21,11 +21,26 @@
 
 #include <stdint.h>
 #include <uuid/uuid.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <rozofs/common/log.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include <config.h>
 #include <rozofs/common/common_config.h>
 #include <rozofs/core/rozofs_string.h>
 
+#define ROZOFS_RUNDIR                "/var/run/rozofs/"
+#define ROZOFS_RUNDIR_RBS            ROZOFS_RUNDIR"rbs/"
+#define ROZOFS_RUNDIR_RBS_SPARE      ROZOFS_RUNDIR_RBS"spare/"
+#define ROZOFS_RUNDIR_RBS_REBUILD    ROZOFS_RUNDIR_RBS"rebuild/"
+
+
+#define ROZOFS_KPI_ROOT_PATH "/var/run/rozofs_kpi"
 //#include <rozofs/common/log.h>
 /*
 ** Get ticker
@@ -331,6 +346,8 @@ typedef enum
    ROZOFS_SLNK,    /**< name of symbolic link */
    ROZOFS_DIR_FID,     /**< directory rferenced by its fid  */
    ROZOFS_RECYCLE,     /**< recycle directory  */
+   ROZOFS_REG_S_MOVER,     /**< FID of a regular file under the control of the file mover: source       */
+   ROZOFS_REG_D_MOVER,     /**< FID of a regular file under the control of the file mover: destination  */
 
    ROZOFS_MAXATTR
 } export_attr_type_e;
@@ -344,6 +361,8 @@ static inline char * export_attr_type2String(export_attr_type_e val) {
     case ROZOFS_SLNK: return "SLNK";
     case ROZOFS_DIR_FID: return "DIR_FID";
     case ROZOFS_RECYCLE: return "RECYCLE";
+    case ROZOFS_REG_S_MOVER: return "REG_SRC_MOVER";
+    case ROZOFS_REG_D_MOVER: return "REG_DST_MOVER";
     default:
       return "?";
   }
@@ -353,7 +372,8 @@ typedef union
    uint64_t fid[2];   /**<   */
    struct {
      uint64_t  vers:4;        /**< fid version */
-     uint64_t  fid_high:41;   /**< highest part of the fid: not used */
+     uint64_t  mover_idx:8;   /**< fid index: needed by mover feature: rozo_rebalancing */
+     uint64_t  fid_high:33;   /**< highest part of the fid: not used */
      uint64_t  recycle_cpt:2;   /**< recycle counter */
      uint64_t  opcode:4;      /**< opcode used for metadata log */
      uint64_t  exp_id:3;      /**< exportd identifier: must remain unchanged for a given server */
@@ -366,7 +386,8 @@ typedef union
    } s;
    struct {
      uint64_t  vers:4;        /**< fid version */
-     uint64_t  fid_high:41;   /**< highest part of the fid: not used */
+     uint64_t  mover_idx:8;   /**< fid index: needed by mover feature: rozo_rebalancing */
+     uint64_t  fid_high:33;   /**< highest part of the fid: not used */
      uint64_t  recycle_cpt:2;   /**< recycle counter */
      uint64_t  opcode:4;      /**< opcode used for metadata log */
      uint64_t  exp_id:3;      /**< exportd identifier: must remain unchanged for a given server */
@@ -606,14 +627,16 @@ static inline char * fid2string(fid_t fid , char * string) {
   
   char * p = string;
   
-  rozofs_uuid_unparse(fid,p);
-  p += 36;
+  p += rozofs_fid_append(p,fid);
+
   *p++ = ' ';
   
   rozofs_inode_t * fake_inode_p =  (rozofs_inode_t *) fid;
   
   p += rozofs_string_append(p,"vers=");
   p += rozofs_u64_append(p,fake_inode_p->s.vers);
+  p += rozofs_string_append(p," mover_idx=");
+  p += rozofs_u64_append(p,fake_inode_p->s.mover_idx);
   p += rozofs_string_append(p," fid_high=");
   p += rozofs_u64_append(p,fake_inode_p->s.fid_high);
   p += rozofs_string_append(p," recycle=");
@@ -646,7 +669,24 @@ static inline char * fid2string(fid_t fid , char * string) {
 
 // Maximum number of parallel threads that will run a rebuild
 #define MAXIMUM_PARALLEL_REBUILD_PER_SID 64
+/*
+**__________________________________________________________________
+*/
+/**
+*   Build the storage fid of a "mover" file
 
+    @param fid: exportd file (either "mover" or "primary")
+    @param index: index of the fid (mover or primary)
+    
+    @retval modified fid
+*/
+static inline void rozofs_build_storage_fid (fid_t fid,uint8_t index)
+{
+    rozofs_inode_t *fake_inode = (rozofs_inode_t*)fid;
+    
+    fake_inode->s.key = ROZOFS_REG;
+    fake_inode->s.mover_idx = index;
+}
 /*
 **__________________________________________________________________
 ** Structure of an entry of a rebuild job file
@@ -655,7 +695,7 @@ typedef struct _rozofs_rebuild_entry_file_t {
     fid_t     fid;         //< unique file identifier associated with the file
     uint32_t  block_start; //< Starting block to rebuild from 
     uint32_t  block_end;   //< Last block to rebuild
-    uint8_t   unused:4;    //< Some unused bits
+    uint8_t   layout:4;    //< layout
     uint8_t   bsize:2;     //< Block size 0=4K / 1=8K / 2=16K / 3=32K    
     uint8_t   todo:1;      //< 1 when rebuild not yet done
     uint8_t   relocate:1;  //< 1 when relocation is required
@@ -666,7 +706,224 @@ typedef struct _rozofs_rebuild_entry_file_t {
     */
     sid_t     dist_set_current[ROZOFS_SAFE_MAX]; ///< currents sids of storage nodes
 } rozofs_rebuild_entry_file_t; 
+/*
+**___________________________________________________________________
+**
+** JSON formating macros
+**
+**___________________________________________________________________
+*/
+
+#define JSON_write_offset {\
+  int json_idx;\
+  for (json_idx=0; json_idx<json_offset; json_idx++) {\
+    *pJSON++ = ' ';\
+    *pJSON++ = ' ';\
+    *pJSON++ = ' ';\
+    *pJSON++ = ' ';\
+  } \
+}
+
+#define JSON_begin {*pJSON++ = '{';JSON_eol;json_offset++;}
+#define JSON_end {JSON_remove_coma;json_offset--; JSON_write_offset; *pJSON++ = '}';JSON_eol;}
+
+#define JSON_separator { *pJSON++ = '\t'; *pJSON++ = ':'; *pJSON++ = ' ';}
+#define JSON_make_name(name) { *pJSON++ = '"'; pJSON += rozofs_string_append(pJSON, name); *pJSON++ = '"';}
+#define JSON_name(name) { JSON_write_offset; JSON_make_name(name); JSON_separator;}
+
+#define JSON_eol {pJSON += rozofs_eol(pJSON); }
+#define JSON_coma_eol { *pJSON++ = ',';  JSON_eol; }
+#define JSON_remove_coma { pJSON = pJSON-2; JSON_eol; }
+
+#define JSON_open_obj(name) { JSON_name(name); JSON_begin; }
+#define JSON_close_obj { JSON_remove_coma; json_offset--; JSON_write_offset; *pJSON++ = '}'; JSON_coma_eol;}
+
+#define JSON_open_array(name) { JSON_name(name);  *pJSON++ = '['; JSON_eol; json_offset++; }
+#define JSON_close_array { JSON_remove_coma; json_offset--; JSON_write_offset; *pJSON++ = ']'; JSON_coma_eol; }
+
+#define JSON_string(name,value) { JSON_name(name);JSON_make_name(value);JSON_coma_eol;}
+
+#define JSON_string_element(value) {JSON_write_offset; JSON_make_name(value); JSON_coma_eol; }
+
+#define JSON_new_element { JSON_write_offset; *pJSON++ = '{'; JSON_eol; json_offset++; }
+#define JSON_end_element { JSON_remove_coma; json_offset--; JSON_write_offset; *pJSON++ = '}'; JSON_coma_eol; }
+#define JSON_i32(name, value) { JSON_name(name); pJSON += rozofs_i32_append(pJSON, value);JSON_coma_eol; }
+#define JSON_u32( name, value) {JSON_name(name); pJSON += rozofs_u32_append(pJSON, value);JSON_coma_eol; }
+
+#define JSON_2u32(name1, value1, name2, value2) { \
+  JSON_name(name1); pJSON += rozofs_u32_append(pJSON, value1);\
+  *pJSON++ = ','; *pJSON++ = ' ';\
+  JSON_make_name(name2); JSON_separator; pJSON += rozofs_u32_append(pJSON, value2);\
+  JSON_coma_eol;}
+ 
+#define JSON_u64(name, value) { JSON_name(name); pJSON += rozofs_u64_append(pJSON, value);JSON_coma_eol;}
 
 
+/*
+**________________________________________________________________________
+**
+** Some declaration for file rebuild
+*/
+typedef enum _rbs_file_type_e {
+  rbs_file_type_nominal=0,
+  rbs_file_type_spare,
+  rbs_file_type_all  
+} rbs_file_type_e;
+
+static inline char * rbs_file_type2string(rbs_file_type_e ftype) {
+  switch (ftype) {
+    case rbs_file_type_nominal: return "nominal";
+    case rbs_file_type_spare:   return "spare";
+    case rbs_file_type_all:     return "all";
+  }
+  return "?";
+}  
+
+/*
+*______________________________________________________________________
+* Create a directory, recursively creating all the directories on the path 
+* when they do not exist
+*
+* @param directory_path   The directory path
+* @param mode             The rights
+*
+* retval 0 on success -1 else
+*/
+static inline int rozofs_kpi_mkpath(char * directory_path) {
+  char* p;
+  int  isZero=1;
+  int  status = -1;
+    
+  p = directory_path;
+  p++; 
+  while (*p!=0) {
+  
+    while((*p!='/')&&(*p!=0)) p++;
+    
+    if (*p==0) {
+      isZero = 1;
+    }  
+    else {
+      isZero = 0;      
+      *p = 0;
+    }
+    
+    if (access(directory_path, F_OK) != 0) {
+      if (mkdir(directory_path, 0744) != 0) {
+        if (errno != EEXIST)
+	{
+	  severe("mkdir(%s) %s", directory_path, strerror(errno));
+          goto out;
+	}
+      }      
+    }
+    
+    if (isZero==0) {
+      *p ='/';
+      p++;
+    }       
+  }
+  status = 0;
+  
+out:
+  if (isZero==0) *p ='/';
+  return status;
+}
+
+static inline void *rozofs_kpi_map(char *path,char *name,int size,void *init_buf)
+{
+  int fd;
+  struct stat sb;
+  void *p;
+  char pathname[1024];
+  int ret;
+  
+  strcpy(pathname,path);  
+  ret = rozofs_kpi_mkpath(pathname);
+  if (ret < 0) return NULL;
+  
+  sprintf(pathname,"%s/%s",path,name);  
+  
+  fd = open (pathname, O_RDWR| O_CREAT, 0644);
+  if (fd == 1) {
+          severe ("open failure for %s : %s",path,strerror(errno));
+          return NULL;
+  }
+
+ if (fstat (fd, &sb) == -1) {
+   severe ("fstat failure for %s : %s",path,strerror(errno));
+   close(fd);
+   return NULL;
+ }
+ if (ftruncate (fd, size) == -1) {
+   severe ("ftruncate failure for %s : %s",path,strerror(errno));
+   close(fd);
+   return NULL;
+ }
+ p = mmap (0, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+ if (p == MAP_FAILED) {
+         severe ("map failure for %s : %s",path,strerror(errno));
+         return NULL;
+ }
+ if (init_buf != NULL)
+ {
+   memcpy(p,init_buf,size);
+ }
+ else
+ {
+   memset(p,0,size);
+ }
+ return p;
+}
+/*
+*______________________________________________________________________
+* Create a directory, recursively creating all the directories on the path 
+* when they do not exist
+*
+* @param path2create      The directory path to create
+* @param mode             The rights
+*
+* retval 0 on success -1 else
+*/
+static inline int rozofs_mkpath(char * path2create, mode_t mode) {
+  char* p;
+  int  isZero=1;
+  int  status = -1;
+  char  directory_path[ROZOFS_PATH_MAX+1];
+  
+  strcpy(directory_path,path2create);
+    
+  p = directory_path;
+  p++; 
+  while (*p!=0) {
+  
+    while((*p!='/')&&(*p!=0)) p++;
+    
+    if (*p==0) {
+      isZero = 1;
+    }  
+    else {
+      isZero = 0;      
+      *p = 0;
+    }
+    
+    if (access(directory_path, F_OK) != 0) {
+      if (mkdir(directory_path, mode) != 0) {
+	severe("mkdir(%s) %s", directory_path, strerror(errno));
+        goto out;
+      }      
+    }
+    
+    if (isZero==0) {
+      *p ='/';
+      p++;
+    }       
+  }
+  status = 0;
+  
+out:
+  if (isZero==0) *p ='/';
+  return status;
+}
 
 #endif

@@ -50,14 +50,13 @@
 #define SIOADDR     "addr"
 #define SIOPORT     "port"
 
+#define SSPARE_MARK     "spare-mark"
 #define SDEV_TOTAL      "device-total"
 #define SDEV_MAPPER     "device-mapper"
 #define SDEV_RED        "device-redundancy"
-#define SSELF_HEALING   "self-healing"
-#define SEXPORT_HOSTS   "export-hosts"
 
 int storage_config_initialize(storage_config_t *s, cid_t cid, sid_t sid,
-        const char *root, int dev, int dev_mapper, int dev_red) {
+        const char *root, int dev, int dev_mapper, int dev_red, const char * spare_mark) {
     DEBUG_FUNCTION;
 
     s->sid = sid;
@@ -66,11 +65,27 @@ int storage_config_initialize(storage_config_t *s, cid_t cid, sid_t sid,
     s->device.total      = dev;
     s->device.mapper     = dev_mapper; 
     s->device.redundancy = dev_red;
+    if (spare_mark == NULL) {
+      /*
+      ** Spare device have an empty "rozofs_spare" file
+      */
+      s->spare_mark = NULL;
+    }
+    else {
+      /*
+      ** Spare device have a "rozofs_spare" file with <spare_mark> string in it
+      */      
+      s->spare_mark = xstrdup(spare_mark);
+    }
     list_init(&s->list);
     return 0;
 }
 
 void storage_config_release(storage_config_t *s) {
+    if (s->spare_mark != NULL) {
+      xfree(s->spare_mark);
+      s->spare_mark = NULL;
+    }  
     return;
 }
 
@@ -99,15 +114,15 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
     struct config_setting_t *stor_settings = 0;
     struct config_setting_t *ioaddr_settings = 0;
     int i = 0;
-    const char              *char_value = NULL;    
+//    const char              *char_value = NULL;    
 #if (((LIBCONFIG_VER_MAJOR == 1) && (LIBCONFIG_VER_MINOR >= 4)) \
                || (LIBCONFIG_VER_MAJOR > 1))
     int port;
-    int devices, mapper, redundancy, selfHealing;
+    int devices, mapper, redundancy;
     
 #else
     long int port;
-    long int devices, mapper, redundancy, selfHealing;
+    long int devices, mapper, redundancy;
 #endif      
     DEBUG_FUNCTION;
 
@@ -123,27 +138,7 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
     /*
     ** Check whether self-healing is configured 
     */
-    config->selfHealing  = -1;
     config->export_hosts = NULL;
-    selfHealing = -1;
-
-    if (config_lookup_int(&cfg, SSELF_HEALING, &selfHealing)) {
-        if ((selfHealing > 0)||(selfHealing==-2)) {
-            /*
-             ** Export hosts list has to be configured too
-             */
-            if (config_lookup_string(&cfg, SEXPORT_HOSTS, &char_value)) {
-                config->selfHealing = selfHealing;
-                config->export_hosts = strdup(char_value);
-            } else {
-                severe("%s must be configured along with %s", SEXPORT_HOSTS,
-                        SSELF_HEALING);
-            }
-        } else {
-            severe("%s value must be greater than 0", SSELF_HEALING);
-            selfHealing = -1;
-        }
-    }
 
     if (!(ioaddr_settings = config_lookup(&cfg, SIOLISTEN))) {
         errno = ENOKEY;
@@ -226,6 +221,8 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
         long int cid;
 #endif
         const char *root = 0;
+        const char *spare_mark = NULL;
+        
 	char       rootPath[PATH_MAX];
 
         if (!(ms = config_setting_get_elem(stor_settings, i))) {
@@ -296,7 +293,7 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
 	  ** Create directory if it does not yet exist
 	  */
 	  if (access(root, F_OK) != 0) {	  
-	    mkpath ((char*)root,S_IRUSR | S_IWUSR | S_IXUSR);
+	    rozofs_mkpath ((char*)root,S_IRUSR | S_IWUSR | S_IXUSR);
 	  }  
 
 	  /*
@@ -347,10 +344,19 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
             goto out;
         }
 
+        
+        /*
+        ** What string should be set in rozofs_spare mark files of spare disk for
+        ** this volume
+        */  
+        spare_mark = NULL;
+        if (config_setting_lookup_string(ms, SSPARE_MARK, &spare_mark) == CONFIG_FALSE) {
+          spare_mark = NULL;
+        }
 
         new = xmalloc(sizeof (storage_config_t));
         if (storage_config_initialize(new, (cid_t) cid, (sid_t) sid,
-                root, devices, mapper, redundancy) != 0) {
+                root, devices, mapper, redundancy,spare_mark) != 0) {
             if (new)
                 free(new);
             goto out;

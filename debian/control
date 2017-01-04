@@ -1,7 +1,7 @@
 Source: rozofs
 Section: admin
 Priority: optional
-Maintainer: Fizians S.A.S. <devel@rozofs.com>
+Maintainer: Rozo Systems S.A.S <devel@rozofs.com>
 Build-Depends: 	debhelper (>= 9),
 				,dh-python
 				,cmake
@@ -13,7 +13,7 @@ Build-Depends: 	debhelper (>= 9),
 				,libreadline-dev
 				,swig
 				,libnuma-dev
-Standards-Version: 3.9.6
+Standards-Version: 3.9.8
 X-Python-Version: = 2.7 << 3.0
 Homepage: http://www.rozofs.com
 Vcs-Git: https://github.com/rozofs/rozofs.git
@@ -26,11 +26,15 @@ Description: RozoFS filesystem (daemon launcher)
  RozoFS rozolauncher is a utility to launch RozoFS daemons like storaged, storio 
  and exportd with high availability feature.
  .
- RozoFS is a scale-out NAS using erasure coding.
+ RozoFS is a scale-out distributed network POSIX file system using erasure
+ coding and Mojette Transform algorithm for data distribution. RozoFS
+ designed to provide very high availability levels with optimized raw
+ capacity usage on heterogeneous commodity hardware
 
 Package: rozofs-exportd
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}
+		,lsb-base (>= 3.0.6)
 		,portmap | rpcbind
 		,libattr1
 		,libuuid1
@@ -39,11 +43,15 @@ Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: RozoFS filesystem (export daemon)
  RozoFS exportd daemon manages metadata for the RozoFS filesystems.
  .
- RozoFS is a scale-out NAS using erasure coding.
+ RozoFS is a scale-out distributed network POSIX file system using erasure
+ coding and Mojette Transform algorithm for data distribution. RozoFS
+ designed to provide very high availability levels with optimized raw
+ capacity usage on heterogeneous commodity hardware
 
 Package: rozofs-storaged
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}
+		,lsb-base (>= 3.0.6)
 		,portmap | rpcbind
 		,libuuid1
 		,libnuma1
@@ -52,11 +60,15 @@ Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: RozoFS filesystem (storage daemon)
  RozoFS storaged daemon stores encoded data for the RozoFS filesystems.
  .
- RozoFS is a scale-out NAS using erasure coding.
+ RozoFS is a scale-out distributed network POSIX file system using erasure
+ coding and Mojette Transform algorithm for data distribution. RozoFS
+ designed to provide very high availability levels with optimized raw
+ capacity usage on heterogeneous commodity hardware
 
 Package: rozofs-rozofsmount
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}
+		,lsb-base (>= 3.0.6)
 		,libfuse2 (>= 2.9.0)
 		,fuse
 		,libnuma1
@@ -65,25 +77,35 @@ Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: RozoFS filesystem (mount utility)
  rozofsmount mounts RozoFS filesystems using FUSE.
  .
- RozoFS is a scale-out NAS using erasure coding.
+ RozoFS is a scale-out distributed network POSIX file system using erasure
+ coding and Mojette Transform algorithm for data distribution. RozoFS
+ designed to provide very high availability levels with optimized raw
+ capacity usage on heterogeneous commodity hardware
 
 Package: rozofs-geomgr
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
+		,lsb-base (>= 3.0.6)
 		,libconfig8 | libconfig9
 		,rozofs-rozolauncher
 Description: RozoFS filesystem (geo-replication software)
  This package contains the software related to geo-replication.
  .
- RozoFS is a scale-out NAS using erasure coding.
+ RozoFS is a scale-out distributed network POSIX file system using erasure
+ coding and Mojette Transform algorithm for data distribution. RozoFS
+ designed to provide very high availability levels with optimized raw
+ capacity usage on heterogeneous commodity hardware
 
 Package: rozofs-rozodiag
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libreadline6
+Depends: ${shlibs:Depends}, ${misc:Depends}, libreadline6, ${python:Depends}
 Description: RozoFS filesystem (diagnostic tools)
  rozodiag allows deep audit of RozoFS filesystems.
  .
- RozoFS is a scale-out NAS using erasure coding.
+ RozoFS is a scale-out distributed network POSIX file system using erasure
+ coding and Mojette Transform algorithm for data distribution. RozoFS
+ designed to provide very high availability levels with optimized raw
+ capacity usage on heterogeneous commodity hardware
 
 Package: rozofs-manager-lib
 Section: python
@@ -95,7 +117,10 @@ Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}
 Description: RozoFS filesystem (management library)
  Python management libraries for RozoFS.
  .
- RozoFS is a scale-out NAS using erasure coding.
+ RozoFS is a scale-out distributed network POSIX file system using erasure
+ coding and Mojette Transform algorithm for data distribution. RozoFS
+ designed to provide very high availability levels with optimized raw
+ capacity usage on heterogeneous commodity hardware
 
 Package: rozofs-manager-cli
 Architecture: any
@@ -104,17 +129,24 @@ Depends: ${misc:Depends}, ${python:Depends}
 Description: RozoFS filesystem (management cli)
  Management command-line for RozoFS.
  .
- RozoFS is a scale-out NAS using erasure coding.
+ RozoFS is a scale-out distributed network POSIX file system using erasure
+ coding and Mojette Transform algorithm for data distribution. RozoFS
+ designed to provide very high availability levels with optimized raw
+ capacity usage on heterogeneous commodity hardware
 
 Package: rozofs-manager-agent
 Architecture: any
 Depends: ${misc:Depends}
+		,lsb-base (>= 3.0.6)
 		,rozofs-manager-lib  (>= ${source:Version})
 		,rozofs-manager-cli
 Description: RozoFS filesystem (management daemon)
  Management daemon for RozoFS.
  .
- RozoFS is a scale-out NAS using erasure coding.
+ RozoFS is a scale-out distributed network POSIX file system using erasure
+ coding and Mojette Transform algorithm for data distribution. RozoFS
+ designed to provide very high availability levels with optimized raw
+ capacity usage on heterogeneous commodity hardware
 
 Package: rozofs-dbg
 Section: debug
@@ -128,7 +160,10 @@ Description: RozoFS filesystem (debugging symbols)
  Provide debugging information for the various rozofs packages.
  Install it to get a better backtrace in the event of a crash, or to test.
  .
- RozoFS is a scale-out NAS using erasure coding.
+ RozoFS is a scale-out distributed network POSIX file system using erasure
+ coding and Mojette Transform algorithm for data distribution. RozoFS
+ designed to provide very high availability levels with optimized raw
+ capacity usage on heterogeneous commodity hardware
 
 Package: nagios-plugins-rozofs
 Section: net
@@ -140,4 +175,7 @@ Depends: ${misc:Depends}
 Description: RozoFS filesystem (Nagios plugins)
  Provide monitoring information for the various rozofs packages.
  .
- RozoFS is a scale-out NAS using erasure coding.
+ RozoFS is a scale-out distributed network POSIX file system using erasure
+ coding and Mojette Transform algorithm for data distribution. RozoFS
+ designed to provide very high availability levels with optimized raw
+ capacity usage on heterogeneous commodity hardware

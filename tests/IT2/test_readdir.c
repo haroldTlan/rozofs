@@ -14,10 +14,10 @@
 #include <dirent.h>
 
 
-
+#define FILE_BASE_NAME "This_is_a_pretty_long_base_file_name_in_order_to_trigger_readdir_not_just_in_one_exchange_with_the_export_but_in_several_runs_toward_the_export______This_should_make_this_test_a_better_test_"
 
 #define DEFAULT_NB_PROCESS    20
-#define DEFAULT_LOOP         200
+#define DEFAULT_LOOP         16
 
 int shmid;
 #define SHARE_MEM_NB 7541
@@ -100,30 +100,33 @@ char *argv[];
         usage();
     }
 }
-remove_file(int nb) {
-  char file[256];
 
-  sprintf(file, "./f%d", nb);
+remove_file(int nb) {
+  char file[1024];
+
+  sprintf(file, "./%s%d", FILE_BASE_NAME, nb);
   unlink(file); 
 }
 create_file(int nb) {
-  char file[256];
+  char file[1024];
 
-  sprintf(file, "./f%d", nb);
+  sprintf(file, "./%s%d", FILE_BASE_NAME, nb);
   
-  sprintf(cmd, "echo HJKNKJNKNKhuezfqr > %s", file);
+  sprintf(cmd, "touch %s", file);
   system(cmd);  
 }
 
+#define NB_FILES 80
 
 int read_directory(char * d,int nbFiles,int count) {
   DIR * dir;
   int   ret;
   struct dirent  * file;
-  unsigned char exist[256];
+  unsigned char exist[NB_FILES];
   unsigned char subdir;
   int number;
   int i;
+  char * pt;
   
   memset(exist,0,sizeof(exist));
   subdir = 0;
@@ -147,19 +150,21 @@ int read_directory(char * d,int nbFiles,int count) {
       continue;
     }
     
-    if (file->d_name[0] != 'f') {
+    if (strncmp(file->d_name, FILE_BASE_NAME, strlen(FILE_BASE_NAME)) != 0) {
       printf("%s found in directory level %d\n",file->d_name,count);
       ret = -1;
       break;       
     }     
-    
-    number = 0;
-    i=1;
-    while (file->d_name[i] != 0) {
-      number *= 10;
-      number += file->d_name[i] - '0'; 
-      i++;
+        
+    pt = file->d_name;
+    pt += strlen(FILE_BASE_NAME);
+    ret = sscanf(pt,"%d",&number);
+    if (ret != 1) {
+      printf("%s found in directory level %d\n",file->d_name,count);   
+      ret = -1;
+      break;                
     }
+ 
     if (number >= nbFiles) {
       printf("%s found in directory level %d\n",file->d_name,count);
       ret = -1;
@@ -176,10 +181,17 @@ int read_directory(char * d,int nbFiles,int count) {
   
   for (i=0; i< nbFiles; i++) {
     if (exist[i] != 1) {
-      printf("f%d is missing in directory level %d\n",i,count);
+      printf("file %d is missing in directory level %d\n",i,count);
       ret = -1;      
     }
   }
+  for (i; i<NB_FILES;i++) {
+    if (exist[i] != 0) {
+      printf("file %d exist in directory level %d\n",i,count);
+      ret = -1;      
+    }
+  }
+  
   if (subdir == 0) {
     printf("subdir %s is missing in directory level %d\n",d,count);
     ret = -1;      
@@ -188,7 +200,6 @@ int read_directory(char * d,int nbFiles,int count) {
   closedir(dir);
   return ret; 
 }
-#define NB_FILES 32
 int do_one_test(int count) {
   int ret = 0;
   int i;
@@ -200,16 +211,17 @@ int do_one_test(int count) {
     printf("proc %3d - ERROR in loop %d mkdir(%s) %s\n", myProcId, d,strerror(errno));  
     return -1;       
   } 
-  
+
+  ret = read_directory(d,0,count);  
   for (i=0; i< NB_FILES; i++) {
-
-    ret = read_directory(d,i,count);
-    if (ret < 0) return ret;
-    
     create_file(i);
+    ret = read_directory(d,i+1,count);
+    if (ret < 0) return ret;
   }        
-  ret = read_directory(d,i,count);
-
+  
+  ret = read_directory(d,NB_FILES,count);
+  if (ret < 0) return ret;
+  
   if (count > 0) {
 
     ret = chdir(d);
@@ -228,13 +240,14 @@ int do_one_test(int count) {
     }      
   }
   for (; i>=0; i--) {
-  
-    remove_file(i);    
-
+    remove_file(i);      
     ret = read_directory(d,i,count);
-    if (ret < 0) return ret;
-    
+    if (ret < 0) return ret;      
   }
+  
+  ret = read_directory(d,0,count);
+  if (ret < 0) return ret;
+  
   ret = rmdir(d);
   if (ret < 0) {
     printf("proc %3d - ERROR in loop %d rmdir(%s) %s\n", myProcId, d,strerror(errno));  

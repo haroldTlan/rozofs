@@ -54,6 +54,7 @@ void ep_symlink_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 void ep_symlink2_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 void ep_rename_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 void ep_readdir_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
+void ep_readdir2_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 void ep_read_block_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 void ep_write_block_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 void ep_setxattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
@@ -65,6 +66,6 @@ void ep_clear_client_file_lock_1_svc_nb( void * pt, rozorpc_srv_ctx_t *req_ctx_p
 void ep_clear_owner_file_lock_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 void ep_get_file_lock_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 void ep_poll_file_lock_1_svc_nb( void * pt, rozorpc_srv_ctx_t *req_ctx_p);
-
+void ep_getxattr_raw_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p);
 
 #endif

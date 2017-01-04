@@ -28,8 +28,9 @@
 rozofs_storcli_ctx_t *rozofs_storcli_ctx_freeListHead;  /**< head of list of the free context  */
 rozofs_storcli_ctx_t rozofs_storcli_ctx_activeListHead;  /**< list of the active context     */
 
-uint32_t    rozofs_storcli_ctx_count;           /**< Max number of contexts    */
-uint32_t    rozofs_storcli_ctx_allocated;      /**< current number of allocated context        */
+uint32_t    rozofs_storcli_ctx_count;          /**< Max number of contexts                                */
+uint32_t    rozofs_storcli_ctx_allocated;      /**< current number of allocated context                   */
+int         rozofs_storcli_ctx_rsvd = 0;       /**< current number of pre-reserved storcli contexts       */
 rozofs_storcli_ctx_t *rozofs_storcli_ctx_pfirst;  /**< pointer to the first context of the pool */
 uint64_t  rozofs_storcli_global_object_index = 0;
 
@@ -37,6 +38,7 @@ uint64_t storcli_hash_lookup_hit_count = 0;
 uint32_t storcli_serialization_forced = 0;     /**< assert to 1 to force serialisation for all request whitout taking care of the fid */
 uint64_t storcli_buf_depletion_count = 0; /**< buffer depletion on storcli buffers */
 uint64_t storcli_rng_full_count = 0; /**< ring request full counter */
+uint64_t rozofs_storcli_ctx_wrap_count_err = 0;
 /*
 ** Table should probably be allocated 
 ** with a length depending on the number of entry given at nfs_lbg_cache_ctx_init
@@ -76,10 +78,13 @@ uint32_t rozofs_storcli_seqnum = 1;
 void rozofs_storcli_debug_show(uint32_t tcpRef, void *bufRef) {
   char           *pChar=uma_dbg_get_buffer();
 
-  pChar += sprintf(pChar,"number of transaction contexts (initial/allocated) : %u/%u\n",rozofs_storcli_ctx_count,rozofs_storcli_ctx_allocated);
+  pChar += sprintf(pChar,"number of transaction contexts (initial/allocated/reserved) : %u/%u/%d\n",rozofs_storcli_ctx_count,
+                                                                                                    rozofs_storcli_ctx_allocated,
+												    rozofs_storcli_ctx_rsvd);
   pChar += sprintf(pChar,"Statistics\n");
 //  pChar += sprintf(pChar,"req serialized : %10llu\n",(unsigned long long int)storcli_hash_lookup_hit_count);
 //  pChar += sprintf(pChar,"serialize mode : %s\n",(storcli_serialization_forced==0)?"NORMAL":"FORCED");
+  pChar += sprintf(pChar,"rsvd wrap error: %llu\n",(unsigned long long int)rozofs_storcli_ctx_wrap_count_err);
   pChar += sprintf(pChar,"serialize mode : %s\n",(stc_rng_serialize==0)?"NORMAL":"FORCED");
   pChar += sprintf(pChar,"req submit/coll: %10llu/%llu\n",
                    (unsigned long long int)stc_rng_submit_count,
@@ -451,6 +456,44 @@ void rozofs_storcli_init()
 **____________________________________________________
 */
 /**
+   rozofs_storcli_rsvd_context_alloc
+
+  Pre-reserve a set of storcli context
+
+@param     p: main storcli context
+@param     count: number of context to reserve
+@retval   : none
+*/
+void  rozofs_storcli_rsvd_context_alloc(rozofs_storcli_ctx_t *p,int count)
+{
+    p->rsvd_ctx_count = count;
+    rozofs_storcli_ctx_rsvd +=count;
+}
+
+/*
+**____________________________________________________
+*/
+/**
+   rozofs_storcli_rsvd_context_release
+
+  Pre-reserve a set of storcli context
+
+@param     p: main storcli context
+@param     count: number of context to release
+@retval   : none
+*/
+void  rozofs_storcli_rsvd_context_release(rozofs_storcli_ctx_t *p)
+{
+    if (p->rsvd_ctx_count == 0) return;
+    rozofs_storcli_ctx_rsvd -=p->rsvd_ctx_count;
+    p->rsvd_ctx_count = 0;
+    if (rozofs_storcli_ctx_rsvd < 0) rozofs_storcli_ctx_rsvd = 0;
+}
+
+/*
+**____________________________________________________
+*/
+/**
    rozofs_storcli_ctxInit
 
   create the transaction context pool
@@ -495,6 +538,7 @@ void  rozofs_storcli_ctxInit(rozofs_storcli_ctx_t *p,uint8_t creation)
    ** in the request scheduler table
    */
   p->sched_idx = -1;
+  p->rsvd_ctx_count= 0;
   
   p->opcode_key = STORCLI_NULL;
    p->shared_mem_p = NULL;
@@ -663,6 +707,7 @@ void rozofs_storcli_release_context(rozofs_storcli_ctx_t *ctx_p)
    **  insert it in the free list
    */
    rozofs_storcli_ctx_allocated--;
+   if (ctx_p->rsvd_ctx_count != 0) rozofs_storcli_rsvd_context_release(ctx_p);
    /*
    ** check the lock
    */

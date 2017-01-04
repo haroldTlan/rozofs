@@ -32,10 +32,11 @@
 #include "rbs.h"
 
 #define ROZOFS_REBUILD_BLOCKS_MAX (512)
-static inline int ROZOFS_BLOCKS_IN_BUFFER(int layout) {
-  if (layout == 0) return ROZOFS_REBUILD_BLOCKS_MAX/4;
-  if (layout == 1) return ROZOFS_REBUILD_BLOCKS_MAX/2;
-  return ROZOFS_REBUILD_BLOCKS_MAX;
+static inline int ROZOFS_BLOCKS_IN_BUFFER(int layout,int bsize) {
+  int nb = 1<<bsize;
+  if (layout == 0) return ROZOFS_REBUILD_BLOCKS_MAX/(4*nb);
+  if (layout == 1) return ROZOFS_REBUILD_BLOCKS_MAX/(2*nb);
+  return ROZOFS_REBUILD_BLOCKS_MAX/nb;
 }
 
 typedef struct rbs_storcli_ctx {

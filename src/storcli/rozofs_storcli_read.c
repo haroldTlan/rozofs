@@ -56,6 +56,11 @@ DECLARE_PROFILING(stcpp_profiler_t);
 uint64_t  corrupted_log_filter=0;
 
 /*
+** Buffer to trace read/write errors
+*/
+storcli_rw_err_t storcli_rw_error = { 0 };
+
+/*
 **__________________________________________________________________________
 */
 /**
@@ -192,6 +197,7 @@ int rozofs_storcli_remote_rsp_cbk(void *buffer,uint32_t socket_ref,void *user_pa
     return test_af_unix_generic_send_stream_with_idx((int)socket_ref,buffer);  
 #endif
 }
+void rozofs_storcli_resize_req_processing(rozofs_storcli_ctx_t *working_ctx_p);
 /*
 **__________________________________________________________________________
 */
@@ -400,6 +406,21 @@ void rozofs_storcli_read_req_init(uint32_t  socket_ctx_idx,
    }
 
    /*
+   ** Prepare for request serialization
+   */
+   memcpy(working_ctx_p->fid_key, storcli_read_rq_p->fid, sizeof (sp_uuid_t));
+   working_ctx_p->opcode_key = STORCLI_READ;
+
+
+   /*
+   ** Resize service
+   */
+   if ((storcli_read_rq_p->bid == 0) && (storcli_read_rq_p->nb_proj == 0)) {  
+      rozofs_storcli_resize_req_processing(working_ctx_p);
+      return;
+   }
+
+   /*
    ** check the case of an internal request
    */
    if (do_not_queue == STORCLI_DO_NOT_QUEUE )
@@ -408,11 +429,6 @@ void rozofs_storcli_read_req_init(uint32_t  socket_ctx_idx,
       return;
 
    }
-   /*
-   ** Prepare for request serialization
-   */
-   memcpy(working_ctx_p->fid_key, storcli_read_rq_p->fid, sizeof (sp_uuid_t));
-   working_ctx_p->opcode_key = STORCLI_READ;
    {
      int ret;
      ret = stc_rng_insert((void*)working_ctx_p,
@@ -643,6 +659,7 @@ void rozofs_storcli_read_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
     */
     error = EINVAL;
     STORCLI_ERR_PROF(read_sid_miss);
+    storcli_trace_error(__LINE__,error, working_ctx_p);     
     goto fatal;  
   }  
   /*
@@ -662,6 +679,7 @@ void rozofs_storcli_read_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
       */
       error = EIO;
       STORCLI_ERR_PROF(read_sid_miss);      
+      storcli_trace_error(__LINE__,error, working_ctx_p);     
       goto fatal;
     }  
   }
@@ -703,6 +721,7 @@ void rozofs_storcli_read_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
        ** fatal error since the ressource control already took place
        */
        error = ENOMEM;
+       storcli_trace_error(__LINE__,error, working_ctx_p);     
        goto fatal;     
      }
 
@@ -775,6 +794,7 @@ retry:
          severe("FDL error on send: EIO returned");
          error = EIO;
          ruc_buf_freeBuffer(xmit_buf);
+	 storcli_trace_error(__LINE__,error, working_ctx_p); 
          goto fatal;
        } 
        /*
@@ -802,6 +822,7 @@ retry:
          severe("FDL error on send: EIO returned");
          error = EIO;
          ruc_buf_freeBuffer(xmit_buf);
+         storcli_trace_error(__LINE__,error, working_ctx_p);     
          goto fatal;
        }
        /*
@@ -846,7 +867,7 @@ end:
      /*
      ** That case should not append here since the contol is done of the projection reception after rebuilding
      ** the rozofs block. That situation might after a read of 0 block is requested!!
-     */
+     */     
      rozofs_storcli_read_reply_success(working_ctx_p);
      rozofs_storcli_release_context(working_ctx_p);  
      return;  
@@ -879,6 +900,7 @@ int rozofs_storcli_read_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,uin
     uint8_t   rozofs_inverse;
     storcli_read_arg_t *storcli_read_rq_p;
     int error;
+    int line=0;
 
     storcli_read_rq_p = (storcli_read_arg_t*)&working_ctx_p->storcli_read_arg;
     rozofs_storcli_projection_ctx_t *prj_cxt_p   = working_ctx_p->prj_ctx;   
@@ -914,11 +936,13 @@ int rozofs_storcli_read_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,uin
 	    // 1rst inverse tell ENOENT 
 	    if ((i<rozofs_inverse)&&(enoent==rozofs_inverse)) {
 	      error = ENOENT;
+              //storcli_trace_error(__LINE__,error, working_ctx_p);           
 	      goto reject;	      
 	    }
 	    // More than inverse tell ENOENT
 	    if (enoent>rozofs_inverse) {
 	      error = ENOENT;
+              //storcli_trace_error(__LINE__,error, working_ctx_p);     
 	      goto reject;	      
 	    }
 	    	    
@@ -934,11 +958,13 @@ int rozofs_storcli_read_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,uin
       if (same_storage_retry_acceptable == 0) 
       {
         error = EIO;
-        goto reject;      
+	line = __LINE__;
+        goto reject;     	 
       }
       if (++prj_cxt_p[projection_id].retry_cpt >= ROZOFS_STORCLI_MAX_RETRY)
       {
         error = EIO;
+	line = __LINE__;
         goto reject;          
       }
     } 
@@ -958,6 +984,7 @@ int rozofs_storcli_read_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,uin
       */
       severe("Out of small buffer");
       error = ENOMEM;
+      line = __LINE__;
       goto fatal;
     }
     /*
@@ -1026,6 +1053,7 @@ int rozofs_storcli_read_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,uin
         severe("FDL error on send: EIO returned");
         ruc_buf_freeBuffer(xmit_buf);
         error = EIO;
+        line = __LINE__;     
         goto reject;
       } 
       goto retry;
@@ -1048,6 +1076,7 @@ int rozofs_storcli_read_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,uin
         */
         error = EIO;
         ruc_buf_freeBuffer(xmit_buf);
+        line = __LINE__;     
         goto reject;
       }
       /*
@@ -1076,7 +1105,9 @@ reject:
      */
      if (rozofs_storcli_check_read_in_progress_projections(layout,working_ctx_p->prj_ctx) == 0)
      {
-            
+       if (line) {   
+         storcli_trace_error(line,error,working_ctx_p);     
+       }	    
        /*
        ** we fall in that case when we run out of  storage
        */
@@ -1091,6 +1122,10 @@ reject:
      return 0; 
       
 fatal:
+    if (line) {   
+       storcli_trace_error(line,error,working_ctx_p);     
+     }	    
+
      /*
      ** we fall in that case when we run out of  resource-> that case is a BUG !!
      */
@@ -1138,7 +1173,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
    uint64_t raw_file_size;
    int bins_len = 0;
    int lbg_id;
-   int corrupted_blocks = 0;
+   uint32_t corrupted_blocks = 0;
    /*
    ** take care of the rescheduling of the pending frames
    */
@@ -1431,6 +1466,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
         ** the source has aborted the request
         */
         error = EPROTO;
+        storcli_trace_error(__LINE__,errno,working_ctx_p);            
         goto io_error;
       }    
     }  
@@ -1440,7 +1476,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
     */
     corrupted_blocks = 0;
     ret = rozofs_storcli_transform_inverse_check_for_thread(working_ctx_p->prj_ctx,
-                                     layout,
+                                     layout, bsize,
                                      working_ctx_p->cur_nmbs2read,
                                      working_ctx_p->nb_projections2read,
                                      working_ctx_p->block_ctx_table,
@@ -1491,16 +1527,22 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
       ** Log FID in the corrupted FID table
       */
       uint8_t  * fid;
-      int        idx;	
-      fid = storcli_fid_corrupted.fid[0];
+      int        idx;
+      storcli_one_corrupted_fid_ctx * pCtx = storcli_fid_corrupted.ctx;	
       // Search for this FID in the table
-      for (idx=0; idx<STORCLI_MAX_CORRUPTED_FID_NB; idx++,fid+=16) {
-        if (memcmp(fid,storcli_read_rq_p->fid,16)==0) break;
+      for (idx=0; idx<STORCLI_MAX_CORRUPTED_FID_NB; idx++,pCtx++) {
+        fid = (uint8_t  *)pCtx->fid;
+        if (memcmp(fid,storcli_read_rq_p->fid,16)==0) {
+	  pCtx->count++;
+	  break;
+	}  
       }
       // Insert this FID in the table
       if (idx == STORCLI_MAX_CORRUPTED_FID_NB) {
-	fid = storcli_fid_corrupted.fid[storcli_fid_corrupted.nextIdx];
+	pCtx = &storcli_fid_corrupted.ctx[storcli_fid_corrupted.nextIdx];
+	fid = pCtx->fid;
         memcpy(fid,storcli_read_rq_p->fid,16);
+	pCtx->count = 1;
 	storcli_fid_corrupted.nextIdx++;
 	if (storcli_fid_corrupted.nextIdx>=STORCLI_MAX_CORRUPTED_FID_NB) {
 	  storcli_fid_corrupted.nextIdx = 0;
@@ -1539,6 +1581,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
          severe("FDL error on send: EIO returned");
          STORCLI_ERR_PROF(read_prj_err);       
          error = EIO;
+         storcli_trace_error(__LINE__,error, working_ctx_p);            
          goto io_error;
        }         
        /*
@@ -1573,6 +1616,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
 	if (ret < 0) 
 	{
            errno = EPROTO;
+           storcli_trace_error(__LINE__,errno,working_ctx_p);            
 	   goto io_error;
 	}
 	/*
@@ -1640,9 +1684,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
       }
     
     }
-    /*
-    ** read is finished, send back the buffer to the client (rozofsmount)
-    */       
+    
     rozofs_storcli_read_reply_success(working_ctx_p);
     /*
     ** release the root context and the transaction context
@@ -1723,6 +1765,7 @@ wait_more_projection:
          ** we fall in that case when we run out of storage
          */
         error = EIO;
+        storcli_trace_error(__LINE__,error, working_ctx_p);            
         rozofs_storcli_read_reply_error(working_ctx_p, error);
         /*
          ** release the root transaction context
@@ -1768,6 +1811,13 @@ void rozofs_storcli_read_timeout(rozofs_storcli_ctx_t *working_ctx_p)
     int nb_received;
 
     storcli_read_rq_p = (storcli_read_arg_t*)&working_ctx_p->storcli_read_arg;
+    
+    /*
+    ** Resize case
+    */
+    if ((storcli_read_rq_p->bid == 0) && (storcli_read_rq_p->nb_proj == 0)) {
+       return rozofs_storcli_resize_timeout(working_ctx_p);
+    }
 
     layout         = storcli_read_rq_p->layout;
     rozofs_safe    = rozofs_get_rozofs_safe(layout);

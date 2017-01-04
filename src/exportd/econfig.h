@@ -26,6 +26,8 @@
 #include <rozofs/common/list.h>
 #include <libconfig.h>
 
+#include "rozofs_ip4_flt.h"
+
 #define MD5_LEN  22
 
 typedef struct storage_node_config {
@@ -56,11 +58,13 @@ typedef struct volume_config {
 typedef struct export_config {
     eid_t eid;
     vid_t vid;
+    uint8_t layout;
     ROZOFS_BSIZE_E  bsize;
     char root[FILENAME_MAX];
     char md5[MD5_LEN];
     uint64_t squota;
     uint64_t hquota;
+    char *   filter_name;  
     list_t list;
 } export_config_t;
 
@@ -88,8 +92,15 @@ typedef struct econfig {
     list_t volumes;
     list_t exports;
     list_t expgw;   /*< exportd gateways */
-
+    list_t filters;
 } econfig_t;
+
+typedef struct filter_config {
+    char                * name;
+    rozofs_ip4_subnet_t * filter_tree;
+    list_t                list;
+} filter_config_t;
+
 
 int econfig_initialize(econfig_t *config);
 

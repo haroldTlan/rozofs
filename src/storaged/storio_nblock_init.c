@@ -93,24 +93,24 @@ DECLARE_PROFILING(spp_profiler_t);
         uint64_t rate;\
         uint64_t cpu;\
         uint64_t throughput;\
-        if ((the_profiler.the_probe[P_COUNT] == 0) || (the_profiler.the_probe[P_ELAPSE] == 0) ){\
+        if ((the_profiler->the_probe[P_COUNT] == 0) || (the_profiler->the_probe[P_ELAPSE] == 0) ){\
             cpu = rate = throughput = 0;\
         } else {\
-            rate = (the_profiler.the_probe[P_COUNT] * 1000000 / the_profiler.the_probe[P_ELAPSE]);\
-            cpu = the_profiler.the_probe[P_ELAPSE] / the_profiler.the_probe[P_COUNT];\
-            throughput = (the_profiler.the_probe[P_BYTES] / 1024 /1024 * 1000000 / the_profiler.the_probe[P_ELAPSE]);\
+            rate = (the_profiler->the_probe[P_COUNT] * 1000000 / the_profiler->the_probe[P_ELAPSE]);\
+            cpu = the_profiler->the_probe[P_ELAPSE] / the_profiler->the_probe[P_COUNT];\
+            throughput = (the_profiler->the_probe[P_BYTES] / 1024 /1024 * 1000000 / the_profiler->the_probe[P_ELAPSE]);\
         }\
 	*pChar++ = ' ';\
 	pChar += rozofs_string_padded_append(pChar, 17, rozofs_left_alignment, #the_probe);\
 	*pChar++ = '|'; \
 	*pChar++ = ' '; \
-	pChar += rozofs_u64_padded_append(pChar, 15, rozofs_right_alignment, the_profiler.the_probe[P_COUNT]);\
+	pChar += rozofs_u64_padded_append(pChar, 15, rozofs_right_alignment, the_profiler->the_probe[P_COUNT]);\
 	*pChar++ = ' ';*pChar++ = '|'; *pChar++ = ' ';\
 	pChar += rozofs_u64_padded_append(pChar, 12, rozofs_right_alignment, rate);\
 	*pChar++ = ' ';*pChar++ = '|';*pChar++ = ' ';\
 	pChar += rozofs_u64_padded_append(pChar, 12, rozofs_right_alignment, cpu);\
 	*pChar++ = ' ';*pChar++ = '|';*pChar++ = ' ';\
-	pChar += rozofs_u64_padded_append(pChar, 20, rozofs_right_alignment, the_profiler.the_probe[P_BYTES]);\
+	pChar += rozofs_u64_padded_append(pChar, 20, rozofs_right_alignment, the_profiler->the_probe[P_BYTES]);\
 	*pChar++ = ' ';*pChar++ = '|';*pChar++ = ' ';\
 	pChar += rozofs_u64_padded_append(pChar, 16, rozofs_right_alignment, throughput);\
 	*pChar++ = ' ';*pChar++ = '|';\
@@ -118,16 +118,16 @@ DECLARE_PROFILING(spp_profiler_t);
     }
 #define sp_display_io_probe_cond(the_profiler, the_probe)\
     {\
-        if (the_profiler.the_probe[P_COUNT] != 0) {\
+        if (the_profiler->the_probe[P_COUNT] != 0) {\
 	   sp_display_io_probe(the_profiler, the_probe)\
         }\
     }  
     
 #define sp_clear_io_probe(the_profiler, the_probe)\
     {\
-       the_profiler.the_probe[P_COUNT] = 0;\
-       the_profiler.the_probe[P_ELAPSE] = 0;\
-       the_profiler.the_probe[P_BYTES] = 0;\
+       the_profiler->the_probe[P_COUNT] = 0;\
+       the_profiler->the_probe[P_ELAPSE] = 0;\
+       the_profiler->the_probe[P_BYTES] = 0;\
     }
 static char * show_profile_storaged_io_display_help(char * pChar) {
   pChar += rozofs_string_append(pChar,"usage:\nprofiler reset       : reset statistics\nprofiler             : display statistics\n");  
@@ -141,13 +141,13 @@ static void show_profile_storaged_io_display(char * argv[], uint32_t tcpRef, voi
 
 
     // Compute uptime for storaged process
-    elapse = (int) (this_time - gprofiler.uptime);
+    elapse = (int) (this_time - gprofiler->uptime);
     days = (int) (elapse / 86400);
     hours = (int) ((elapse / 3600) - (days * 24));
     mins = (int) ((elapse / 60) - (days * 1440) - (hours * 60));
     secs = (int) (elapse % 60);
 
-    pChar += sprintf(pChar, "GPROFILER version %s uptime =  %d days, %2.2d:%2.2d:%2.2d\n", gprofiler.vers,days, hours, mins, secs);
+    pChar += sprintf(pChar, "GPROFILER version %s uptime =  %d days, %2.2d:%2.2d:%2.2d\n", gprofiler->vers,days, hours, mins, secs);
 
     // Print header for operations profiling values for storaged
     pChar += rozofs_string_append(pChar, "                  |      CALL       | RATE(msg/s)  |   CPU(us)    |        COUNT(B)      | THROUGHPUT(MB/s) |\n");
@@ -178,7 +178,7 @@ static void show_profile_storaged_io_display(char * argv[], uint32_t tcpRef, voi
 	sp_clear_io_probe(gprofiler, remove_chunk);
 	sp_clear_io_probe(gprofiler, clear_error);
 	pChar += sprintf(pChar,"Reset Done\n");  
-	gprofiler.uptime = this_time;  	      
+	gprofiler->uptime = this_time;  	      
       }
       else {
         pChar = show_profile_storaged_io_display_help(pChar);

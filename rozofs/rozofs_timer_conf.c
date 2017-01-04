@@ -44,9 +44,9 @@ rozofs_configure_param_t rozofs_timer_conf[TMR_MAX_ENTRY];
 */
 void rozofs_tmr_init_configuration()
 {
-  DEF_TMR(EXPORT_PROGRAM,1,120,25,TMR_SEC); /**< exportd transaction timeout :default 25 s */
-  DEF_TMR(STORAGE_PROGRAM,2,120,4,TMR_SEC);  /**< storaged transaction timeout : default 4 s  */
-  DEF_TMR(STORCLI_PROGRAM,2,120,15,TMR_SEC);            /**< storagd client transaction timeout :      default 15 s */
+  DEF_TMR(EXPORT_PROGRAM,1,120,60,TMR_SEC); /**< exportd transaction timeout :default 25 s */
+  DEF_TMR(STORAGE_PROGRAM,2,120,30,TMR_SEC);  /**< storaged transaction timeout : default 4 s  */
+  DEF_TMR(STORCLI_PROGRAM,2,120,60,TMR_SEC);            /**< storagd client transaction timeout :      default 15 s */
   DEF_TMR(EXPORTD_PROFILE_PROGRAM,5,120,25,TMR_SEC);     /**< exportd profiler program                  default 25 s */
   DEF_TMR(ROZOFSMOUNT_PROFILE_PROGRAM,5,120,25,TMR_SEC); /**< rozofsmount profiler program              default 25 s */
   DEF_TMR(MONITOR_PROGRAM,2,30,4,TMR_SEC);             /**< storaged monitor program                  default 4 s  */
@@ -56,9 +56,19 @@ void rozofs_tmr_init_configuration()
   ** timers related to dirent cache
   */
   DEF_TMR(FUSE_ATTR_CACHE,0,300,10,TMR_SEC);            /**< attribute cache timeout for fuse           default 10 s */
-  DEF_TMR(FUSE_ATTR_CACHE_MS,0,2000,0,TMR_MS);            /**< attribute cache timeout for fuse           default 10 s */
+  DEF_TMR(FUSE_ATTR_CACHE_MS,0,300000,0,TMR_MS);            /**< attribute cache timeout for fuse           default 10 s */
   DEF_TMR(FUSE_ENTRY_CACHE,0,300,10,TMR_SEC);           /**< entry cache timeout for fuse               default 10 s */
-  DEF_TMR(FUSE_ENTRY_CACHE_MS,0,2000,0,TMR_MS);           /**< entry cache timeout for fuse               default 10 s */
+  DEF_TMR(FUSE_ENTRY_CACHE_MS,0,300000,0,TMR_MS);           /**< entry cache timeout for fuse               default 10 s */
+  /*
+  ** timer related to dirent cache (directory case)
+  */
+  DEF_TMR(FUSE_ATTR_DIR_CACHE_MS,0,300000,10000,TMR_MS);            /**< directory attribute cache timeout for fuse    */
+  DEF_TMR(FUSE_ENTRY_DIR_CACHE_MS,0,300000,10000,TMR_MS);           /**< directory entry cache timeout for fuse        */
+  /*
+  ** timer related to archive cache (file case only)
+  */
+  DEF_TMR(FUSE_ATTR_ARCH_CACHE,0,300,10,TMR_SEC);                   /**< file attribute cache timeout for fuse archive case    */
+  DEF_TMR(FUSE_ENTRY_ARCH_CACHE,0,300,10,TMR_SEC);           /**< file entry cache timeout for fuse archive case        */
   /*
   ** timer related to TCP connection and load balancing group
   */
@@ -138,7 +148,7 @@ int rozofs_tmr_set_to_default(int timer_id)
 */
 #define DISPLAY_TMR() \
 { \
-  buf+=sprintf(buf," %-27s | %3d | %7d | %5d | %5d | %7d | %4s |\n",\
+  buf+=sprintf(buf," %-27s | %3d | %7d | %7d | %7d | %7d | %4s |\n",\
        p->display_name,i,p->default_val,p->min_val,p->max_val,p->cur_val,(p->unit==TMR_SEC)?"sec":"ms");\
 }
 
@@ -147,8 +157,8 @@ char *rozofs_tmr_display(char *buf)
   rozofs_configure_param_t *p=&rozofs_timer_conf[0];
   int i= 0;
   
-  buf+=sprintf(buf,"    timer name               | idx | default |  min  | max   | current | unit |\n");
-  buf+=sprintf(buf,"-----------------------------+-----+---------+-------+-------+---------+------+\n");
+  buf+=sprintf(buf,"    timer name               | idx | default |  min    | max     | current | unit |\n");
+  buf+=sprintf(buf,"-----------------------------+-----+---------+---------+---------+---------+------+\n");
   for (i=0; i< TMR_MAX_ENTRY; i++,p++) {
     DISPLAY_TMR(); 
   }  

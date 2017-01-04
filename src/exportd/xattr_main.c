@@ -94,6 +94,34 @@ rozofs_getxattr(struct dentry *dentry, const char *name, void *buffer, size_t si
 }
 
 /*
+ * Find the handler for the prefix and dispatch its get() operation.
+   Caution: the allocated buffer used for storing the extended attributes is not released by this function
+ */
+ssize_t
+rozofs_getxattr_raw(struct dentry *dentry, const char *name, void *buffer, size_t size)
+{
+	const struct xattr_handler *handler;
+	int ret;
+	/*
+	** save the current tracking context needed for allocation
+	*/
+	xattr_set_tracking_context(dentry);
+
+	handler = xattr_resolve_name(ext4_xattr_handlers, &name);
+	if (!handler)
+	{
+	   errno = EOPNOTSUPP;
+           return -1;
+	}
+	ret = handler->get(dentry, name, buffer, size, handler->flags);
+	if (ret < 0 )
+	{
+	  ret = -1;
+	}
+	return ret;
+}
+
+/*
  * Combine the results of the list() operation from every xattr_handler in the
  * list.
  */

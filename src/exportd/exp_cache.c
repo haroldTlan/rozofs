@@ -28,6 +28,8 @@
 //#include <rozofs/rpc/epproto.h>
 #include "cache.h"
 #include "export.h"
+#include "rozofs_exp_mover.h"
+
 #include <rozofs/common/export_track.h>
 
 #define EXP_MAX_FAKE_LVL2_ENTRIES 16
@@ -60,6 +62,10 @@ static inline uint32_t lv2_hash(void *key) {
     */
     memcpy(&fake_inode,key,sizeof(rozofs_inode_t));
     rozofs_reset_recycle_on_fid(&fake_inode);
+    /*
+    ** Clear the mover_idx since a lookup can by done from the storage node with a storage_fid encoding
+    */
+    fake_inode.s.mover_idx = 0;
     /*
     ** clear the delete pending bit
     */
@@ -115,6 +121,10 @@ static inline void lv2_cache_unlink(lv2_cache_t *cache,lv2_entry_t *entry) {
   if (entry->symlink_target != NULL) free(entry->symlink_target);
   
   list_remove(&entry->list);
+  /*
+  ** remove from the move_list
+  */
+  list_remove(&entry->move_list);  
   free(entry);
   cache->size--;  
 }
@@ -358,7 +368,10 @@ lv2_entry_t *lv2_cache_put(export_tracking_table_t *trk_tb_p,lv2_cache_t *cache,
     list_init(&entry->file_lock);
     entry->nb_locks = 0;
     list_init(&entry->list);
-
+    /*
+    ** init of the move list
+    */
+    list_init(&entry->move_list);
     /*
     ** Try to remove older entries
     */
@@ -370,7 +383,11 @@ lv2_entry_t *lv2_cache_put(export_tracking_table_t *trk_tb_p,lv2_cache_t *cache,
  	  if (lru->nb_locks != 0) {
 	    severe("lv2 with %d locks in lru",lru->nb_locks);
  	  }
-
+          /*
+	  **  Exit from the LRU deletion loop if the current entry is
+	  **  locked in the cache
+	  */
+	  if (lru->locked_in_cache) break;
            
 	  htable_del(&cache->htable, lru->attributes.s.attrs.fid);
 	  lv2_cache_unlink(cache,lru);
@@ -439,7 +456,10 @@ lv2_entry_t *lv2_cache_put_forced(lv2_cache_t *cache, fid_t fid,ext_mattr_t *att
     list_init(&entry->file_lock);
     entry->nb_locks = 0;
     list_init(&entry->list);
-
+    /*
+    ** init of the move list
+    */
+    list_init(&entry->move_list);
     /*
     ** Try to remove older entries
     */
@@ -451,7 +471,11 @@ lv2_entry_t *lv2_cache_put_forced(lv2_cache_t *cache, fid_t fid,ext_mattr_t *att
  	  if (lru->nb_locks != 0) {
 	    severe("lv2 with %d locks in lru",lru->nb_locks);
  	  }
-
+          /*
+	  **  Exit from the LRU deletion loop if the current entry is
+	  **  locked in the cache
+	  */
+	  if (lru->locked_in_cache) break;
            
 	  htable_del(&cache->htable, lru->attributes.s.attrs.fid);
 	  lv2_cache_unlink(cache,lru);
@@ -500,27 +524,42 @@ void lv2_cache_del(lv2_cache_t *cache, fid_t fid)
  
   @param trk_tb_p: export attributes tracking table
   @param cache: pointer to the cache associated with the export
-  @param fid: the searched fid
+  @param fid: the searched fid_orig
+  @param mover_invalidate: assert to 1 where mover can be invalidated
  
   @return a pointer to lv2 entry or null on error (errno is set)
 */
-lv2_entry_t *export_lookup_fid(export_tracking_table_t *trk_tb_p,lv2_cache_t *cache, fid_t fid) {
+lv2_entry_t *export_lookup_fid_internal(export_tracking_table_t *trk_tb_p,lv2_cache_t *cache, fid_t fid_orig,int mover_invalidate) {
     lv2_entry_t *lv2 = 0;
+    rozofs_inode_t fake_inode;
+    rozofs_inode_t *fid = &fake_inode;
+    rozofs_inode_t *fake_inode_src_p = (rozofs_inode_t*)fid_orig;
     uint32_t slice;
 //    START_PROFILING(export_lookup_fid);
-    
+    /*
+    ** use a temporary FID for doing the lookup
+    */
+    fid->fid[0] = fake_inode_src_p->fid[0];
+    fid->fid[1] = fake_inode_src_p->fid[1];
+    if ((fid->s.key == ROZOFS_REG_S_MOVER) || (fid->s.key == ROZOFS_REG_D_MOVER))
+    {
+       /*
+       ** switch back to the ROZOFS_REG type for the lookup
+       */
+       fid->s.key = ROZOFS_REG;
+    }
     /*
     ** get the slice of the fid :extracted from the upper part 
     */
-    exp_trck_get_slice(fid,&slice);
+    exp_trck_get_slice((unsigned char *)fid,&slice);
     /*
     ** check if the slice is local
     */
     if (exp_trck_is_local_slice(slice))
     {
-      if (!(lv2 = lv2_cache_get(cache, fid))) {
+      if (!(lv2 = lv2_cache_get(cache, (unsigned char *)fid))) {
           // not cached, find it an cache it
-          if (!(lv2 = lv2_cache_put(trk_tb_p,cache, fid))) {
+          if (!(lv2 = lv2_cache_put(trk_tb_p,cache,(unsigned char *) fid))) {
               goto out;
           }
       }
@@ -529,7 +568,7 @@ lv2_entry_t *export_lookup_fid(export_tracking_table_t *trk_tb_p,lv2_cache_t *ca
     {
       int idx  = (++exp_fake_lv2_entry_idx)%(EXP_MAX_FAKE_LVL2_ENTRIES);
       lv2 = &exp_fake_lv2_entry[idx];
-      if (exp_meta_get_object_attributes(trk_tb_p,fid,lv2) < 0)
+      if (exp_meta_get_object_attributes(trk_tb_p,(unsigned char *)fid,lv2) < 0)
       {
 	/*
 	** cannot get the attributes: need to log the returned errno
@@ -542,10 +581,51 @@ lv2_entry_t *export_lookup_fid(export_tracking_table_t *trk_tb_p,lv2_cache_t *ca
       }         
     }
 out:
+    if (lv2!= NULL)
+    {
+       if ((fake_inode_src_p->s.key != ROZOFS_REG_S_MOVER) && (fake_inode_src_p->s.key != ROZOFS_REG_D_MOVER))
+       {
+          rozofs_mover_invalidate(lv2);
+       }
+    }
 //    STOP_PROFILING(export_lookup_fid);
     return lv2;
 }
+/*
+**__________________________________________________________________
+*/
+/** search a fid in the attribute cache
+ 
+ if fid is not cached, try to find it on the underlying file system
+ and cache it.
+ 
+  @param trk_tb_p: export attributes tracking table
+  @param cache: pointer to the cache associated with the export
+  @param fid_orig: the searched fid
+ 
+  @return a pointer to lv2 entry or null on error (errno is set)
+*/
+lv2_entry_t *export_lookup_fid(export_tracking_table_t *trk_tb_p,lv2_cache_t *cache, fid_t fid_orig) {
+    return export_lookup_fid_internal(trk_tb_p,cache,fid_orig,0);
+}
 
+/*
+**__________________________________________________________________
+*/
+/** search a fid in the attribute cache
+ 
+ if fid is not cached, try to find it on the underlying file system
+ and cache it.
+ 
+  @param trk_tb_p: export attributes tracking table
+  @param cache: pointer to the cache associated with the export
+  @param fid: the searched fid
+ 
+  @return a pointer to lv2 entry or null on error (errno is set)
+*/
+lv2_entry_t *export_lookup_fid_no_invalidate_mover(export_tracking_table_t *trk_tb_p,lv2_cache_t *cache, fid_t fid_orig) {
+    return export_lookup_fid_internal(trk_tb_p,cache,fid_orig,0);
+}
 /*
 **__________________________________________________________________
 */
@@ -553,10 +633,11 @@ out:
  *
    @param trk_tb_p: export attributes tracking table
    @param entry: the entry used
+   @param sync: whether to force sync on disk of attributes
  
    @return: 0 on success otherwise -1
  */
-int export_lv2_write_attributes(export_tracking_table_t *trk_tb_p,lv2_entry_t *entry) {
+int export_lv2_write_attributes(export_tracking_table_t *trk_tb_p,lv2_entry_t *entry,int sync) {
 
    int ret;
    rozofs_inode_t *fake_inode;
@@ -577,7 +658,7 @@ int export_lv2_write_attributes(export_tracking_table_t *trk_tb_p,lv2_entry_t *e
    /*
    ** read the attributes from disk
    */
-   ret = exp_metadata_write_attributes(p,fake_inode,entry,sizeof(ext_mattr_t));
+   ret = exp_metadata_write_attributes(p,fake_inode,entry,sizeof(ext_mattr_t), sync);
    if (ret < 0)
    { 
      return -1;
@@ -654,6 +735,7 @@ int exp_attr_create_write_cond(export_tracking_table_t *trk_tb_p,uint32_t slice,
    uint32_t link_slice;
    int inode_allocated = 0;
    int link_allocated = 0;
+   int sync = 1;
    
    rozofs_uuid_generate(fid,rozofs_get_export_host_id());
 
@@ -695,7 +777,7 @@ int exp_attr_create_write_cond(export_tracking_table_t *trk_tb_p,uint32_t slice,
        /*
        ** write the metadata on disk for the directory and the regular file
        */
-       ret = exp_metadata_write_attributes(p,fake_inode,global_attr_p,sizeof(ext_mattr_t));
+       ret = exp_metadata_write_attributes(p,fake_inode,global_attr_p,sizeof(ext_mattr_t),sync);
        if (ret < 0)
        {
 	 goto error;
@@ -735,7 +817,7 @@ int exp_attr_create_write_cond(export_tracking_table_t *trk_tb_p,uint32_t slice,
    ** write the link value
    */
    int len = strlen(link);
-   ret = exp_metadata_write_attributes(p_link,&fake_inode_link,link,len+1);
+   ret = exp_metadata_write_attributes(p_link,&fake_inode_link,link,len+1,sync);
    if (ret < 0)
    {
     goto error;
@@ -746,7 +828,7 @@ int exp_attr_create_write_cond(export_tracking_table_t *trk_tb_p,uint32_t slice,
    global_attr_p->s.i_link_name = fake_inode_link.fid[1];
    if (write)
    {
-     ret = exp_metadata_write_attributes(p,fake_inode,global_attr_p,sizeof(ext_mattr_t));
+     ret = exp_metadata_write_attributes(p,fake_inode,global_attr_p,sizeof(ext_mattr_t),sync);
      if (ret < 0)
      {  
        goto error;
@@ -769,141 +851,6 @@ error:
 
 
 
-/*
-**__________________________________________________________________
-*/
-/**
-*  Create the attributes of a directory/regular file or symbolic link
-
-  create an oject according to its type. The service performs the allocation of the fid. 
-  It is assumed that all the other fields of the object attributes are already been filled in.
-  
-  @param trk_tb_p: export attributes tracking table
-  @param slice: slice of the parent directory
-  @param global_attr_p : pointer to the attributes of the object
-  @param type: type of the object (ROZOFS_REG: regular file, ROZOFS_SLNK: symbolic link, ROZOFS_DIR : directory
-  @param link: pointer to the symbolic link (significant for ROZOFS_SLNK only)
-  
-  @retval 0 on success: (the attributes contains the lower part of the fid that is allocated by the service)
-  @retval -1 on error (see errno for details)
-*/
-int exp_attr_create(export_tracking_table_t *trk_tb_p,uint32_t slice,ext_mattr_t *global_attr_p,int type,char *link)
-{
-   fid_t fid;
-   rozofs_inode_t *fake_inode;
-   rozofs_inode_t fake_inode_link;
-   int ret;
-   exp_trck_top_header_t *p = NULL;
-   exp_trck_top_header_t *p_link = NULL;
-   uint32_t link_slice;
-   int inode_allocated = 0;
-   int link_allocated = 0;
-   
-   rozofs_uuid_generate(fid,rozofs_get_export_host_id());
-
-
-   fake_inode = (rozofs_inode_t*)fid;
-   fake_inode->fid[1] = 0;
-   fake_inode->s.key = type;
-   fake_inode->s.usr_id = slice; /** always the parent slice for storage */
-   fake_inode->s.eid = trk_tb_p->eid; 
-      
-   if (fake_inode->s.key >= ROZOFS_MAXATTR)
-   {
-     errno = EINVAL;
-     return -1;
-   }
-   p = trk_tb_p->tracking_table[fake_inode->s.key];
-   if (p == NULL)
-   {
-     errno = ENOTSUP;
-     goto error;
-   }   
-   /*
-   ** allocate the inode
-   */
-   ret = exp_metadata_allocate_inode(p,fake_inode,type,slice);
-   if (ret < 0)
-   { 
-      goto error;
-   }
-   inode_allocated = 1;
-   /*
-   ** copy the definitive fid of the object
-   */
-   memcpy(&global_attr_p->s.attrs.fid,fake_inode,sizeof(fid_t));
-   if (link == NULL)
-   {
-     /*
-     ** write the metadata on disk for the directory and the regular file
-     */
-    ret = exp_metadata_write_attributes(p,fake_inode,global_attr_p,sizeof(ext_mattr_t));
-    if (ret < 0)
-    {
-      goto error;
-    }
-    return 0;
-  }
-  /*
-  ** case of a symbolic link: here we need to allocate a block for storing the link
-  ** the slice associated with the link is the one associated with the fid of the file
-  ** and not the fid of the parent directory
-  */
-  exp_trck_get_slice(global_attr_p->s.attrs.fid,&link_slice);
-
-  fake_inode = (rozofs_inode_t*)fid;
-  fake_inode_link.fid[1] = 0;
-  fake_inode_link.s.key = ROZOFS_SLNK;
-  fake_inode_link.s.usr_id = link_slice; 
-  fake_inode_link.s.eid = trk_tb_p->eid;   
-
-  p_link = trk_tb_p->tracking_table[ROZOFS_SLNK];
-  if (p_link == NULL)
-  {
-    errno = ENOTSUP;
-    goto error;
-  }  
-   /*
-   ** allocate the inode
-   */
-   ret = exp_metadata_allocate_inode(p_link,&fake_inode_link,ROZOFS_SLNK,link_slice);
-   if (ret < 0)
-   { 
-    goto error;
-   }
-   link_allocated = 1;
-   /*
-   ** write the link value
-   */
-   int len = strlen(link);
-   ret = exp_metadata_write_attributes(p_link,&fake_inode_link,link,len+1);
-   if (ret < 0)
-   {
-    goto error;
-   }
-   /*
-   ** update the inode with the reference of the block allocated for storing the link value
-   */
-   global_attr_p->s.i_link_name = fake_inode_link.fid[1];
-   ret = exp_metadata_write_attributes(p,fake_inode,global_attr_p,sizeof(ext_mattr_t));
-   if (ret < 0)
-   {  
-     goto error;
-   }   
-   return 0;
-
-error:
-   if (inode_allocated)
-   {
-     exp_attr_delete(trk_tb_p,global_attr_p->s.attrs.fid);           
-   }
-   if (link_allocated)
-   {
-     memcpy(fid,&fake_inode_link,sizeof(fid_t));
-     exp_attr_delete(trk_tb_p,fid);           
-   }
-   return -1;
-}
 
 
 /*
@@ -980,7 +927,7 @@ int exp_xattr_block_create(export_tracking_table_t *trk_tb_p,lv2_entry_t *entry,
    /*
    ** write the extended attribute block  on disk
    */
-   ret = exp_metadata_write_attributes(p,&fake_inode,xattr_p,ROZOFS_XATTR_BLOCK_SZ);
+   ret = exp_metadata_write_attributes(p,&fake_inode,xattr_p,ROZOFS_XATTR_BLOCK_SZ, 0 /* not sync */);
    if (ret < 0)
    {
      return -1;
@@ -1020,7 +967,7 @@ int export_lv2_write_xattr(export_tracking_table_t *trk_tb_p,lv2_entry_t *entry)
    /*
    ** read the attributes from disk
    */
-   ret = exp_metadata_write_attributes(p,&fake_inode,entry->extended_attr_p,ROZOFS_XATTR_BLOCK_SZ);
+   ret = exp_metadata_write_attributes(p,&fake_inode,entry->extended_attr_p,ROZOFS_XATTR_BLOCK_SZ, 0 /* not sync */);
    if (ret < 0)
    { 
      return -1;
@@ -1051,6 +998,8 @@ int exp_trash_entry_create(export_tracking_table_t *trk_tb_p,uint32_t slice,void
    exp_trck_top_header_t *p = NULL;
    rmfentry_disk_t *global_attr_p = (rmfentry_disk_t *)ptr;
    
+   fake_inode.fid[0] = 0;
+   fake_inode.fid[1] = 0;   
    fake_inode.s.key = ROZOFS_TRASH;
    fake_inode.s.usr_id = slice; 
    fake_inode.s.eid = trk_tb_p->eid;   
@@ -1077,7 +1026,7 @@ int exp_trash_entry_create(export_tracking_table_t *trk_tb_p,uint32_t slice,void
    /*
    ** write the metadata on disk
    */
-   ret = exp_metadata_write_attributes(p,&fake_inode,global_attr_p,sizeof(rmfentry_disk_t));
+   ret = exp_metadata_write_attributes(p,&fake_inode,global_attr_p,sizeof(rmfentry_disk_t),1 /* sync */);
   if (ret < 0)
   {
     return -1;
@@ -1133,7 +1082,7 @@ int exp_recycle_entry_create(export_tracking_table_t *trk_tb_p,uint32_t slice,vo
    /*
    ** write the metadata on disk
    */
-   ret = exp_metadata_write_attributes(p,&fake_inode,global_attr_p,sizeof(recycle_disk_t));
+   ret = exp_metadata_write_attributes(p,&fake_inode,global_attr_p,sizeof(recycle_disk_t), 1 /* sync */);
   if (ret < 0)
   {
     return -1;
@@ -1166,7 +1115,7 @@ int exp_create_one_attributes_tracking_context(export_tracking_table_t *tab_p,in
    sprintf(pathname,"%s/%s",root_path,name);
    if (access(pathname, F_OK) == -1) 
    {
-    if (errno == ENOENT) 
+    if ((errno == ENOENT) && (create)) 
     {
       /*
       ** create the directory
@@ -1225,10 +1174,32 @@ export_tracking_table_t *exp_create_attributes_tracking_context(uint16_t eid, ch
    if (export_tracking_table[eid]!= NULL)
    {
       /*
-      ** the context is already allocated: nothing more to done:
-      **  note: it is not foreseen the change the root path of an exportd !!
-      */
-      return export_tracking_table[eid];
+      ** check if there is a change in the root path--> in that case the memory should be released
+      ** the test is done by read the root path found in the reg_attr
+      */      
+       export_tracking_table_t *p = export_tracking_table[eid];
+       exp_trck_top_header_t *top_hdr_p = p->tracking_table[ROZOFS_REG];
+
+       if (top_hdr_p == NULL)
+       {
+	  fatal("no memory structure for reg_attr of eid %d path %s",eid,root_path);
+       }
+       if (strcmp(root_path,top_hdr_p->root_path) == 0)
+       {
+	  /*
+	  ** the context is already allocated: nothing more to done:
+	  **  note: it is not foreseen the change the root path of an exportd !!
+	  */
+	  return export_tracking_table[eid];	 
+       }
+       else
+       {
+	  /*
+	  ** release the context
+	  */
+	  exp_release_attributes_tracking_context(export_tracking_table[eid]);
+	  export_tracking_table[eid] = NULL;	 
+       }
    }
    
    tab_p = malloc(sizeof(export_tracking_table_t));

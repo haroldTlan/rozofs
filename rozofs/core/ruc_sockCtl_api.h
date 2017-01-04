@@ -121,6 +121,11 @@ static inline uint64_t rozofs_get_ticker_us()
 {
   return rozofs_ticker_microseconds;
 }
+extern uint64_t rozofs_ticker_seconds;
+static inline uint64_t rozofs_get_ticker_s()
+{
+  return rozofs_ticker_microseconds;
+}
 
 /**
 * attach a traffic shaper scheduler

@@ -12,8 +12,16 @@ is managed thanks to
 .B libconfig
 grammar.
 
+Boolean values must be set to either
+.B
+True
+or
+.B
+False.
+
+String values must enclosed into double quotes.
 .SS numa_aware
-That boolean (True or False) enables to take into account the NUMA architecture of the board in order to collocate some RozoFS modules on a same node. This may improve the inter process communication performance. 
+That boolean enables to take into account the NUMA architecture of the mother board in order to collocate some RozoFS modules on a same node. This may improve the inter process communication performance. 
 
 .SS file_distribution_rule
 This parameter enables to choose the file distribution rule at file creation. The following rules are defined:
@@ -26,35 +34,30 @@ This parameter enables to choose the file distribution rule at file creation. Th
 .RE
 - 1 "weighted round robin"
 .RS
-  The clusters are selected in a round robin maner.
+  The clusters are selected in a round robin manner.
   The SIDs with the more available disk space are chosen within this cluster.
-  The devices are allocated in a round robin maner within a storio.
+  The devices are allocated in a round robin manner within a storio.
   The clusters and storages are re-ordered in decreasing cluster and storage available disk space order every 12s.
 .RE
 - 2 "strict round robin"
 .RS
-  The clusters are selected in a round robin maner.
-  The SIDs are chosen in round robin maner.
-  The devices are allocated in a round robin maner within a storio.
+  The clusters are selected in a round robin manner.
+  The SIDs are chosen in round robin manner.
+  The devices are allocated in a round robin manner within a storio.
 .RE
 .RE	    
 
 .SS trashed_file_per_run
-Maximum number of file that the remove bins thread of a slave export can remove in a run. A 2 seconds delay occurs between every run. 
-
+Maximum number of files that the remove bins thread of a slave export can remove in a run. A 2 second delay occurs between every run. This provides the maximum deletion rate.
+.SS deletion_delay 
+Minimum delay in seconds between the FID unlink in the export and the actual projections removal on the storage nodes.
+.SS statfs_period 
+caching delay in second of the data reported by a statfs(). The default value is 10 seconds. When the delay is 0, there is no caching.
 .SS core_file_directory
 The directory under which the RozoFS modules store their core files in case a crash occurs. 
 
 .SS nb_core_file
 Maximum number of core file to keep on this node per RozoFS module type. The older core files are kept while the newest ones are removed. 
-
-.SS storio_multiple_mode
-Specifies if storaged starts one or multiple storio process(es).
-       Valid values are :
-           - "False"
-             only storio instance 0 is started. It takes care of every storage instance configured in the storage.conf.
-           - "True"
-             one storio is started for each cluster declared in the storage.conf file. The storio instance is the cluster number. 
 
 .SS nb_disk_thread
 Specifies the number of threads within the STORIO process that can operate the disk read/write.
@@ -66,7 +69,7 @@ Boolean (True or False) indicating if a check (thanks to CRC error detecting cod
 Boolean (True or False) indicating if a checksum must be generated (thanks to CRC error detecting code) for each write request.
 
 .SS crc32c_hw_forced
-That boolean (True or False) can be asserted if the information reported by cpuid does not indicates that hardware CRC is supported whilst the current CPU supports it.
+That boolean (True or False) can be asserted if the information reported by cpuid does not indicate that hardware CRC is supported whilst the current CPU supports it.
 This might be the case with VirtualBox.
 
 .SS disk_usage_threshold
@@ -93,7 +96,6 @@ it waits until a count of forward projections are written. By default, the write
 This boolean has to be set to enable the spinning down of the disks of a storage node. The STORIO monitoring thread periodically checks the file systems mounted on its disks. This boolean prevents the check to be performed in case no modification takes place on the disk (i.e neither write, truncate nor delete). So when no access is done to the disks, the monitoring thread does not either access to the disk, and the disk spinning down can take place.
 
 It is no use to set this boolean when you do not configure a spin down timeout (see hdparm -S). 
-
 .SS export_dscp
 Value that indicates the DSCP that is associated with TCP connections used to communicate with the Metadata server. By default the value corresponds to Expedited Forwarding (EF) class.
 .SS storio_dscp
@@ -102,12 +104,16 @@ Value that indicates the DSCP that is associated with TCP connections used to co
 Boolean (True or False). When set, this flag indicates that the export has its attribute writeback threads activated (default true).
 .SS rozofsmount_fuse_reply_thread
 Boolean (True or False). When set, this flag indicates that the rozofsmount has its fuse reply threads activated (default true).
+.SS client_xattr_cache
+Boolean (True or False). When set, this flag indicates that the rozofsmount caches the extended attributes. The timer used is the same as the one used for attributes (default false).
+.SS async_setattr
+Boolean (True or False). When set, this flag indicates that the rozofsmount operates in asynchronous mode for setattr operations (default false).
 .SS export_versioning
 Boolean (True or False). When set, this flag indicates that any deleted object (file/directory) are save under
 .B @rozofs-del@ 
 pseudo directory of the parent directory (default false).
 .SS device_automount
-Boolean (True or False). Default value is False. When set, the RozoFS devices are automatically mounted on the rigth directories provided that they have the destination mark file on them; the destination mark file is a file named storage_c<cluster>_s<storage>_<device> that tells what this RozoFS device is intended for. No mount instruction should be set in the fstab file for these devices.
+Boolean (True or False). Default value is False. When set, the RozoFS devices are automatically mounted on the right directories provided that they have the destination mark file on them; the destination mark file is a file named storage_c<cluster>_s<storage>_<device> that tells what this RozoFS device is intended for. No mount instruction should be set in the fstab file for these devices.
 
 when device_automount is True, the following configuration parameters become effective.
 .TP 
@@ -116,12 +122,10 @@ This parameter gives the path where the devices have to be mounted. The default 
 .B root 
 parameter in the 
 .B storage.conf 
-file is ignored and can even be omitted. All the pathes are automatically created when needed. 
+file is ignored and can even be omitted. All the paths are automatically created when needed. 
 .TP
 .SS device_automount_option
-This parameter provides an optionnal mount option that should be supported by the lowlevel file system.
-.SS device_self_healing_process
-This parameter sets the number of rebuilder processes that run in parallel in case of an automatic rebuild for selfhealing purpose. This is also the default number of rebuilder processes for operator rebuild commands.
+This parameter provides an optional mount option that should be supported by the lowlevel file system.
 .SS mkdir_ok_instead_of_eexist
 When set to True this parameter makes the export respond OK instead of EEXIST on a directory creation while the directory already exist. 
 This enables concurrent processes to all execute mkdir at the same time without getting any error. 
@@ -130,24 +134,125 @@ This enables concurrent processes to all execute mkdir at the same time without 
 When set to True this parameter makes the export respond OK instead of EEXIST on a file creation while the file already exist. 
 This enables concurrent processes to all execute mkdir at the same time without getting any error. 
 .B Be aware that this will prevent some application to make use of mknod to simulate a lock between nodes.
+.SS ssh_user
+This parameter tells what user name to use between storage and export for ssh or scp when different from root. 
+.SS ssh_port
+This parameter tells what port to use between storage and export for ssh or scp when different from 22. 
+.SS ssh_param
+This parameter gives extra options to be used by ssh or scp ( -i <keypath> for instance). 
 .SS client_fast_reconnect
 When set to True, the rozofsmount updates some of its timers in order to reconnect to the exportd as fast as possible.
+.SS disable_sync_attributes
+When set to True it disables synchonous write of the attributes.
+.SS device_selfhealing_mode
+This parameter is a string that can take the following values:
+.RS
+-
+.B
+""
+.RS
+No automatic device rebuild can take place.
+.RE
+-
+.B spareOnly
+.RS
+Failed devices are automatically rebuilt on a spare disk when one is available.
+.B
+device_automount
+must be True for auto rebuild to take place on spare device.
+A spare device is an unmounted but formatted ext4/xfs disk with a "rorofs_spare" mark file at its root. 
+A logical storage (cid/sid) can use a given spare device if the "rozofs_spare" mark file content fits with its spare-mark parameter defined in storage.conf. 
+.RE
+-
+.B "relocate"
+.RS
+Identical to 
+.B
+"spareOnly" 
+while some spare device is available. When no more spare device is available, files of failed devices are automatically relocated on remaining devices of the same sid.
+.RE
+.RE
+
+For self-healing to be active, the 
+.B export_hosts 
+parameter must be configured too.
+
+when self-healing is set, the following configuration parameters become effective.
+.TP 
+.SS device_selfhealing_delay
+Gives the delay in minutes that a failure must last before starting an automatic rebuild of a failed device. The lowest possible value is 1.  
+.TP
+.SS device_self_healing_process
+This parameter sets the number of rebuilding processes that will be launched in parallel in case of an automatic rebuild for self-healing purpose. This is also the default number of rebuilding processes for operator rebuild commands.
+.TP
+.SS export_hosts 
+This parameter is needed for automatic rebuilds to take place. 
+It gives the list of addresses (or dns names) where exportd daemon is running.
+When securing the exportd thanks to virtual IP address, only the virtual IP address is declared (i.e "192.168.10.1"). 
+When no virtual IP address is used, the list of "physical" IP addresses of each host securing the exportd must be given (i.e "192.168.10.1/192.168.20.1").
+.TP
+.SS device_selfhealing_read_throughput
+This parameter provides the maximum bandwidth in MB/s that a single rebuild process can take. 
+.SS spare_restore_enable
+Set to False to disable spare file restoring. Default value is True, which enables the spare file restoring feature. This feature tries to relocate data saved in spare files to the nominal location.
+This feature also requires 
+.B export_hosts 
+parameter to be set.
+when spare file restoring is active, the following configuration parameters become effective.
+.TP 
+.SS spare_restore_loop_delay
+This parameter gives in minutes the delay between two spare file restoring attempts.
+.TP 
+.SS spare_restore_read_throughput
+This parameter is the maximum network/disk bandwidth that the spare file restoring process will take to run.  
 .SH EXAMPLE
 .PP
 .nf
 .ta +3i
 # sample RozoFS common configuration file
-numa_aware           = True; 
+
+#
+# Collocalize when possible
+#
+numa_aware           = True;
+
+#
+# Round robin gices the better performance
+#
+file_distribution_rule = 2;
+
+#
+# Delete a maximum of 32 files every 2 seconds 
+#
 trashed_file_per_run = 32;
 
+#
+# Do not keep more than 1 core file module
+#
 nb_core_file         = 1;
-core_file_directory  = "/root/rozofs/cores";
 
-storio_multiple_mode = True;
-nb_disk_threads      = 4;
+#
+# Need more disk threads
+#
+nb_disk_threads      = 8;
+
+#
+# CRC32 enabling
+#
 crc32c_check         = True;
 crc32c_generate      = True;
 crc32c_hw_forced     = True;
+
+device_automount            = True;
+
+#
+# Very slow self healing : 2 processes to read 15MB/s each
+#
+device_selfhealing_mode            = "spareOnly";
+device_selfhealing_delay           = 10;
+device_self_healing_process        = 2;
+device_selfhealing_read_throughput = 15;
+export_hosts                       = "192.168.10.1/192.168.10.2";
 
 
 .SH FILES

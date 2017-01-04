@@ -176,18 +176,29 @@ extern uint32_t                export_profiler_eid;
 */    
 static inline int export_profiler_allocate(int eid) {
 
+  void *p = NULL;
+  char path[256];
+  
   if (eid>EXPGW_EXPORTD_MAX_IDX) return -1;
   
   if (export_profiler[eid] != NULL) {
-    free(export_profiler[eid]);
-    export_profiler[eid] = NULL;
+     return 0;
   }
-  
+  if (eid != 0)
+  {
+    sprintf(path,"%s/export/eid_%d/",ROZOFS_KPI_ROOT_PATH,eid);
+    p = rozofs_kpi_map(path,"profiler",sizeof(export_one_profiler_t),NULL);
+  }
+  if (p != NULL)
+  {
+    export_profiler[eid] =p;
+    return 0;  
+  }
   export_profiler[eid] = malloc(sizeof(export_one_profiler_t));
   if (export_profiler[eid] == NULL) {
     return -1;	    
   }
-  memset(export_profiler[eid],0,sizeof(export_one_profiler_t));
+  memset(export_profiler[eid],0,sizeof(export_one_profiler_t));  
   return 0;
 }  
 /*
@@ -217,6 +228,8 @@ static inline void export_profiler_reset_all() {
     }    
   }
 }   
+
+#if 0
 /*
 *________________________________________________
 * Free allocated memory for export profiler statistics
@@ -232,6 +245,7 @@ static inline void export_profiler_free(int eid) {
     export_profiler[eid] = NULL;
   }
 } 
+#endif
 #ifdef __cplusplus
 }
 #endif

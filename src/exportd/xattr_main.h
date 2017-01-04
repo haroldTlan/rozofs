@@ -52,4 +52,42 @@ rozofs_setxattr(struct dentry *dentry, const char *name, const void *value, size
 int
 rozofs_removexattr(struct dentry *dentry, const char *name);
 
+/*
+ * Find the handler for the prefix and dispatch its get() operation.
+   Caution: the allocated buffer used for storing the extended attributes is not released by this function
+ */
+ssize_t
+rozofs_getxattr_raw(struct dentry *dentry, const char *name, void *buffer, size_t size);
+
+/*
+**_____________________________________________________________________________
+*/
+/**
+*  Get the block that contains an extended attribute in raw mode
+
+   @param inode 
+   @param buffer : buffer for storing extended attriute value
+   @param buffer_size : size of the buffer
+   
+   @retval >=0 size on success
+   @retval < 0 on error
+*/
+int
+ext4_xattr_block_get_raw(lv2_entry_t *inode,void *buffer, u_int *buffer_size);
+/*
+**_____________________________________________________________________________
+*/
+/**
+*  Get  all the extended attributes from the root inode
+
+   @param inode 
+   @param buffer : buffer for storing extended attributes
+   @param buffer_size : size of the buffer
+   
+   @retval >=0 size on success
+   @retval < 0 on error
+*/
+int
+ext4_xattr_ibody_get_raw(lv2_entry_t *inode,void *buffer, u_int *buffer_size);
+
 #endif

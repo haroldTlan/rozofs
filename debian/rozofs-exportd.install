@@ -5,10 +5,11 @@
 /usr/bin/rozo_repquota
 /usr/bin/rozo_fid2pathname
 /usr/bin/rozo_clusterstats
+/usr/bin/rozo_rebalance
 /usr/bin/rozo_buildfid_list
 /usr/bin/rozo_rbsList
 /usr/bin/rozo_geoRepList
-/usr/bin/rozo_geoReplicationReinitialize.sh
+/usr/bin/rozo_geoReplicationReinitialize
 /etc/rozofs/export.conf
 /usr/share/man/man5/export.conf.5
 /usr/share/man/man7/rozofs.7
@@ -17,4 +18,5 @@
 /usr/share/man/man8/rozo_warnquota.8
 /usr/share/man/man8/rozo_setquota.8
 /usr/share/man/man8/rozo_repquota.8
+/usr/share/man/man8/rozo_rebalance.8
 contrib/heartbeat/* /usr/lib/ocf/resource.d/heartbeat/

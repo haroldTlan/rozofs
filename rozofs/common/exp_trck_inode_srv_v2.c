@@ -30,33 +30,13 @@
 #include <malloc.h>
 #include "export_track_change.h"
 
-#define EXP_TRK_FREE(p)  exp_trk_free((uint64_t*)p,__LINE__);
-#define EXP_TRK_MALLOC(length)  exp_trk_malloc((int)length,__LINE__);
-
 
 //static char pathname[1024];
-uint64_t exp_trk_malloc_size;
+int64_t exp_trk_malloc_size;
 int open_count;
 int close_count;
 #define CLOSE_CONTROL(val) /*{ if(close_count >= open_count) {printf("bad_close %d\n",val);} else {close_count++;}};*/
 
-
-static inline void exp_trk_free(uint64_t *p, int line) {
-    uint64_t size;
-    p -= 1;
-    size = *p;
-    exp_trk_malloc_size -= size;
-    free(p);
-}
-static inline void *exp_trk_malloc(int size, int line) {
-    uint64_t *p;
-
-    p = memalign(32,size + 8);
-    if (p == NULL )
-        printf("Out of memory at line %d\n", line);
-    exp_trk_malloc_size += (uint64_t) size;
-    return p + 1;
-}
 
 /*
 **__________________________________________________________________
@@ -919,6 +899,7 @@ int exp_metadata_release_inode(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *
     @param attr_sz: size of the attributes
     @param max_attr_sz: size of the attributes on disk (must be greater or equal to attr_sz)
     @param read: assert to 1 for reading
+    @param sync: whether to force sync on disk of attributes
 
     
     @retval 0 on success
@@ -926,7 +907,7 @@ int exp_metadata_release_inode(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *
     
 */
 int fdl_access_count=10;
-int exp_trck_rw_attributes(char *root_path,rozofs_inode_t *inode,void *attr_p,int attr_sz,int max_attr_sz,int read)
+int exp_trck_rw_attributes(char *root_path,rozofs_inode_t *inode,void *attr_p,int attr_sz,int max_attr_sz,int read, int sync)
 {
    int fd = -1;
    ssize_t count;
@@ -973,7 +954,16 @@ int exp_trck_rw_attributes(char *root_path,rozofs_inode_t *inode,void *attr_p,in
    */
    off_t attr_offset = real_idx*max_attr_sz+sizeof(exp_trck_file_header_t);
    if (read) count = pread(fd,attr_p,attr_sz, attr_offset);
-   else count = pwrite(fd,attr_p,attr_sz, attr_offset);		         
+   else {
+     count = pwrite(fd,attr_p,attr_sz, attr_offset);
+     /*
+     ** sync data on disk immeditely if requested 
+     ** and allowed
+     */
+     if ((sync) && (!common_config.disable_sync_attributes)){
+       fdatasync(fd);
+     } 
+   }	         
    if (count != attr_sz)
    {
      CLOSE_CONTROL(__LINE__);
@@ -996,13 +986,14 @@ int exp_trck_rw_attributes(char *root_path,rozofs_inode_t *inode,void *attr_p,in
     @param inode: address of the inode
     @param attr_p: pointer to the attribute array
     @param attr_sz: size of the attributes
+    @param sync: whether to force sync on disk of attributes
 
     
     @retval 0 on success
     @retval -1 on error
     
 */
-int exp_metadata_write_attributes(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,void *attr_p,int attr_sz)
+int exp_metadata_write_attributes(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,void *attr_p,int attr_sz, int sync)
 {
    exp_trck_header_memory_t  *main_trck_p;
 
@@ -1021,9 +1012,9 @@ int exp_metadata_write_attributes(exp_trck_top_header_t *top_hdr_p,rozofs_inode_
    /*
    ** take care of the tracking
    */
-   expt_set_bit(top_hdr_p->trck_inode_p,inode->s.usr_id,inode->s.file_id);
+//   expt_set_bit(top_hdr_p->trck_inode_p,inode->s.usr_id,inode->s.file_id);
    
-   return exp_trck_rw_attributes(main_trck_p->root_path,inode,attr_p,attr_sz,main_trck_p->max_attributes_sz,0);
+   return exp_trck_rw_attributes(main_trck_p->root_path,inode,attr_p,attr_sz,main_trck_p->max_attributes_sz,0,sync);
 }
 
 
@@ -1038,13 +1029,14 @@ int exp_metadata_write_attributes(exp_trck_top_header_t *top_hdr_p,rozofs_inode_
     @param inode: address of the inode
     @param attr_p: pointer to the attribute array
     @param attr_sz: size of the attributes
+    @param sync: whether to force sync on disk of attributes
 
     
     @retval 0 on success
     @retval -1 on error
     
 */
-int exp_metadata_create_attributes_burst(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,void *attr_p,int attr_sz)
+int exp_metadata_create_attributes_burst(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t *inode,void *attr_p,int attr_sz, int sync)
 {
    exp_trck_header_memory_t  *main_trck_p;
    int fd = -1;
@@ -1061,7 +1053,7 @@ int exp_metadata_create_attributes_burst(exp_trck_top_header_t *top_hdr_p,rozofs
    /*
    ** take care of the tracking
    */
-   expt_set_bit(top_hdr_p->trck_inode_p,inode->s.usr_id,inode->s.file_id);
+//   expt_set_bit(top_hdr_p->trck_inode_p,inode->s.usr_id,inode->s.file_id);
     /*
     ** build the pathname of the tracking file
     */
@@ -1099,7 +1091,7 @@ int exp_metadata_create_attributes_burst(exp_trck_top_header_t *top_hdr_p,rozofs
 
 
    
-   return exp_trck_rw_attributes(main_trck_p->root_path,inode,attr_p,attr_sz,main_trck_p->max_attributes_sz,0);
+   return exp_trck_rw_attributes(main_trck_p->root_path,inode,attr_p,attr_sz,main_trck_p->max_attributes_sz,0,sync);
 }
 
 /*
@@ -1135,7 +1127,7 @@ int exp_metadata_read_attributes(exp_trck_top_header_t *top_hdr_p,rozofs_inode_t
       errno = EFBIG;
       return -1;
    }
-   return exp_trck_rw_attributes(main_trck_p->root_path,inode,attr_p,attr_sz,main_trck_p->max_attributes_sz,1);
+   return exp_trck_rw_attributes(main_trck_p->root_path,inode,attr_p,attr_sz,main_trck_p->max_attributes_sz,1,0/* No sync*/);
 }
 
 /*
@@ -1478,7 +1470,6 @@ int exp_trck_top_add_user_id(exp_trck_top_header_t *top_hdr_p,int user_id)
 exp_trck_top_header_t *exp_trck_top_allocate(char *name,char *root_path,uint16_t max_attributes_sz,int create_flag)
 {
    exp_trck_top_header_t *top_hdr_p;
-   char full_path[1024];
    
    top_hdr_p = EXP_TRK_MALLOC(sizeof(exp_trck_top_header_t));
    if (top_hdr_p == NULL)
@@ -1493,11 +1484,17 @@ exp_trck_top_header_t *exp_trck_top_allocate(char *name,char *root_path,uint16_t
    strcpy(top_hdr_p->root_path,root_path);
    top_hdr_p->max_attributes_sz = max_attributes_sz;
    top_hdr_p->create_flag = create_flag;
-   /*
-   ** allocare a context for inode type tracking
-   */
-   sprintf(full_path,"%s/%s",root_path,name);
-   top_hdr_p->trck_inode_p = expt_alloc_context(root_path);
+   
+#if 0
+   if (create_flag)
+   {
+     /*
+     ** allocare a context for inode type tracking
+     */
+     sprintf(full_path,"%s/%s",root_path,name);
+     top_hdr_p->trck_inode_p = expt_alloc_context(root_path);
+   }
+#endif
    return top_hdr_p; 
 }
 

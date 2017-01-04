@@ -350,9 +350,91 @@ int remove_attr (char * file, int exist, int symlink) {
   }  
   return 0;
 }   
+#define MAX_XATTR_SIZE 3992
+int do_check_max_xattr(char * file, int symlink) {
+  int  ret = 0;
+  char max_attr[MAX_XATTR_SIZE+1];
+  int  i;
+  int loop;
+    
+  for (i=0; i<MAX_XATTR_SIZE; i++) {
+    max_attr[i] = ('A'+ (i%26));
+  }
+  max_attr[MAX_XATTR_SIZE] = 0;
+
+  /*
+  ** No xattr yet
+  */
+     
+  if (symlink) {
+    /* Apply on symbolic link and not the target */
+    ret = llistxattr(file,buff,BUFFER_SIZE);    
+  }
+  else {
+    ret = listxattr(file,buff,BUFFER_SIZE);
+  }  
+  
+  if (ret != 0) {
+    printf("LINE %d file %s %d %s\n",__LINE__,file,ret,strerror(errno));
+    return 1;
+  } 
+  
+  if (symlink) {
+    /* Apply on symbolic link and not the target */
+    ret = lsetxattr(file, "system.MAX", max_attr, MAX_XATTR_SIZE, XATTR_CREATE);
+  } 
+  else {         
+    ret = setxattr(file, "user.MAX", max_attr, MAX_XATTR_SIZE, XATTR_CREATE);
+  }
+  if (ret != 0) {
+    printf("LINE %d file %s %d %s\n",__LINE__,file,ret,strerror(errno));
+    return 1;
+  } 
+  
+  
+  for (loop=0; loop<4; loop++) {
+    if (symlink) {
+      /* Apply on symbolic link and not the target */
+      ret = lgetxattr(file,"system.MAX",max_attr,MAX_XATTR_SIZE);   
+      if (ret <= 0) {
+        printf("LINE %d file %s %d %s\n",__LINE__,file,ret,strerror(errno));
+        return 1;
+      } 
+    } 
+    else {   
+      ret = getxattr(file,"user.MAX",max_attr,MAX_XATTR_SIZE);
+      if (ret <= 0) {
+        printf("LINE %d file %s %d %s\n",__LINE__,file,ret,strerror(errno));
+        return 1;
+      } 
+    }  
+
+
+
+    for (i=0; i<MAX_XATTR_SIZE; i++) {
+      if (max_attr[i] != ('A'+ (i%26))){
+        printf("LINE %d file %s %d\n",__LINE__,file,i);
+        return i;    
+      }
+    }
+  }
+
+  if (symlink) {
+    /* Apply on symbolic link and not the target */
+    ret = lremovexattr(file, "system.MAX");
+  } 
+  else {
+    ret = removexattr(file, "user.MAX");
+  }  
+  if (ret < 0) {
+    printf("LINE %d file %s %d %s\n",__LINE__,file,ret,strerror(errno));
+    return 1;
+  }
+  return 0;
+}
 int do_one_test(char * file, int count) {
   int ret = 0;
-
+    
   ret += list_xattr(file,XATTR_CREATE, 0, 0 /* not on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
@@ -423,6 +505,7 @@ int do_one_test(char * file, int count) {
 int do_one_test_symlink(char * file, int count) {
   int ret = 0;
 
+  
   ret += list_xattr(file,XATTR_CREATE, 0, 1 /* apply on symlink */);
   if (ret != 0) {
     printf("LINE %d file %s\n",__LINE__,file);
@@ -505,21 +588,39 @@ int loop_test_process() {
   sprintf(symlink, "%s/test_slink_xattr.%u", mount, pid);
   sprintf(dirname, "%s/test_dir_xattr.%u", mount, pid);
   
+  unlink(filename);
   ret = mknod(filename,S_IFREG | 0700,0);
   if (ret < 0) {
     printf("proc %3d - mknod(%s) %s\n", myProcId, filename,strerror(errno));  
     return -1;       
   } 
-    
+  ret += do_check_max_xattr(filename,0);
+  if (ret != 0) {
+    printf("LINE %d file %s\n",__LINE__,filename);
+    return;
+  }    
+
+  rmdir(dirname);     
   ret = mkdir(dirname,0700); 
   if (ret < 0) {
     printf("proc %3d - mkdir(%s) %s\n", myProcId, dirname,strerror(errno));  
     return -1;       
-  }  
-  
+  } 
+  ret += do_check_max_xattr(dirname,0);
+  if (ret != 0) {
+    printf("LINE %d file %s\n",__LINE__,dirname);
+    return;
+  }   
+    
+  unlink(symlink);
   sprintf(cmd, "ln -s %s %s", filename, symlink); 
   if (system(cmd) == -1) {
       return -1;
+  }  
+  ret += do_check_max_xattr(symlink,1);
+  if (ret != 0) {
+    printf("LINE %d file %s\n",__LINE__,symlink);
+    return;
   }  
   
   while (1) {
@@ -545,9 +646,10 @@ int loop_test_process() {
       return -1;
     } 
         
-    if (loop==count) {
-      unlink(filename); 
-      rmdir(dirname);                   
+    if (loop==count) {   
+      unlink(symlink);
+      unlink(filename);                 
+      rmdir(dirname);
       return 0;
     }  
   }

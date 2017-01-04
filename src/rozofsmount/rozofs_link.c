@@ -191,6 +191,7 @@ void rozofs_ll_link_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -287,7 +288,7 @@ void rozofs_ll_link_cbk(void *this,void *param)
       pie->timestamp = rozofs_get_ticker_us();
     }   
     
-    fep.attr_timeout = rozofs_tmr_get_attr();
+    fep.attr_timeout = rozofs_tmr_get_attr(0);
     /*
     Don't keep entry in cache (just for pjdtest)
     see: http://sourceforge.net/mailarchive/message.php?msg_id=28704462
@@ -481,6 +482,7 @@ void rozofs_ll_readlink_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -723,6 +725,7 @@ void rozofs_ll_symlink_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -832,8 +835,8 @@ void rozofs_ll_symlink_cbk(void *this,void *param)
       pie->timestamp = time_us;
     }  
         
-    fep.attr_timeout = rozofs_tmr_get_attr();
-    fep.entry_timeout = rozofs_tmr_get_entry();
+    fep.attr_timeout = rozofs_tmr_get_attr(0);
+    fep.entry_timeout = rozofs_tmr_get_entry(0);
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
     nie->nlookup++;
     fuse_reply_entry(req, &fep);
@@ -1018,6 +1021,7 @@ void rozofs_ll_unlink_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part

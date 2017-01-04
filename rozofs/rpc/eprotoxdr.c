@@ -167,7 +167,7 @@ xdr_ep_status_ret_t (XDR *xdrs, ep_status_ret_t *objp)
 		 return FALSE;
 	switch (objp->status) {
 	case EP_FAILURE:
-		 if (!xdr_uint64_t (xdrs, &objp->ep_status_ret_t_u.error))
+		 if (!xdr_int (xdrs, &objp->ep_status_ret_t_u.error))
 			 return FALSE;
 		break;
 	default:
@@ -1294,6 +1294,102 @@ xdr_epgw_readdir_ret_t (XDR *xdrs, epgw_readdir_ret_t *objp)
 }
 
 bool_t
+xdr_dirlist2_nodata_t (XDR *xdrs, dirlist2_nodata_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_uint8_t (xdrs, &objp->eof))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->cookie))
+		 return FALSE;
+	 if (!xdr_uint32_t (xdrs, &objp->len))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_ep_readdir2_nodata_ret_t (XDR *xdrs, ep_readdir2_nodata_ret_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_status_t (xdrs, &objp->status))
+		 return FALSE;
+	switch (objp->status) {
+	case EP_SUCCESS:
+		 if (!xdr_dirlist2_nodata_t (xdrs, &objp->ep_readdir2_nodata_ret_t_u.reply))
+			 return FALSE;
+		break;
+	case EP_FAILURE:
+		 if (!xdr_int (xdrs, &objp->ep_readdir2_nodata_ret_t_u.error))
+			 return FALSE;
+		break;
+	default:
+		break;
+	}
+	return TRUE;
+}
+
+bool_t
+xdr_epgw_readdir2_nodata_ret_t (XDR *xdrs, epgw_readdir2_nodata_ret_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_gateway_t (xdrs, &objp->hdr))
+		 return FALSE;
+	 if (!xdr_ep_readdir2_nodata_ret_t (xdrs, &objp->status_gw))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_dirlist2_t (XDR *xdrs, dirlist2_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_uint8_t (xdrs, &objp->eof))
+		 return FALSE;
+	 if (!xdr_uint64_t (xdrs, &objp->cookie))
+		 return FALSE;
+	 if (!xdr_bytes (xdrs, (char **)&objp->value.value_val, (u_int *) &objp->value.value_len, ~0))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_ep_readdir2_ret_t (XDR *xdrs, ep_readdir2_ret_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_status_t (xdrs, &objp->status))
+		 return FALSE;
+	switch (objp->status) {
+	case EP_SUCCESS:
+		 if (!xdr_dirlist2_t (xdrs, &objp->ep_readdir2_ret_t_u.reply))
+			 return FALSE;
+		break;
+	case EP_FAILURE:
+		 if (!xdr_int (xdrs, &objp->ep_readdir2_ret_t_u.error))
+			 return FALSE;
+		break;
+	default:
+		break;
+	}
+	return TRUE;
+}
+
+bool_t
+xdr_epgw_readdir2_ret_t (XDR *xdrs, epgw_readdir2_ret_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_gateway_t (xdrs, &objp->hdr))
+		 return FALSE;
+	 if (!xdr_ep_readdir2_ret_t (xdrs, &objp->status_gw))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_ep_rename_arg_t (XDR *xdrs, ep_rename_arg_t *objp)
 {
 	//register int32_t *buf;
@@ -1632,6 +1728,52 @@ xdr_epgw_getxattr_ret_t (XDR *xdrs, epgw_getxattr_ret_t *objp)
 	 if (!xdr_ep_gateway_t (xdrs, &objp->hdr))
 		 return FALSE;
 	 if (!xdr_ep_getxattr_ret_t (xdrs, &objp->status_gw))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_ep_getxattr_raw_ret_val_t (XDR *xdrs, ep_getxattr_raw_ret_val_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_bytes (xdrs, (char **)&objp->inode_xattr.inode_xattr_val, (u_int *) &objp->inode_xattr.inode_xattr_len, ~0))
+		 return FALSE;
+	 if (!xdr_bytes (xdrs, (char **)&objp->inode_xattr_block.inode_xattr_block_val, (u_int *) &objp->inode_xattr_block.inode_xattr_block_len, ~0))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
+xdr_ep_getxattr_raw_ret_t (XDR *xdrs, ep_getxattr_raw_ret_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_status_t (xdrs, &objp->status))
+		 return FALSE;
+	switch (objp->status) {
+	case EP_SUCCESS:
+		 if (!xdr_ep_getxattr_raw_ret_val_t (xdrs, &objp->ep_getxattr_raw_ret_t_u.raw))
+			 return FALSE;
+		break;
+	case EP_FAILURE:
+		 if (!xdr_int (xdrs, &objp->ep_getxattr_raw_ret_t_u.error))
+			 return FALSE;
+		break;
+	default:
+		break;
+	}
+	return TRUE;
+}
+
+bool_t
+xdr_epgw_getxattr_raw_ret_t (XDR *xdrs, epgw_getxattr_raw_ret_t *objp)
+{
+	//register int32_t *buf;
+
+	 if (!xdr_ep_gateway_t (xdrs, &objp->hdr))
+		 return FALSE;
+	 if (!xdr_ep_getxattr_raw_ret_t (xdrs, &objp->status_gw))
 		 return FALSE;
 	return TRUE;
 }

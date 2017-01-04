@@ -651,7 +651,8 @@ class storage(rozofs_module):
   def check_devices(self):
     res = self.rozodiag("device")
     if res == None: return -1
-    
+        
+    error_list=[]	
     for line in res:
       words=line.split('|') 
       try: int(words[1])
@@ -661,11 +662,22 @@ class storage(rozofs_module):
       sid=words[2].split()[0]
       dev=words[3].split()[0]		
       free= int(words[7]) 
+      try:diag= words[15].split()[0]
+      except:diag=""
       if status != "IS" and status != "DEG":
+        error_list.append("cid%s/sid%s"%(cid,sid))
 	self.ERROR("Device %s of cid%s/sid%s is %s"%(dev, cid, sid, status),"device") 
         self.failed = True 
-      if free <= int(20):
-	self.WARNING("Device %s of cid%s/sid%s has only %s%s free space"%(dev, cid, sid, free,'%'),"device")         	   
+      elif diag == "REBUILD":
+	error_list.append("cid%s/sid%s"%(cid,sid))
+	self.ERROR("Device %s of cid%s/sid%s is to rebuild"%(dev, cid, sid),"device") 
+	self.failed = True                       
+      elif free <= int(20):
+	self.WARNING("Device %s of cid%s/sid%s has only %s%s free space"%(dev, cid, sid, free,'%'),"device")  
+
+    # More than 1 error per CID/SID is critical
+    for error in error_list:
+      if error_list.count(error) > 1: self.CRITICAL("Several devices failed in %s"%(error),"device")         
     return 0	
              
   def check_storaged(self):    
@@ -735,21 +747,36 @@ class storcli(rozofs_module):
     res = self.rozodiag("storaged_status")
     if res == None:
       status = False
-    else:  
+    else: 
+      error_count={}
       for line in res:
 	words=line.split()
 	if len(words) < 20:   continue
-	if words[0] == "cid": continue  
+	if words[0] == "cid": continue
 	if words[8] != "UP":
-	  self.ERROR("LBG down toward SID %s %d/%d"%(words[4],int(words[0]),int(words[2])),"storaged_status")	    
-	  status = False 
+	  self.ERROR("cid%d/sid%d unreachable on host %s"%(int(words[0]),int(words[2]),words[4]),"storaged_status")
+	  if not error_count.has_key(int(words[0])):
+            error_count[int(words[0])]=0
+	  error_count[int(words[0])]=error_count[int(words[0])] + 1
+	  status = False
           continue
 	if words[10] != "UP":
-	  status = False  	  
-	  self.ERROR("LBG down toward SID %s %d/%d"%(words[4],int(words[0]),int(words[2])),"storaged_status")	    	    
+	  status = False
+	  self.ERROR("cid%d/sid%d unreachable on host %s"%(int(words[0]),int(words[2]),words[4]),"storaged_status")
+	  if not error_count.has_key(int(words[0])):
+            error_count[int(words[0])]=0
+          error_count[int(words[0])]=error_count[int(words[0])] + 1
 	if words[12]!= "YES":
-	  sstatus = False  
-	  self.ERROR("LBG down toward SID %s %d/%d"%(words[4],int(words[0]),int(words[2])),"storaged_status")	    	    
+	  status = False
+	  self.ERROR("cid%d/sid%d unreachable on host %s"%(int(words[0]),int(words[2]),words[4]),"storaged_status")
+      	  if not error_count.has_key(int(words[0])):
+            error_count[int(words[0])]=0
+          error_count[int(words[0])]=error_count[int(words[0])] + 1
+      for error_sid_nb in error_count.values():
+        if error_sid_nb >= int(2):
+	  self.CRITICAL("Too much cid/sid unreachable","storaged_status")
+	  break
+
     return status
 
 #_______________________________________________

@@ -36,8 +36,16 @@
 #define DIRENT_ROOT_FILE_IDX_MASK ((1<<DIRENT_ROOT_FILE_IDX_SHIFT)-1)
 #define DIRENT_ROOT_FILE_IDX_MAX   (1 << DIRENT_ROOT_FILE_IDX_SHIFT)
 
+/**
+* Globals
+*/
 int fdl_debug = 0;
 int verbose_mode = 1;
+uint64_t rozo_lib_current_file_id = 0;  /**< current file in use for inode tracking            */
+int      rozo_lib_current_user_id = 0;  /**< current slice directory in use for inode tracking */
+int      rozo_lib_current_inode_idx = 0; /**< current inode index in current file             */
+
+int      rozo_lib_stop_var        = 0;        /**< assert to one for stopping the inode reading      */
 /*
 ** prototypes
 */
@@ -73,6 +81,7 @@ buf_work_t *buf_dir_save = NULL;
 buf_work_t *buf_dir_read_save = NULL;
 int count_threshold = 200000;
 
+extern export_tracking_table_t * export_tracking_table[];
 /*
 **_________________________________________________________________
 
@@ -1309,8 +1318,8 @@ int export_scan_from_dir(scan_export_intf_t *intf_p)
   /*
   ** init of dirent stuff
   */
-  dirent_cache_level0_initialize();
-  dirent_wbcache_init();
+  //dirent_cache_level0_initialize();
+  //dirent_wbcache_init();
   dirent_wbcache_disable();
   /*
   ** fill up the export structure
@@ -1781,8 +1790,8 @@ void rz_set_verbose_mode(int mode)
    
    @retval
 */
-int rz_scan_all_inodes(void *export,int type,int read,check_inode_pf_t callback_fct,void *param,
-                       check_inode_pf_t callback_trk_fct,void *param_trk)
+int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_pf_t callback_fct,void *param,
+                       check_inode_pf_t callback_trk_fct,void *param_trk,scan_index_context_t *index_ctx_p)
 {
    int ret=0;
    export_t *e;
@@ -1799,10 +1808,20 @@ int rz_scan_all_inodes(void *export,int type,int read,check_inode_pf_t callback_
    int   file_count = 0;
    uint8_t *metadata_buf_p = NULL;
    struct stat stat;
+   int start_with_context = 0;
    
+   rozo_lib_stop_var = 0;
    e = export;
    
     inode_metadata_p = e->trk_tb_p->tracking_table[type];
+    if (index_ctx_p != NULL)
+    {
+       rozo_lib_current_user_id = index_ctx_p->user_id;
+       rozo_lib_current_file_id = index_ctx_p->file_id;
+       rozo_lib_current_inode_idx = index_ctx_p->inode_idx;
+       start_with_context = 1;
+    
+    }
     /*
     ** allocate memory to store the metadata
     */
@@ -1818,16 +1837,28 @@ int rz_scan_all_inodes(void *export,int type,int read,check_inode_pf_t callback_
    /*
    ** go through  all the slices of the export
    */
-   for (user_id = 0; user_id < EXP_TRCK_MAX_USER_ID; user_id++)
+   for (user_id = rozo_lib_current_user_id; user_id < EXP_TRCK_MAX_USER_ID; user_id++,rozo_lib_current_user_id++)
    {
      inode.s.usr_id = user_id;
-     file_id = 0;
+     if (start_with_context)
+     {
+       file_id = inode_metadata_p->entry_p[user_id]->entry.first_idx;
+       if (file_id >= rozo_lib_current_file_id) rozo_lib_current_file_id = file_id;
+       else file_id = rozo_lib_current_file_id;
+       start_with_context = 0;
+        
+     }
+     else
+     {
+       file_id = inode_metadata_p->entry_p[user_id]->entry.first_idx;
+       rozo_lib_current_file_id = file_id;
+       rozo_lib_current_inode_idx = 0;
+     }
      /*
      ** get the information related to the main tracking file: that file contains the
      ** first and last attribute file indexes
      */     
-     for (file_id = inode_metadata_p->entry_p[user_id]->entry.first_idx;
-          file_id <= inode_metadata_p->entry_p[user_id]->entry.last_idx;file_id++)
+     for (;file_id <= inode_metadata_p->entry_p[user_id]->entry.last_idx;file_id++,rozo_lib_current_file_id++)
      {
 
 //         printf("user_id %d file_id %d \n",user_id,file_id);
@@ -1872,10 +1903,12 @@ int rz_scan_all_inodes(void *export,int type,int read,check_inode_pf_t callback_
 	 inode.s.file_id = file_id;
 	 if (read)
 	 {
-	   for (i = 0; i < EXP_TRCK_MAX_INODE_PER_FILE; i++)
+	   for (i = rozo_lib_current_inode_idx; i < EXP_TRCK_MAX_INODE_PER_FILE; i++)
 	   {
               inode.s.idx = i;
 	      inode.s.key = type;
+	      rozo_lib_current_inode_idx = i+1;
+
 	      if (tracking_buffer.inode_idx_table[i] == 0xffff) continue;
 	      ret = exp_trck_read_attributes_from_buffer((char*)metadata_buf_p,tracking_buffer.inode_idx_table[i],&ext_attr,sizeof(ext_attr));
 	      if (ret < 0)
@@ -1914,17 +1947,22 @@ int rz_scan_all_inodes(void *export,int type,int read,check_inode_pf_t callback_
 		  // sprintf(bufall,"%s/%s\n",parent_name,get_fname(e,child_name,&ext_attr.s.fname,ext_attr.s.pfid));
                   // printf("%s",bufall);
 		 }
+		 /*
+		 ** Check if you should stop the scanning of the inode
+		 */
+		 if (rozo_lib_stop_var) goto out;
 	      }
 	      else
 	      {
 	         match = 1;
 	      }
-	   }
+	   }	   
+	   rozo_lib_current_inode_idx = 0;
 	 }
-
      }   
    }
 //   printf("type %d\n",type);
+out:
    if (verbose_mode)
    {
       perf_stop(&stop);
@@ -1941,6 +1979,35 @@ int rz_scan_all_inodes(void *export,int type,int read,check_inode_pf_t callback_
    return ret;
 
 }
+/*
+**_______________________________________________________________________________
+*/
+/**
+*  scan of the inode of a given type:
+   
+   @param export: pointer to the export context
+   @param type: type of the inode to search for
+   @param read : assert to one if inode attributes must be read
+   @param callback_fct : optional callback function, NULL if none
+   @param fd : file descriptor if output must be flushed in a file, -1 otherwise
+   @param callback_trk_fct : optional callback function associated with the tracking file, NULL if none
+   
+   @retval
+*/
+int rz_scan_all_inodes(void *export,int type,int read,check_inode_pf_t callback_fct,void *param,
+                       check_inode_pf_t callback_trk_fct,void *param_trk)
+{
+
+   rozo_lib_current_file_id = 0;
+   rozo_lib_current_user_id = 0;
+   rozo_lib_current_inode_idx = 0;
+   return  rz_scan_all_inodes_from_context(export,type,read,callback_fct,param,
+                       callback_trk_fct,param_trk,NULL);
+
+}	
+/*
+**_______________________________________________________________________________
+*/
 /**
 *  API to get the pathname of the objet: @rozofs_uuid@<FID_parent>/<child_name>
 
@@ -1982,6 +2049,7 @@ char *rozo_get_parent_child_path(void *exportd,void *inode_p,char *buf)
       get_fname(e,&buf[offset+1],&inode_attr_p->s.fname,inode_attr_p->s.pfid);
     return buf;
 }
+	       
  /*
  **___________________________________________________________________________
  **
@@ -2026,8 +2094,8 @@ void *rz_inode_lib_init(char *root_path)
   /*
   ** init of dirent stuff
   */
-  dirent_cache_level0_initialize();
-  dirent_wbcache_init();
+//  dirent_cache_level0_initialize();
+//  dirent_wbcache_init();
   dirent_wbcache_disable();
   /*
   ** fill up the export structure
@@ -2062,6 +2130,12 @@ void *rz_inode_lib_init(char *root_path)
   ** create the tracking context
   */
   sprintf(root_export_host_id,"%s/host%d",root_path,rozofs_get_export_host_id());
+#warning Workaround for scaning several exports 
+  if (export_tracking_table[0]!= NULL) {
+    free(export_tracking_table[0]);
+    export_tracking_table[0] = NULL;
+  }
+  
   fake_export_p->trk_tb_p = exp_create_attributes_tracking_context(fake_export_p->eid,root_export_host_id,0);
   if (fake_export_p->trk_tb_p == NULL)
   {
@@ -2126,4 +2200,60 @@ void rozofs_get_file_distribution(void *inode_p,rozofs_file_distribution_t *p)
    {
      p->sids[i] = inode_attr_p->s.attrs.sids[i];
    }
+}
+
+
+/*
+**__________________________________________________
+*/
+/**
+   Release the memory allocated to deal with an exportd
+   
+   @param none
+   
+   @retval 0 on success
+   @retval < 0 on error
+*
+*/
+int rozo_lib_export_release()
+{
+   int i,k;   
+   export_tracking_table_t *trk_tb_p;
+   exp_trck_top_header_t *tracking_table_p;
+   exp_trck_header_memory_t *entry_p;
+   
+   if (fake_export_p == NULL) return 0;
+   trk_tb_p = fake_export_p->trk_tb_p;
+   if ( fake_export_p->trk_tb_p == NULL)return 0;
+   
+   
+   for (i=0; i < ROZOFS_MAXATTR; i++)
+   {
+      tracking_table_p = trk_tb_p->tracking_table[i];
+      if (tracking_table_p == NULL) continue;
+      trk_tb_p->tracking_table[i] = NULL;
+      for (k= 0; k < EXP_TRCK_MAX_USER_ID;k++)
+      {
+        entry_p = tracking_table_p->entry_p[k];
+        if (entry_p == NULL) continue;
+	if (entry_p->tracking_file_hdr_p != NULL) EXP_TRK_FREE(entry_p->tracking_file_hdr_p);
+	EXP_TRK_FREE(entry_p);
+      }
+      if (tracking_table_p->trck_inode_p != NULL) free(tracking_table_p->trck_inode_p);
+      EXP_TRK_FREE(tracking_table_p);
+   }
+
+   /*
+   ** free the fake exportd
+   */
+   free(fake_export_p);
+   fake_export_p = NULL;
+   /*
+   ** free the tracking table
+   */   
+   if (export_tracking_table[0]!= NULL) {
+    free(export_tracking_table[0]);
+    export_tracking_table[0] = NULL;
+  }
+   return 0;	
 }

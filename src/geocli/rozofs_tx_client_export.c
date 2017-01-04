@@ -115,6 +115,7 @@ int rozofs_export_send_common(exportclt_t * clt,uint32_t timeout_sec,uint32_t pr
     ** create the xdr_mem structure for encoding the message
     */
     bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
     /*
     ** fill in the rpc header
@@ -301,6 +302,7 @@ int rozofs_storcli_send_common(exportclt_t * clt,uint32_t timeout_sec,uint32_t p
     ** create the xdr_mem structure for encoding the message
     */
     bufsize = ruc_buf_getMaxPayloadLen(xmit_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
     /*
     ** fill in the rpc header

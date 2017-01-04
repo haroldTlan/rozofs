@@ -65,8 +65,21 @@ add_executable(rozofsmount
     fuse_reply_thread.c
     rozofs_kpi.c
     rozofs_kpi.h
-    rozofs_acl.c
-    rozofs_acl.h
+#    rozofs_acl.c
+#    rozofs_acl.h
+    
+   xattr_acl.c
+   xattr_main.c
+   xattr_nocache.c
+   xattr_security.c
+   xattr_stub.c
+   xattr_system.c
+   xattr_trusted.c
+   xattr_user.c
+   rozofs_ext4.h
+   xattr.h
+   xattr_main.h
+   rozofs_opendir.c
 )
 #pthread need by fuse
 target_link_libraries(rozofsmount rozofs ${PTHREAD_LIBRARY} ${FUSE_LIBRARY} ${UUID_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
@@ -82,7 +95,8 @@ install(TARGETS rozofsmount
 # Create symbolic link /sbin/mount.rozofs -> /sbin/mount.fuse (mount.rozofs command)
 install(CODE "MESSAGE(\"Create symbolic link /sbin/mount.rozofs -> /sbin/mount.fuse\")")
 install(CODE "EXECUTE_PROCESS (COMMAND ln -sf /sbin/mount.fuse /sbin/mount.rozofs)" COMPONENT client)
-install(PROGRAMS rozo_clusterstats.sh DESTINATION bin)
-install(PROGRAMS rozo_repquota.sh DESTINATION bin)
-install(PROGRAMS rozo_distributionCheck.py DESTINATION bin)
-install(PROGRAMS rozo_mount_cleanup.sh DESTINATION bin)
+install(PROGRAMS rozo_mount_clusterstats DESTINATION bin)
+install(PROGRAMS rozo_mount_repquota DESTINATION bin)
+install(PROGRAMS rozo_distribution_check DESTINATION bin)
+install(PROGRAMS rozo_mount_cleanup DESTINATION bin)
+install(PROGRAMS rozofsmount_wrapper DESTINATION bin)

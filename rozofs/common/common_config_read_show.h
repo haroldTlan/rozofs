@@ -28,26 +28,24 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <sys/types.h>
-/*____________________________________________________________________________________________*/
-static inline void common_config_generated_show(char * argv[], uint32_t tcpRef, void *bufRef) {
-char *pChar = uma_dbg_get_buffer();
+/*____________________________________________________________________________________________
+**
+** common config man function
+**
+*/
+void man_common_config(char * pChar) {
+  pChar += rozofs_string_append(pChar,"cconf is related to the common configuration in rozofs.conf file.\n");
+  pChar += rozofs_string_append(pChar,"cconf            displays the whole rozofs.conf configuration.\n");
+  pChar += rozofs_string_append(pChar,"cconf <scope>    displays only the rozofs.conf <scope> configuration part.\n");
+  pChar += rozofs_string_append(pChar,"cconf reload     reloads and then displays the rozofs.conf configuration.\n");
+}
+/*____________________________________________________________________________________________
+**
+** global scope configuration elements
+**
+*/
+char * show_module_global(char * pChar) {
 
-  if (argv[1] != NULL) {
-    if (strcmp(argv[1],"reload")==0) {
-      common_config_read(NULL);
-    }
-  }
- 
-  if (config_file_is_read==0) {
-    pChar += rozofs_string_append(pChar,"Can not read configuration file ");
-  }
-  pChar += rozofs_string_append(pChar,config_file_name);
-  pChar += rozofs_eol(pChar);
-  pChar += rozofs_eol(pChar);
-
-  /*
-  ** global scope configuration elements
-  */
   pChar += rozofs_string_append(pChar,"#\n");
   pChar += rozofs_string_append(pChar,"# global scope configuration elements\n");
   pChar += rozofs_string_append(pChar,"#\n\n");
@@ -71,10 +69,15 @@ char *pChar = uma_dbg_get_buffer();
   COMMON_CONFIG_SHOW_INT_OPT(storio_dscp,46,"0:46");
   pChar += rozofs_string_append(pChar,"// DSCP for exchanges from/to the EXPORTD.\n");
   COMMON_CONFIG_SHOW_INT_OPT(export_dscp,34,"0:34");
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** export scope configuration elements
+**
+*/
+char * show_module_export(char * pChar) {
 
-  /*
-  ** export scope configuration elements
-  */
   pChar += rozofs_string_append(pChar,"#\n");
   pChar += rozofs_string_append(pChar,"# export scope configuration elements\n");
   pChar += rozofs_string_append(pChar,"#\n\n");
@@ -106,12 +109,21 @@ char *pChar = uma_dbg_get_buffer();
   pChar += rozofs_string_append(pChar,"// when the directory is already created \n");
   COMMON_CONFIG_SHOW_BOOL(mkdir_ok_instead_of_eexist,False);
   pChar += rozofs_string_append(pChar,"// To activate workaround that make mknod respond OK instead of EEXIST\n");
-  pChar += rozofs_string_append(pChar,"// when the file is already created \n");
+  pChar += rozofs_string_append(pChar,"// when the file is already created  \n");
   COMMON_CONFIG_SHOW_BOOL(mknod_ok_instead_of_eexist,False);
+  pChar += rozofs_string_append(pChar,"// To disable synchronous write of attributes when set to True\n");
+  COMMON_CONFIG_SHOW_BOOL(disable_sync_attributes,False);
+  pChar += rozofs_string_append(pChar,"// Minimum delay between the deletion request and the effective projections deletion\n");
+  COMMON_CONFIG_SHOW_INT(deletion_delay,0);
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** client scope configuration elements
+**
+*/
+char * show_module_client(char * pChar) {
 
-  /*
-  ** client scope configuration elements
-  */
   pChar += rozofs_string_append(pChar,"#\n");
   pChar += rozofs_string_append(pChar,"# client scope configuration elements\n");
   pChar += rozofs_string_append(pChar,"#\n\n");
@@ -121,15 +133,32 @@ char *pChar = uma_dbg_get_buffer();
   COMMON_CONFIG_SHOW_BOOL(rozofsmount_fuse_reply_thread,False);
   pChar += rozofs_string_append(pChar,"// To activate fast reconnect from client to exportd\n");
   COMMON_CONFIG_SHOW_BOOL(client_fast_reconnect,False);
+  pChar += rozofs_string_append(pChar,"// delay is minutes after which a file is considered as an archived file (unit is minute)\n");
+  COMMON_CONFIG_SHOW_INT_OPT(archive_file_delay,10,"0:3600");
+  pChar += rozofs_string_append(pChar,"// dentry cache timeout for archive file type (unit is second)\n");
+  COMMON_CONFIG_SHOW_INT_OPT(archive_file_dentry_timeout,30,"0:300");
+  pChar += rozofs_string_append(pChar,"// attribute cache timeout for archive file type (unit is second)\n");
+  COMMON_CONFIG_SHOW_INT_OPT(archive_file_attr_timeout,30,"0:300");
+  pChar += rozofs_string_append(pChar,"// When that flag is asserted, the rozofsmount client can cache the extended attributes\n");
+  COMMON_CONFIG_SHOW_BOOL(client_xattr_cache,False);
+  pChar += rozofs_string_append(pChar,"// When that flag is asserted, the rozofsmount client performs setattr in asynchronous mode\n");
+  COMMON_CONFIG_SHOW_BOOL(async_setattr,False);
+  pChar += rozofs_string_append(pChar,"// statfs period in seconds. minimum is 0.\n");
+  COMMON_CONFIG_SHOW_INT(statfs_period,10);
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** storage scope configuration elements
+**
+*/
+char * show_module_storage(char * pChar) {
 
-  /*
-  ** storage scope configuration elements
-  */
   pChar += rozofs_string_append(pChar,"#\n");
   pChar += rozofs_string_append(pChar,"# storage scope configuration elements\n");
   pChar += rozofs_string_append(pChar,"#\n\n");
   pChar += rozofs_string_append(pChar,"// Number of disk threads in the STORIO.\n");
-  COMMON_CONFIG_SHOW_INT_OPT(nb_disk_thread,4,"2:32");
+  COMMON_CONFIG_SHOW_INT_OPT(nb_disk_thread,4,"2:64");
   pChar += rozofs_string_append(pChar,"// Whether STORIO is in multiple (1 STORIO per cluster) \n");
   pChar += rozofs_string_append(pChar,"// or single mode (only 1 STORIO).\n");
   COMMON_CONFIG_SHOW_BOOL(storio_multiple_mode,True);
@@ -162,21 +191,98 @@ char *pChar = uma_dbg_get_buffer();
   COMMON_CONFIG_SHOW_STRING(device_automount_path,"/srv/rozofs/storages");
   pChar += rozofs_string_append(pChar,"// Device mounting options\n");
   COMMON_CONFIG_SHOW_STRING(device_automount_option,"");
-  pChar += rozofs_string_append(pChar,"// Paralellism factor for device self healing feature\n");
-  COMMON_CONFIG_SHOW_INT_OPT(device_self_healing_process,8,"1:64");
   pChar += rozofs_string_append(pChar,"// Directory to use on the storage node to build temporary files.\n");
   pChar += rozofs_string_append(pChar,"// Used for instance by the rebuild process.\n");
   COMMON_CONFIG_SHOW_STRING(storage_temporary_dir,"/tmp");
+  pChar += rozofs_string_append(pChar,"// Port to be used for ssh or scp \n");
+  COMMON_CONFIG_SHOW_INT(ssh_port,0);
+  pChar += rozofs_string_append(pChar,"// User name to be used for ssh or scp \n");
+  COMMON_CONFIG_SHOW_STRING(ssh_user,"root");
+  pChar += rozofs_string_append(pChar,"// Other ssh/scp parameter (such as key location) \n");
+  COMMON_CONFIG_SHOW_STRING(ssh_param,"");
+  pChar += rozofs_string_append(pChar,"// self healing : Paralellism factor for device self healing feature\n");
+  pChar += rozofs_string_append(pChar,"// i.e the number of process to run rebuild in //\n");
+  COMMON_CONFIG_SHOW_INT_OPT(device_self_healing_process,8,"1:64");
+  pChar += rozofs_string_append(pChar,"// self healing : Fault duration in minutes before device selfhealing starts\n");
+  COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_delay,15,"0:10000");
+  pChar += rozofs_string_append(pChar,"// self healing :  throughput limitation in MB/s per rebuild process in //\n");
+  pChar += rozofs_string_append(pChar,"// for reading external projections. The writing on disk is only\n");
+  pChar += rozofs_string_append(pChar,"// 1/2 of that in layout 0, 1/4 in layout 1...\n");
+  pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
+  COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_read_throughput,20,"0:10000");
+  pChar += rozofs_string_append(pChar,"// self healing : possible modes\n");
+  pChar += rozofs_string_append(pChar,"// spareOnly  only self repair on a spare disk\n");
+  pChar += rozofs_string_append(pChar,"// relocate   also repair on remaining disks when no spare available\n");
+  COMMON_CONFIG_SHOW_STRING(device_selfhealing_mode,"spareOnly");
+  pChar += rozofs_string_append(pChar,"// Export host names or IP addresses separated with / \n");
+  pChar += rozofs_string_append(pChar,"// Required for selfhealing.\n");
+  pChar += rozofs_string_append(pChar,"// Required for spare file restoring to its nominal location.\n");
+  COMMON_CONFIG_SHOW_STRING(export_hosts,"");
+  pChar += rozofs_string_append(pChar,"// Spare file restoring : whether the service is active or not\n");
+  COMMON_CONFIG_SHOW_BOOL(spare_restore_enable,True);
+  pChar += rozofs_string_append(pChar,"// Spare file restoring : how often the process runs  \n");
+  COMMON_CONFIG_SHOW_INT(spare_restore_loop_delay,120);
+  pChar += rozofs_string_append(pChar,"// Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s\n");
+  pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
+  COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,5);
+  return pChar;
+}
+/*____________________________________________________________________________________________
+**
+** common config diagnostic function
+**
+*/
+void common_config_generated_show(char * argv[], uint32_t tcpRef, void *bufRef) {
+char *pChar = uma_dbg_get_buffer();
+
+  if (argv[1] != NULL) {
+    if (strcmp(argv[1],"reload")==0) {
+      common_config_read(NULL);
+    }
+    else {
+      if (strcmp("global",argv[1])==0) {
+        pChar = show_module_global(pChar);
+      }
+      else if (strcmp("export",argv[1])==0) {
+        pChar = show_module_export(pChar);
+      }
+      else if (strcmp("client",argv[1])==0) {
+        pChar = show_module_client(pChar);
+      }
+      else if (strcmp("storage",argv[1])==0) {
+        pChar = show_module_storage(pChar);
+      }
+      else {
+        pChar += rozofs_string_append(pChar, "Unexpected configuration scope\n");
+      }
+      uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+      return;
+    }
+  }
+ 
+  if (config_file_is_read==0) {
+    pChar += rozofs_string_append(pChar,"Can not read configuration file ");
+  }
+  pChar += rozofs_string_append(pChar,config_file_name);
+  pChar += rozofs_eol(pChar);
+  pChar += rozofs_eol(pChar);
+  pChar = show_module_global(pChar);
+  pChar = show_module_export(pChar);
+  pChar = show_module_client(pChar);
+  pChar = show_module_storage(pChar);
 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
   return;
 }
-/*____________________________________________________________________________________________*/
+/*____________________________________________________________________________________________
+**
+** Read the configuration file
+*/
 static inline void common_config_generated_read(char * fname) {
   config_t          cfg; 
 
   if (config_file_is_read == 0) {
-    uma_dbg_addTopic("cconf",show_common_config);
+    uma_dbg_addTopicAndMan("cconf",show_common_config, man_common_config, 0);
     if (fname == NULL) {
       strcpy(config_file_name,ROZOFS_DEFAULT_CONFIG);
     }
@@ -253,8 +359,12 @@ static inline void common_config_generated_read(char * fname) {
   // when the directory is already created  
   COMMON_CONFIG_READ_BOOL(mkdir_ok_instead_of_eexist,False);
   // To activate workaround that make mknod respond OK instead of EEXIST 
-  // when the file is already created  
+  // when the file is already created   
   COMMON_CONFIG_READ_BOOL(mknod_ok_instead_of_eexist,False);
+  // To disable synchronous write of attributes when set to True 
+  COMMON_CONFIG_READ_BOOL(disable_sync_attributes,False);
+  // Minimum delay between the deletion request and the effective projections deletion 
+  COMMON_CONFIG_READ_INT(deletion_delay,0);
   /*
   ** client scope configuration elements
   */
@@ -264,11 +374,23 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_BOOL(rozofsmount_fuse_reply_thread,False);
   // To activate fast reconnect from client to exportd 
   COMMON_CONFIG_READ_BOOL(client_fast_reconnect,False);
+  // delay is minutes after which a file is considered as an archived file (unit is minute) 
+  COMMON_CONFIG_READ_INT_MINMAX(archive_file_delay,10,0,3600);
+  // dentry cache timeout for archive file type (unit is second) 
+  COMMON_CONFIG_READ_INT_MINMAX(archive_file_dentry_timeout,30,0,300);
+  // attribute cache timeout for archive file type (unit is second) 
+  COMMON_CONFIG_READ_INT_MINMAX(archive_file_attr_timeout,30,0,300);
+  // When that flag is asserted, the rozofsmount client can cache the extended attributes 
+  COMMON_CONFIG_READ_BOOL(client_xattr_cache,False);
+  // When that flag is asserted, the rozofsmount client performs setattr in asynchronous mode 
+  COMMON_CONFIG_READ_BOOL(async_setattr,False);
+  // statfs period in seconds. minimum is 0. 
+  COMMON_CONFIG_READ_INT(statfs_period,10);
   /*
   ** storage scope configuration elements
   */
   // Number of disk threads in the STORIO. 
-  COMMON_CONFIG_READ_INT_MINMAX(nb_disk_thread,4,2,32);
+  COMMON_CONFIG_READ_INT_MINMAX(nb_disk_thread,4,2,64);
   // Whether STORIO is in multiple (1 STORIO per cluster)  
   // or single mode (only 1 STORIO). 
   COMMON_CONFIG_READ_BOOL(storio_multiple_mode,True);
@@ -301,11 +423,40 @@ static inline void common_config_generated_read(char * fname) {
   COMMON_CONFIG_READ_STRING(device_automount_path,"/srv/rozofs/storages");
   // Device mounting options 
   COMMON_CONFIG_READ_STRING(device_automount_option,"");
-  // Paralellism factor for device self healing feature 
-  COMMON_CONFIG_READ_INT_MINMAX(device_self_healing_process,8,1,64);
   // Directory to use on the storage node to build temporary files. 
   // Used for instance by the rebuild process. 
   COMMON_CONFIG_READ_STRING(storage_temporary_dir,"/tmp");
+  // Port to be used for ssh or scp  
+  COMMON_CONFIG_READ_INT(ssh_port,0);
+  // User name to be used for ssh or scp  
+  COMMON_CONFIG_READ_STRING(ssh_user,"root");
+  // Other ssh/scp parameter (such as key location)  
+  COMMON_CONFIG_READ_STRING(ssh_param,"");
+  // self healing : Paralellism factor for device self healing feature 
+  // i.e the number of process to run rebuild in // 
+  COMMON_CONFIG_READ_INT_MINMAX(device_self_healing_process,8,1,64);
+  // self healing : Fault duration in minutes before device selfhealing starts 
+  COMMON_CONFIG_READ_INT_MINMAX(device_selfhealing_delay,15,0,10000);
+  // self healing :  throughput limitation in MB/s per rebuild process in // 
+  // for reading external projections. The writing on disk is only 
+  // 1/2 of that in layout 0, 1/4 in layout 1... 
+  // 0 means no limit 
+  COMMON_CONFIG_READ_INT_MINMAX(device_selfhealing_read_throughput,20,0,10000);
+  // self healing : possible modes 
+  // spareOnly  only self repair on a spare disk 
+  // relocate   also repair on remaining disks when no spare available 
+  COMMON_CONFIG_READ_STRING(device_selfhealing_mode,"spareOnly");
+  // Export host names or IP addresses separated with /  
+  // Required for selfhealing. 
+  // Required for spare file restoring to its nominal location. 
+  COMMON_CONFIG_READ_STRING(export_hosts,"");
+  // Spare file restoring : whether the service is active or not 
+  COMMON_CONFIG_READ_BOOL(spare_restore_enable,True);
+  // Spare file restoring : how often the process runs   
+  COMMON_CONFIG_READ_INT(spare_restore_loop_delay,120);
+  // Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s 
+  // 0 means no limit 
+  COMMON_CONFIG_READ_INT(spare_restore_read_throughput,5);
  
   config_destroy(&cfg);
 }

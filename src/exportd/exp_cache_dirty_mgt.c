@@ -773,6 +773,7 @@ int exp_cache_encode_common(int opcode,xdrproc_t encode_fct,void *msg, void * xm
     ** create the xdr_mem structure for encoding the message
     */
     bufsize = ruc_buf_getMaxPayloadLen(xmit_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
     /*
     ** fill in the rpc header

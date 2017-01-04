@@ -71,9 +71,9 @@ static char    myBuf[UMA_DBG_MAX_SEND_SIZE];
 
 #define SHOW_PROFILER_PROBE(probe) pChar += sprintf(pChar," %-14s | %15llu | %9llu | %18llu |\n",\
                     #probe,\
-                    (long long unsigned int)gprofiler.probe[P_COUNT],\
-                    (long long unsigned int)(gprofiler.probe[P_COUNT]?gprofiler.probe[P_ELAPSE]/gprofiler.probe[P_COUNT]:0),\
-                    (long long unsigned int)gprofiler.probe[P_ELAPSE]);
+                    (long long unsigned int)gprofiler->probe[P_COUNT],\
+                    (long long unsigned int)(gprofiler->probe[P_COUNT]?gprofiler->probe[P_ELAPSE]/gprofiler->probe[P_COUNT]:0),\
+                    (long long unsigned int)gprofiler->probe[P_ELAPSE]);
 
 /*__________________________________________________________________________
   Trace level debug function
@@ -99,8 +99,8 @@ void rozorpc_srv_debug_show(uint32_t tcpRef, void *bufRef) {
   pChar += sprintf(pChar, "   procedure    |     count       |  time(us) | cumulated time(us) |\n");
   pChar += sprintf(pChar, "----------------+-----------------+-----------+--------------------+\n");
   SHOW_PROFILER_PROBE(forward_reply);
-  gprofiler.forward_reply[0] = 0;
-  gprofiler.forward_reply[1] = 0;
+  gprofiler->forward_reply[0] = 0;
+  gprofiler->forward_reply[1] = 0;
   pChar += sprintf(pChar,"\n");
 
 #ifdef SRV_RPC_POOL 
@@ -493,7 +493,6 @@ int rozorpc_srv_getargs_with_position (void *recv_buf,xdrproc_t xdr_argument, vo
    return (int) ret;
 }
 
-
 /*
 **__________________________________________________________________________
 */
@@ -511,7 +510,7 @@ int rozorpc_srv_getargs_with_position (void *recv_buf,xdrproc_t xdr_argument, vo
   @retval none
 
 */
-void rozorpc_srv_forward_reply (rozorpc_srv_ctx_t *p,char * arg_ret)
+void rozorpc_srv_forward_reply_with_extra_len (rozorpc_srv_ctx_t *p,char * arg_ret,int extra_len)
 {
    int ret;
    uint8_t *pbuf;           /* pointer to the part that follows the header length */
@@ -550,10 +549,11 @@ void rozorpc_srv_forward_reply (rozorpc_srv_ctx_t *p,char * arg_ret)
     ** the ruc buffer to take care of the header length of the rpc message.
     */
     int total_len = xdr_getpos(&xdrs) ;
+    total_len +=extra_len;
     *header_len_p = htonl(0x80000000 | total_len);
     total_len +=sizeof(uint32_t);
     ruc_buf_setPayloadLen(p->xmitBuf,total_len);
-
+//    STOP_PROFILING(forward_reply);
 
     /*
     ** Get the callback for sending back the response:
@@ -577,6 +577,30 @@ error:
     STOP_PROFILING(forward_reply);
     return;
 }
+
+/*
+**__________________________________________________________________________
+*/
+/**
+* send a rpc reply: the encoding function MUST be found in xdr_result 
+ of the gateway context
+
+  It is assumed that the xmitBuf MUST be found in xmitBuf field
+  
+  In case of a success it is up to the called function to release the xmit buffer
+  
+  @param p : pointer to the root transaction context used for the read
+  @param arg_ret : returned argument to encode 
+  
+  @retval none
+
+*/
+void rozorpc_srv_forward_reply (rozorpc_srv_ctx_t *p,char * arg_ret)
+{
+   return rozorpc_srv_forward_reply_with_extra_len(p,arg_ret,0);
+}
+
+
 
 
 /*
@@ -602,7 +626,7 @@ uint32_t rozorpc_srv_module_init()
    if (rozorpc_srv_module_initialized) return RUC_OK;
    rozorpc_srv_module_initialized = 1;
    
-    memset(&gprofiler,0,sizeof(gprofiler));
+    ALLOC_PROFILING(rozorpc_profiler_t);
 
     rozorpc_srv_north_small_buf_count  = ROZORPC_SRV_NORTH_MOD_INTERNAL_READ_BUF_CNT ;
     rozorpc_srv_north_small_buf_sz     = ROZORPC_SRV_NORTH_MOD_INTERNAL_READ_BUF_SZ    ;
@@ -738,8 +762,8 @@ uint32_t rozorpc_srv_module_init_ctx_only(uint32_t count)
    if (rozorpc_srv_module_initialized) return RUC_OK;
    rozorpc_srv_module_initialized = 1;
    
-    memset(&gprofiler,0,sizeof(gprofiler));
-   
+   ALLOC_PROFILING(rozorpc_profiler_t); 
+        
    rozorpc_srv_ctx_allocated = 0;
    rozorpc_srv_ctx_count = count;
  

@@ -1556,6 +1556,29 @@ out:
     return &ret;
 }
 
+
+/*
+**______________________________________________________________________________
+*/
+/**
+*   exportd readdir: list the content of a directory
+
+    @param args : fid of the directory
+    
+    @retval: EP_SUCCESS :set of name and fid associated with the directory and cookie for next readdir
+    @retval: EP_FAILURE :error code associated with the operation (errno)
+*/
+epgw_readdir2_ret_t * ep_readdir2_1_svc(epgw_readdir_arg_t * arg,
+        struct svc_req * req) {
+    static epgw_readdir2_ret_t ret;
+
+    // Set profiler export index
+
+    ret.status_gw.status = EP_FAILURE;
+    ret.status_gw.ep_readdir2_ret_t_u.error = ENOTSUP;
+    return &ret;
+}
+
 /* not used anymore
 ep_io_ret_t *ep_read_1_svc(ep_io_arg_t * arg, struct svc_req * req) {
     static ep_io_ret_t ret;
@@ -1818,6 +1841,24 @@ error:
     ret.status_gw.ep_getxattr_ret_t_u.error = errno;
 out:
     STOP_PROFILING(ep_getxattr);
+    return &ret;
+}
+/*
+**______________________________________________________________________________
+*/
+/**
+*   exportd getxattr: get extended attributes in raw mode (stub)
+
+    @param args : fid of the object, extended attribute name 
+    
+    @retval: EP_SUCCESS : extended attribute value
+    @retval: EP_FAILURE :error code associated with the operation (errno)
+*/
+epgw_getxattr_raw_ret_t * ep_getxattr_raw_1_svc(epgw_getxattr_arg_t * arg, struct svc_req * req) {
+    static epgw_getxattr_raw_ret_t ret;
+
+    ret.status_gw.status = EP_FAILURE;
+    ret.status_gw.ep_getxattr_raw_ret_t_u.error = ENOTSUP;
     return &ret;
 }
 /*

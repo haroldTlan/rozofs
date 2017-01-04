@@ -19,8 +19,8 @@
 cmake_minimum_required(VERSION 2.6)
 project(rozofs C)
 set(MAJOR "2")
-set(MINOR "0")
-set(REVISION "26")
+set(MINOR "1")
+set(REVISION "0")
 set(VERSION "${MAJOR}.${MINOR}.${REVISION}")
 
 # cmake_get.sh enables to populate some CMAKE variables
@@ -117,7 +117,6 @@ add_subdirectory(rozofs)
 add_subdirectory(src)
 add_subdirectory(doc)
 add_subdirectory(tests EXCLUDE_FROM_ALL)
-add_subdirectory(tests/fs_ops/fileop EXCLUDE_FROM_ALL)
 add_subdirectory(tests/fs_ops/pjd-fstest EXCLUDE_FROM_ALL)
 add_subdirectory(manager)
 
@@ -128,7 +127,9 @@ set(ROZOFS_SOURCE_PACKAGE_FILE_NAME "rozofs-${VERSION}")
 configure_file("${PROJECT_SOURCE_DIR}/cmake/config.h.in" "${PROJECT_BINARY_DIR}/config.h")
 configure_file("${PROJECT_SOURCE_DIR}/cmake/uninstall.in" "${PROJECT_BINARY_DIR}/uninstall.cmake" @ONLY)
 configure_file("${PROJECT_SOURCE_DIR}/cmake/debian.in" "${PROJECT_BINARY_DIR}/debian.cmake" @ONLY)
-configure_file("${PROJECT_SOURCE_DIR}/cmake/debian.changelog.in" "${PROJECT_SOURCE_DIR}/debian/changelog" @ONLY)
+if (NOT EXISTS "${PROJECT_SOURCE_DIR}/debian/changelog")
+  configure_file("${PROJECT_SOURCE_DIR}/cmake/debian.changelog.in" "${PROJECT_SOURCE_DIR}/debian/changelog" @ONLY)
+endif(NOT EXISTS "${PROJECT_SOURCE_DIR}/debian/changelog")
 configure_file("${PROJECT_SOURCE_DIR}/cmake/redhat.in" "${PROJECT_BINARY_DIR}/redhat.cmake" @ONLY)
 configure_file("${PROJECT_SOURCE_DIR}/cmake/rozofs.spec.in" "${PROJECT_BINARY_DIR}/rozofs.spec" @ONLY)
 configure_file("${PROJECT_SOURCE_DIR}/cmake/doxyfile.in" "${PROJECT_BINARY_DIR}/doc/doxyfile" IMMEDIATE @ONLY)
@@ -148,12 +149,12 @@ set(CMAKE_C_FLAGS "-D_GNU_SOURCE" CACHE STRING
     FORCE)
 
 if(CMAKE_SIZEOF_VOID_P MATCHES 4) 
-  message("-- 32 bits target")
+  MESSAGE( STATUS "32 bits target")
   set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -D_GNU_SOURCE  -g  -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast" CACHE STRING
     "Flags used by the C compiler during maintainer builds."
     FORCE)
 else()
-  message("-- 64 bits target")    
+  MESSAGE( STATUS "64 bits target")    
   set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -D_GNU_SOURCE  -g" CACHE STRING
     "Flags used by the C compiler during maintainer builds."
     FORCE)

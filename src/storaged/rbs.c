@@ -65,7 +65,7 @@ char * get_rebuild_directory_name(int rebuildRef) {
   return rebuild_directory_name;
 }
 char rebuild_sid_directory_name[FILENAME_MAX];
-char * get_rebuild_sid_directory_name(int rebuildRef, int cid, int sid) {
+char * get_rebuild_sid_directory_name(int rebuildRef, int cid, int sid, rbs_file_type_e ftype) {
   char * pChar = rebuild_sid_directory_name;
   pChar += rozofs_string_append(pChar,common_config.storage_temporary_dir);
   pChar += rozofs_string_append(pChar,"/rbs.");
@@ -73,7 +73,9 @@ char * get_rebuild_sid_directory_name(int rebuildRef, int cid, int sid) {
   pChar += rozofs_string_append(pChar,"/cid");
   pChar += rozofs_u32_append(pChar,cid);  
   pChar += rozofs_string_append(pChar,"_sid");
-  pChar += rozofs_u32_append(pChar,sid);  
+  pChar += rozofs_u32_append(pChar,sid); 
+  pChar += rozofs_string_append(pChar,"_");  
+  pChar += rozofs_u32_append(pChar,ftype);   
   return rebuild_sid_directory_name;
 }
 
@@ -111,8 +113,8 @@ int rbs_stor_cnt_initialize(rb_stor_t * rb_stor, int cid) {
 
     // Initialize connection with this storage (by mproto)
     if (mclient_connect(&rb_stor->mclient, timeo) != 0) {
-        severe("failed to join storage (host: %s), %s.",
-                rb_stor->host, strerror(errno));
+//        severe("failed to join storage (host: %s), %s.",
+//                rb_stor->host, strerror(errno));
         goto out;
     } else {
         // Send request to get TCP ports for this storage
@@ -246,7 +248,6 @@ void rbs_init_cluster_cnts(list_t * cluster_entries,
         }
     }
 }
-
 /** Release the list of cluster(s)
  *
  * @param cluster_entries: list of cluster(s).
@@ -270,13 +271,13 @@ void rbs_release_cluster_list(list_t * cluster_entries) {
                 sclient_release(&rb_stor->sclients[i]);
 
             list_remove(&rb_stor->list);
-            free(rb_stor);
+            xfree(rb_stor);
 
         }
 
         // Remove and free cluster
         list_remove(&clu->list);
-        free(clu);
+        xfree(clu);
     }
 }
 

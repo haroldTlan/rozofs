@@ -55,6 +55,8 @@
 #include "xattr_main.h"
 #include "rozofs_quota_api.h"
 #include "export_quota_thread_api.h"
+#include "rozofs_exp_mover.h"
+
 #include <rozofs/common/acl.h>
 int rozofs_acl_access_check(const char *name, const char *value, size_t size,mode_t *mode_p);
 /** Max entries of lv1 directory structure (nb. of buckets) */
@@ -78,6 +80,8 @@ uint64_t export_last_count = 0;
 uint64_t export_fid_recycle_reload_count = 0; /**< number of recycle fid reloaded */
 int export_fid_recycle_ready = 0; /**< assert to 1 when fid recycle have been reloaded */
 int export_limit_rm_files;
+
+
 
 typedef struct cnxentry {
     mclient_t *cnx;
@@ -193,7 +197,8 @@ static inline int export_metadata_device_full(export_t *e, uint64_t microsec) {
 typedef struct _attr_writeback_ctx_t
 {
   pthread_t               thrdId; 
-  int                     thread_idx;     
+  int                     thread_idx:31; 
+  int                     sync:1;    
   lv2_entry_t             *lv2; 
   export_tracking_table_t *trk_tb_p;
   uint64_t                 wakeup_count;
@@ -223,6 +228,7 @@ static inline int test_no_extended_attr(lv2_entry_t *lv2) {
   if ((lv2->attributes.s.i_state == 0)&&(lv2->attributes.s.i_file_acl == 0)) return 1;
   return 0;  
 }
+
 void show_attr_thread(char * argv[], uint32_t tcpRef, void *bufRef) 
 {
     char *pChar = uma_dbg_get_buffer();
@@ -344,7 +350,7 @@ void *export_wr_attr_th(void *arg) {
       if(ctx_p->lv2 != NULL)
       {
         ctx_p->wakeup_count++;
-	ret = export_lv2_write_attributes(ctx_p->trk_tb_p,ctx_p->lv2);
+	ret = export_lv2_write_attributes(ctx_p->trk_tb_p,ctx_p->lv2,ctx_p->sync);
 	if (ret < 0)
 	{ 
 	  if (errno != ENOENT) 
@@ -366,9 +372,10 @@ void *export_wr_attr_th(void *arg) {
     
     @param lv2: level2 entry to write
     @param trk_tb_p: pointer to the tracking context tale
+    @param sync: whether to force sync on disk of attributes
  
 */
-/*static inline */void export_attr_thread_submit(lv2_entry_t*lv2,export_tracking_table_t *trk_tb_p)
+/*static inline */void export_attr_thread_submit(lv2_entry_t*lv2,export_tracking_table_t *trk_tb_p, int sync)
 {
     int i;
    attr_writeback_ctx_t       *thread_ctx_p;  
@@ -380,7 +387,7 @@ void *export_wr_attr_th(void *arg) {
     */
     if (common_config.export_attr_thread == 0)
     {
-	ret = export_lv2_write_attributes(trk_tb_p,lv2);
+	ret = export_lv2_write_attributes(trk_tb_p,lv2,sync);
 	if (ret < 0)
 	{ 
 	  severe("failed while writing child attributes %s",strerror(errno));
@@ -399,6 +406,7 @@ void *export_wr_attr_th(void *arg) {
        {
 	  sem_wait(&thread_ctx_p->export_attr_wr_ready);
 	  thread_ctx_p->lv2 = lv2;
+	  thread_ctx_p->sync = sync;
 	  thread_ctx_p->trk_tb_p = trk_tb_p;
 	  sem_post(&thread_ctx_p->export_attr_wr_rq); 
 	  return;             
@@ -414,6 +422,7 @@ void *export_wr_attr_th(void *arg) {
     }
     thread_ctx_p->lv2 = lv2;
     thread_ctx_p->trk_tb_p = trk_tb_p;
+    thread_ctx_p->sync = sync;
     sem_post(&thread_ctx_p->export_attr_wr_rq);     
 }
 
@@ -1332,9 +1341,9 @@ static void *load_trash_dir_thread(void *v) {
     return 0;
 }
 
-int export_initialize(export_t * e, volume_t *volume, ROZOFS_BSIZE_E bsize,
+int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
         lv2_cache_t *lv2_cache, uint32_t eid, const char *root, const char *md5,
-        uint64_t squota, uint64_t hquota) {
+        uint64_t squota, uint64_t hquota, char * filter_name) {
 
     char fstat_path[PATH_MAX];
     char const_path[PATH_MAX];
@@ -1366,7 +1375,18 @@ int export_initialize(export_t * e, volume_t *volume, ROZOFS_BSIZE_E bsize,
     e->volume = volume;
     e->bsize = bsize;
     e->lv2_cache = lv2_cache;
-    e->layout = volume->layout; // Layout used for this volume
+    if (layout<LAYOUT_MAX) {
+      e->layout = layout; // Layout used for this volume
+    }
+    else {
+      e->layout = volume->layout; // Layout used for this volume
+    }  
+    /*
+    ** Retrieve filter tree to use for this export from its name
+    ** when name does not exist tree is NULL and IP is allowed.
+    */
+    e->filter_tree = rozofs_ip4_flt_get_tree(filter_name);   
+    
     e->load_trash_thread = 0;
     
     /*
@@ -1660,7 +1680,6 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
     {
         fid_t fid_direct;
 	int ret;
-	lv2_entry_t exp_fake_lv2_entry;
 	
 	ret = rozofs_uuid_parse(&name[13],fid_direct);
 	if (ret < 0)
@@ -1668,22 +1687,24 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
 	  errno = EINVAL;
 	  goto out;
 	}
+	lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid_direct);
+	if (lv2 == NULL)
+	{
+	  /*
+	  ** cannot get the attributes: need to log the returned errno
+	  */
+	  errno = ENOENT;
+	  goto out;
+	} 
+        memcpy(attrs, &lv2->attributes.s.attrs, sizeof (mattr_t));
 	/*
-	** read the attribute from disk
+	** copy the fid provided in the input argument
 	*/
-      lv2 = &exp_fake_lv2_entry;
-      if (exp_meta_get_object_attributes(e->trk_tb_p,fid_direct,lv2) < 0)
-      {
-	/*
-	** cannot get the attributes: need to log the returned errno
-	*/
-	errno = ENOENT;
-	goto out;
-      } 
-       memcpy(attrs, &lv2->attributes.s.attrs, sizeof (mattr_t));
-       if (test_no_extended_attr(lv2)) rozofs_clear_xattr_flag(&attrs->mode);
-       status = 0;  
-       goto out;      
+	memcpy(attrs->fid,fid_direct,sizeof(fid_t));
+	
+        if (test_no_extended_attr(lv2)) rozofs_clear_xattr_flag(&attrs->mode);
+        status = 0;  
+        goto out;      
     }
     /*
     ** check for root of delete pending object
@@ -1704,7 +1725,7 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
         goto out;
     }
     // get the lv2
-    if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, child_fid))) {
+    if (!(lv2 = export_lookup_fid_no_invalidate_mover(e->trk_tb_p,e->lv2_cache, child_fid))) {
         /*
          ** It might be possible that the file is still referenced in the dirent file but 
          ** not present on disk: its FID has been released (and the associated file deleted)
@@ -1727,6 +1748,10 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
         }
         goto out;
     }
+    /*
+    ** take care of the case of the mover
+    */
+    rozofs_mover_check_for_validation(e,lv2,child_fid);
     memcpy(attrs, &lv2->attributes.s.attrs, sizeof (mattr_t));
     /*
     ** check if the file has the delete pending bit asserted: if it is the
@@ -1775,7 +1800,7 @@ int export_getattr(export_t *e, fid_t fid, mattr_t *attrs) {
     START_PROFILING(export_getattr);
     uint64_t     ts;
 
-    if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid))) {
+    if (!(lv2 = export_lookup_fid_no_invalidate_mover(e->trk_tb_p,e->lv2_cache, fid))) {
     
       ts = rdtsc();
       if (ts>last_export_getattr_log+5000000000UL) {
@@ -1785,7 +1810,11 @@ int export_getattr(export_t *e, fid_t fid, mattr_t *attrs) {
 	last_export_getattr_log = ts;
       }
       goto out;
-    }   
+    } 
+    /*
+    ** take care of the case of the mover
+    */
+    rozofs_mover_check_for_validation(e,lv2,fid);  
     memcpy(attrs, &lv2->attributes.s.attrs, sizeof (mattr_t));
     memcpy(attrs->fid,fid,sizeof(fid_t));
     if (test_no_extended_attr(lv2)) rozofs_clear_xattr_flag(&attrs->mode);
@@ -1830,6 +1859,7 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
     int quota_gid=-1;
     uint64_t nrb_new = 0;
     uint64_t nrb_old = 0;
+    int      sync = 0;
        
     START_PROFILING(export_setattr);
 
@@ -1843,6 +1873,20 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
     {
        errno = EROFS;
        goto out;
+    }
+    /*
+    ** check if the inode reference a Mover
+    */
+    {
+      rozofs_inode_t *inode_p = (rozofs_inode_t*)fid;
+      if ((inode_p->s.key == ROZOFS_REG_S_MOVER) || (inode_p->s.key == ROZOFS_REG_D_MOVER))
+      {
+	 /*
+	 ** Mover cannot  change the i-node
+	 */
+	 status = 0;
+	 goto out;
+      }
     }
 
     if ((to_set & EXPORT_SET_ATTR_SIZE) && S_ISREG(lv2->attributes.s.attrs.mode)) {
@@ -1867,6 +1911,7 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
             goto out;
 
         lv2->attributes.s.attrs.size = attrs->size;
+	sync = 1; /* Need to sync on disk now */
     }
 
     if (to_set & EXPORT_SET_ATTR_MODE)
@@ -1903,7 +1948,7 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
 	 rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,lv2->attributes.s.attrs.size,ROZOFS_QT_INC);       
        }       
     }
-    status = export_lv2_write_attributes(e->trk_tb_p,lv2);
+    status = export_lv2_write_attributes(e->trk_tb_p,lv2,sync);
 out:
     STOP_PROFILING(export_setattr);
     return status;
@@ -1992,7 +2037,7 @@ int export_link(export_t *e, fid_t inode, fid_t newparent, char *newname, mattr_
     target->attributes.s.attrs.ctime = time(NULL);
 
     // Write attributes of target
-    if (export_lv2_write_attributes(e->trk_tb_p,target) != 0)
+    if (export_lv2_write_attributes(e->trk_tb_p,target,0/* No sync */) != 0)
         goto out;
 
     // Update parent
@@ -2000,7 +2045,7 @@ int export_link(export_t *e, fid_t inode, fid_t newparent, char *newname, mattr_
     plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = time(NULL);
 
     // Write attributes of parents
-    if (export_lv2_write_attributes(e->trk_tb_p,plv2) != 0)
+    if (export_lv2_write_attributes(e->trk_tb_p,plv2,0/* No sync */) != 0)
         goto out;
 
     // Return attributes
@@ -2182,7 +2227,7 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
 
     for (k = 0; k < filecount+1 ; k++,buf_attr_work_p++)
     {
-      if (volume_distribute(e->volume,site_number, &buf_attr_work_p->s.attrs.cid, buf_attr_work_p->s.attrs.sids) != 0)
+      if (volume_distribute(e->layout,e->volume,site_number, &buf_attr_work_p->s.attrs.cid, buf_attr_work_p->s.attrs.sids) != 0)
           goto error;
       if (k !=0) 
       {
@@ -2274,7 +2319,7 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
 	    /*
 	    ** push on disk
 	    */
-	    ret = exp_metadata_create_attributes_burst(p,fake_inode,&buf_attr_p[offset_in_buffer],sizeof(ext_mattr_t)*attr_count);
+	    ret = exp_metadata_create_attributes_burst(p,fake_inode,&buf_attr_p[offset_in_buffer],sizeof(ext_mattr_t)*attr_count, 1 /* sync */);
 	    if (ret < 0)
 	    { 
 	      goto error;
@@ -2295,7 +2340,7 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
     if (attr_count != 0)
     {
        fake_inode = (rozofs_inode_t*)buf_attr_p[offset_in_buffer].s.attrs.fid;
-       ret = exp_metadata_create_attributes_burst(p,fake_inode,&buf_attr_p[offset_in_buffer],sizeof(ext_mattr_t)*attr_count);
+       ret = exp_metadata_create_attributes_burst(p,fake_inode,&buf_attr_p[offset_in_buffer],sizeof(ext_mattr_t)*attr_count, 1 /* sync */);
        if (ret < 0)
        { 
 	 goto error;    
@@ -2307,7 +2352,7 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
     /*
     ** write the attributes on disk
     */
-    export_attr_thread_submit(plv2,e->trk_tb_p);
+    export_attr_thread_submit(plv2,e->trk_tb_p,0 /* No sync */);
 
     // update export files
     export_update_files(e, filecount+1);
@@ -2431,6 +2476,8 @@ lv2_entry_t *  export_get_recycled_inode(export_t *e,fid_t pfid,ext_mattr_t *ext
   
  * @return: 0 on success -1 otherwise (errno is set)
  */
+#define ROZOFS_SLICE "@rozofs_slice@"
+
 int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32_t uid,
         uint32_t gid, mode_t mode, mattr_t *attrs,mattr_t *pattrs) {
     int status = -1;
@@ -2555,9 +2602,21 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
        }         
     }
     /*
-    ** get the slice of the parent
+    ** get the slice in the name
     */
-    exp_trck_get_slice(pfid,&pslice);
+    if (strncmp(name,ROZOFS_SLICE,strlen(ROZOFS_SLICE)) == 0) {
+      /*
+      ** Slice is provided
+      */
+      char * pt = name + strlen(ROZOFS_SLICE);
+      sscanf(pt,"%d", &pslice);  
+    }
+     /*
+     ** get the slice of the parent
+     */
+    else {
+      exp_trck_get_slice(pfid,&pslice);
+    }
     /*
     ** copy the parent fid of the regular file
     */
@@ -2572,7 +2631,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
       /*
       ** get the distribution for the file
       */
-      if (volume_distribute(e->volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
+      if (volume_distribute(e->layout,e->volume,site_number, &ext_attrs.s.attrs.cid, ext_attrs.s.attrs.sids) != 0)
           goto error;
     }
     ext_attrs.s.attrs.mode = mode;
@@ -2649,7 +2708,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     /*
     ** write child attributes on disk
     */
-    export_attr_thread_submit(lv2_child,e->trk_tb_p);
+    export_attr_thread_submit(lv2_child,e->trk_tb_p,1 /* sync */);
 
     // Update children nb. and times of parent
     plv2->attributes.s.attrs.children++;
@@ -2657,7 +2716,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     /*
     ** write parent attributes on disk
     */
-    export_attr_thread_submit(plv2,e->trk_tb_p);
+    export_attr_thread_submit(plv2,e->trk_tb_p,0 /* No sync */);
 
     // update export files
     export_update_files(e, 1);
@@ -2923,7 +2982,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     */
     fake_inode = (rozofs_inode_t*)ext_attrs.s.attrs.fid;
     p = e->trk_tb_p->tracking_table[fake_inode->s.key];
-    ret = exp_metadata_write_attributes(p,fake_inode,&ext_attrs,sizeof(ext_mattr_t));
+    ret = exp_metadata_write_attributes(p,fake_inode,&ext_attrs,sizeof(ext_mattr_t), 1 /* sync */);
     if (ret < 0)
     { 
       goto error;
@@ -2936,7 +2995,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     plv2->attributes.s.attrs.children++;
     plv2->attributes.s.attrs.nlink++;
     plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = plv2->attributes.s.cr8time = time(NULL);
-    if (export_lv2_write_attributes(e->trk_tb_p,plv2) != 0)
+    if (export_lv2_write_attributes(e->trk_tb_p,plv2,0/* No sync */) != 0)
         goto error;
 
     // update export files
@@ -3047,6 +3106,30 @@ int exp_delete_file(export_t * e, lv2_entry_t *lvl2)
     exp_attr_delete(trk_tb_p,rozofs_attr_p->s.attrs.fid);
     return 0;        
 }  
+ 
+/*
+**__________________________________________________________________
+*/
+/** Allocate a rmfentry_t structure to chain the deletion job
+ *
+ * @param trash_entry     The disk context of removed file
+ * 
+ * @return: the address of the allocated structure
+ */
+rmfentry_t * export_alloc_rmentry(rmfentry_disk_t * trash_entry) {
+  rmfentry_t *rmfe = xmalloc(sizeof (rmfentry_t));
+  export_rm_bins_pending_count++;
+  memcpy(rmfe->fid, trash_entry->fid, sizeof (fid_t));
+  rmfe->cid = trash_entry->cid;
+  memcpy(rmfe->initial_dist_set, trash_entry->initial_dist_set,
+          sizeof (sid_t) * ROZOFS_SAFE_MAX);
+  memcpy(rmfe->current_dist_set, trash_entry->current_dist_set,
+          sizeof (sid_t) * ROZOFS_SAFE_MAX);
+  memcpy(rmfe->trash_inode,trash_entry->trash_inode,sizeof(fid_t));
+  list_init(&rmfe->list);
+  rmfe->time = time(NULL)+common_config.deletion_delay;
+  return rmfe;
+}
 /*
 **__________________________________________________________________
 */
@@ -3203,16 +3286,8 @@ int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,mat
       /*
       ** Preparation of the rmfentry
       */
-      rmfentry_t *rmfe = xmalloc(sizeof (rmfentry_t));
-      export_rm_bins_pending_count++;
-      memcpy(rmfe->fid, trash_entry.fid, sizeof (fid_t));
-      rmfe->cid = trash_entry.cid;
-      memcpy(rmfe->initial_dist_set, trash_entry.initial_dist_set,
-              sizeof (sid_t) * ROZOFS_SAFE_MAX);
-      memcpy(rmfe->current_dist_set, trash_entry.current_dist_set,
-              sizeof (sid_t) * ROZOFS_SAFE_MAX);
-      memcpy(rmfe->trash_inode,trash_entry.trash_inode,sizeof(fid_t));
-      list_init(&rmfe->list);
+      rmfentry_t *rmfe = export_alloc_rmentry(&trash_entry);
+      
       /* Acquire lock on bucket trash list
       */
       if ((errno = pthread_rwlock_wrlock
@@ -3258,7 +3333,7 @@ int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,mat
     plv2->attributes.s.attrs.children--;
 
     // Write attributes of parents
-    if (export_lv2_write_attributes(e->trk_tb_p,plv2) != 0)
+    if (export_lv2_write_attributes(e->trk_tb_p,plv2,0/* No sync */) != 0)
         goto out;
     /*
     ** return the parent attributes
@@ -3352,7 +3427,7 @@ int export_fid_recycle_attempt(export_t * e,lv2_entry_t *lv2)
    /*
    ** write back attributes on disk
    */ 
-   if (export_lv2_write_attributes(e->trk_tb_p,lv2) != 0)
+   if (export_lv2_write_attributes(e->trk_tb_p,lv2, 1/* sync */) != 0)
    {
      severe("fail to write attributes on disk");
    }
@@ -3434,6 +3509,10 @@ void export_unlink_duplicate_fid(export_t * e,lv2_entry_t  *plv2,fid_t parent, f
    fid_has_been_recycled = export_fid_recycle_attempt(e,lv2);
    if (fid_has_been_recycled == 0)
    {
+     /*
+     ** take care of the mover: the "mover" distribution must be pushed in trash when it exits
+     */
+     rozofs_mover_unlink_mover_distribution(e,lv2);
      // Compute hash value for this fid
      uint32_t hash = rozofs_storage_fid_slice(lv2->attributes.s.attrs.fid);
 
@@ -3442,6 +3521,14 @@ void export_unlink_duplicate_fid(export_t * e,lv2_entry_t  *plv2,fid_t parent, f
      */
      trash_entry.size = lv2->attributes.s.attrs.size;
      memcpy(trash_entry.fid, lv2->attributes.s.attrs.fid, sizeof (fid_t));
+     /*
+     ** compute the storage fid
+     */
+     {
+       rozofs_mover_children_t mover_idx;
+       mover_idx.u32 = lv2->attributes.s.attrs.children;
+       rozofs_build_storage_fid(trash_entry.fid,mover_idx.fid_st_idx.primary_idx);
+     }
      trash_entry.cid = lv2->attributes.s.attrs.cid;
      memcpy(trash_entry.initial_dist_set, lv2->attributes.s.attrs.sids,
              sizeof (sid_t) * ROZOFS_SAFE_MAX);
@@ -3487,16 +3574,8 @@ void export_unlink_duplicate_fid(export_t * e,lv2_entry_t  *plv2,fid_t parent, f
      /*
      ** Preparation of the rmfentry
      */
-     rmfentry_t *rmfe = xmalloc(sizeof (rmfentry_t));
-     export_rm_bins_pending_count++;
-     memcpy(rmfe->fid, trash_entry.fid, sizeof (fid_t));
-     rmfe->cid = trash_entry.cid;
-     memcpy(rmfe->initial_dist_set, trash_entry.initial_dist_set,
-             sizeof (sid_t) * ROZOFS_SAFE_MAX);
-     memcpy(rmfe->current_dist_set, trash_entry.current_dist_set,
-             sizeof (sid_t) * ROZOFS_SAFE_MAX);
-     memcpy(rmfe->trash_inode,trash_entry.trash_inode,sizeof(fid_t));
-     list_init(&rmfe->list);
+     rmfentry_t *rmfe = export_alloc_rmentry(&trash_entry);
+
      /* Acquire lock on bucket trash list
      */
      if ((errno = pthread_rwlock_wrlock
@@ -3690,6 +3769,10 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
 	      fid_has_been_recycled = export_fid_recycle_attempt(e,lv2);
 	      if (fid_has_been_recycled == 0)
 	      {
+	        /*
+		** take care of the mover: the "mover" distribution must be pushed in trash when it exists
+		*/
+	        rozofs_mover_unlink_mover_distribution(e,lv2);
         	// Compute hash value for this fid
         	uint32_t hash = rozofs_storage_fid_slice(lv2->attributes.s.attrs.fid);
 
@@ -3698,6 +3781,15 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
 		*/
 		trash_entry.size = lv2->attributes.s.attrs.size;
         	memcpy(trash_entry.fid, lv2->attributes.s.attrs.fid, sizeof (fid_t));
+		/*
+		** compute the storage fid
+		*/
+		{
+		  rozofs_mover_children_t mover_idx;
+		  mover_idx.u32 = lv2->attributes.s.attrs.children;
+		  rozofs_build_storage_fid(trash_entry.fid,mover_idx.fid_st_idx.primary_idx);
+		}
+
         	trash_entry.cid = lv2->attributes.s.attrs.cid;
         	memcpy(trash_entry.initial_dist_set, lv2->attributes.s.attrs.sids,
                 	sizeof (sid_t) * ROZOFS_SAFE_MAX);
@@ -3743,16 +3835,8 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
         	/*
 		** Preparation of the rmfentry
 		*/
-        	rmfentry_t *rmfe = xmalloc(sizeof (rmfentry_t));
-		export_rm_bins_pending_count++;
-        	memcpy(rmfe->fid, trash_entry.fid, sizeof (fid_t));
-        	rmfe->cid = trash_entry.cid;
-        	memcpy(rmfe->initial_dist_set, trash_entry.initial_dist_set,
-                	sizeof (sid_t) * ROZOFS_SAFE_MAX);
-        	memcpy(rmfe->current_dist_set, trash_entry.current_dist_set,
-                	sizeof (sid_t) * ROZOFS_SAFE_MAX);
-        	memcpy(rmfe->trash_inode,trash_entry.trash_inode,sizeof(fid_t));
-        	list_init(&rmfe->list);
+                rmfentry_t *rmfe = export_alloc_rmentry(&trash_entry);
+
         	/* Acquire lock on bucket trash list
 		*/
         	if ((errno = pthread_rwlock_wrlock
@@ -3829,7 +3913,7 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
 	update_children = 1;
         lv2->attributes.s.attrs.nlink--;
         lv2->attributes.s.attrs.ctime = time(NULL);
-        export_lv2_write_attributes(e->trk_tb_p,lv2);
+        export_lv2_write_attributes(e->trk_tb_p,lv2, 0/* No sync */);
         // Return a empty fid because no inode has been deleted
         //memset(fid, 0, sizeof (fid_t));
     }
@@ -3854,7 +3938,7 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
       */
       if (exp_metadata_inode_is_del_pending(parent))
       {
-         plv2->attributes.s.hpc_reserved--;          
+	 plv2->attributes.s.hpc_reserved--;          
       }    
     }
 
@@ -3939,7 +4023,7 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
        /*
        **  Write attributes of deleted file (pending)
        */
-       export_lv2_write_attributes(e->trk_tb_p,lv2) ;
+       export_lv2_write_attributes(e->trk_tb_p,lv2, 0/* No sync */) ;
     }
 out:
     /*
@@ -3952,7 +4036,7 @@ out:
         /*
 	** write parent attributes on disk
 	*/
-	export_attr_thread_submit(plv2,e->trk_tb_p);
+	export_attr_thread_submit(plv2,e->trk_tb_p,0 /* No sync */);
       }
       export_dir_flush_root_idx_bitmap(e,parent,plv2->dirent_root_idx_p);
     }
@@ -4233,8 +4317,9 @@ char *export_rm_bins_stats(char *pChar)
    uint64_t new_count;   
    pChar += sprintf(pChar,"Trash thread period         : %d seconds\n",RM_BINS_PTHREAD_FREQUENCY_SEC);
    pChar += sprintf(pChar,"trash rate                  : %d\n",export_limit_rm_files);   
-   pChar += sprintf(pChar,"trash limit                 : %llu\n",(unsigned long long int)export_rm_bins_threshold_high);   
-      
+   pChar += sprintf(pChar,"trash limit                 : %llu\n",(unsigned long long int)export_rm_bins_threshold_high);         
+   pChar += sprintf(pChar,"trash delay                 : %llu\n",(unsigned long long int)common_config.deletion_delay);   
+
    new_ticks = rdtsc();
    new_count = export_rm_bins_done_count;
    
@@ -4278,6 +4363,7 @@ static inline int export_rm_bucket(export_t * e, list_t * connexions, int bucket
   rmfentry_t * entry;
 //  cid_t        cid;
   list_t      * p, *n;
+  time_t        now;
 
   /*
   ** Initialize the working lists
@@ -4297,6 +4383,7 @@ static inline int export_rm_bucket(export_t * e, list_t * connexions, int bucket
     severe("pthread_rwlock_unlock failed: %s", strerror(errno));
   }
 
+  now = time(NULL);
 
   /*
   ** get every entry
@@ -4308,7 +4395,16 @@ static inline int export_rm_bucket(export_t * e, list_t * connexions, int bucket
 
     // Nb. of bins files removed for this file
     sid_count = 0;
-
+    
+    // Not yet time to delete this file
+    if ((entry->time) && (entry->time >= now)) {
+      /*
+      ** Put this entry in the failed list
+      */
+      list_push_back(&failed, &entry->list);
+      continue;
+    }
+    
     // For each storage associated with this file
     for (i = 0; i < safe; i++) {
 
@@ -4376,7 +4472,7 @@ static inline int export_rm_bucket(export_t * e, list_t * connexions, int bucket
       */
       export_rm_bins_done_count++;
       export_rmbins_remove_from_tracking_file(e,entry); 
-      free(entry);
+      xfree(entry);
     }
     else {
       /*
@@ -4721,7 +4817,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
        /*
        **  Write attributes of deleted file (pending)
        */
-       export_lv2_write_attributes(e->trk_tb_p,lv2) ;
+       export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */) ;
        /*
        ** update the parent attributes
        */
@@ -4735,7 +4831,7 @@ out:
     */
     if (plv2 != NULL) 
     {
-       if (write_parent_attributes) export_lv2_write_attributes(e->trk_tb_p,plv2);
+       if (write_parent_attributes) export_lv2_write_attributes(e->trk_tb_p,plv2,0/* No sync */);
        export_dir_flush_root_idx_bitmap(e,pfid,plv2->dirent_root_idx_p);
     }
     
@@ -4880,7 +4976,7 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     */
     fake_inode = (rozofs_inode_t*)ext_attrs.s.attrs.fid;
     p = e->trk_tb_p->tracking_table[fake_inode->s.key];
-    ret = exp_metadata_write_attributes(p,fake_inode,&ext_attrs,sizeof(ext_mattr_t));
+    ret = exp_metadata_write_attributes(p,fake_inode,&ext_attrs,sizeof(ext_mattr_t), 1 /* sync */);
     if (ret < 0)
     { 
       goto error;
@@ -4888,7 +4984,7 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     plv2->attributes.s.attrs.children++;
     // update times of parent
     plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = time(NULL);
-    if (export_lv2_write_attributes(e->trk_tb_p,plv2) != 0)
+    if (export_lv2_write_attributes(e->trk_tb_p,plv2,0/* No sync */) != 0)
         goto error;
 
     /*
@@ -5062,6 +5158,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     if (!(lv2_old_parent = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, pfid))) {
         goto out;
     }
+    exp_metadata_inode_del_deassert(pfid);
 
     // Verify that the old parent is a directory
     if (!S_ISDIR(lv2_old_parent->attributes.s.attrs.mode)) {
@@ -5208,6 +5305,10 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
                     // Check if it's a regular file not empty 
                     if (lv2_to_replace->attributes.s.attrs.size > 0 &&
                             S_ISREG(lv2_to_replace->attributes.s.attrs.mode)) {
+	        	/*
+			** take care of the mover: the "mover" distribution must be pushed in trash when it exits
+			*/
+	        	rozofs_mover_unlink_mover_distribution(e,lv2_to_replace);
 
                         // Compute hash value for this fid
                         uint32_t hash = rozofs_storage_fid_slice(lv2_to_replace->attributes.s.attrs.fid);
@@ -5215,6 +5316,14 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
 			** prepare the trash entry
 			*/
         		memcpy(trash_entry.fid, lv2_to_replace->attributes.s.attrs.fid, sizeof (fid_t));
+ 			/*
+			** compute the storage fid
+			*/
+			{
+			  rozofs_mover_children_t mover_idx;
+			  mover_idx.u32 = lv2_to_replace->attributes.s.attrs.children;
+			  rozofs_build_storage_fid(trash_entry.fid,mover_idx.fid_st_idx.primary_idx);
+			}
         		trash_entry.cid = lv2_to_replace->attributes.s.attrs.cid;
         		memcpy(trash_entry.initial_dist_set, lv2_to_replace->attributes.s.attrs.sids,
                 		sizeof (sid_t) * ROZOFS_SAFE_MAX);
@@ -5236,16 +5345,8 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
         		/*
 			** Preparation of the rmfentry
 			*/
-        		rmfentry_t *rmfe = xmalloc(sizeof (rmfentry_t));
-			export_rm_bins_pending_count++;
-        		memcpy(rmfe->fid, trash_entry.fid, sizeof (fid_t));
-        		rmfe->cid = trash_entry.cid;
-        		memcpy(rmfe->initial_dist_set, trash_entry.initial_dist_set,
-                		sizeof (sid_t) * ROZOFS_SAFE_MAX);
-        		memcpy(rmfe->current_dist_set, trash_entry.current_dist_set,
-                		sizeof (sid_t) * ROZOFS_SAFE_MAX);
-        		memcpy(rmfe->trash_inode,trash_entry.trash_inode,sizeof(fid_t));
-                        list_init(&rmfe->list);
+			rmfentry_t *rmfe = export_alloc_rmentry(&trash_entry);
+			
                         /*
                         ** Acquire lock on bucket trash list
 			*/
@@ -5311,7 +5412,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
                 // It's a hardlink
                 if (nlink > 1) {
                     lv2_to_replace->attributes.s.attrs.nlink--;
-                    export_lv2_write_attributes(e->trk_tb_p,lv2_to_replace);
+                    export_lv2_write_attributes(e->trk_tb_p,lv2_to_replace,0/* No sync */);
                     // Return a empty fid because no inode has been deleted
                     memset(fid, 0, sizeof (fid_t));
                 }
@@ -5352,20 +5453,23 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     if (memcmp(pfid, npfid, sizeof (fid_t)) != 0) {
 
         lv2_new_parent->attributes.s.attrs.children++;
-        lv2_old_parent->attributes.s.attrs.children--;
+        if (deleted_object) lv2_old_parent->attributes.s.hpc_reserved--;
+        else lv2_old_parent->attributes.s.attrs.children--;
+
 
         if (S_ISDIR(lv2_to_rename->attributes.s.attrs.mode)) {
             lv2_new_parent->attributes.s.attrs.nlink++;
-            lv2_old_parent->attributes.s.attrs.nlink--;
+	    if (deleted_object) lv2_old_parent->attributes.s.hpc_reserved--;
+            else lv2_old_parent->attributes.s.attrs.nlink--;
         }
 
         lv2_new_parent->attributes.s.attrs.mtime = lv2_new_parent->attributes.s.attrs.ctime = time(NULL);
         lv2_old_parent->attributes.s.attrs.mtime = lv2_old_parent->attributes.s.attrs.ctime = time(NULL);
 
-        if (export_lv2_write_attributes(e->trk_tb_p,lv2_new_parent) != 0)
+        if (export_lv2_write_attributes(e->trk_tb_p,lv2_new_parent,0/* No sync */) != 0)
             goto out;
 
-        if (export_lv2_write_attributes(e->trk_tb_p,lv2_old_parent) != 0)
+        if (export_lv2_write_attributes(e->trk_tb_p,lv2_old_parent,0/* No sync */) != 0)
             goto out;
     } else {
 	/*
@@ -5375,6 +5479,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
 	*/
 	if (deleted_object)
 	{
+	  lv2_old_parent->attributes.s.hpc_reserved--;
           lv2_new_parent->attributes.s.attrs.children++;
           if (S_ISDIR(lv2_to_rename->attributes.s.attrs.mode)) {
               lv2_new_parent->attributes.s.attrs.nlink++;
@@ -5382,7 +5487,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
 	}
         lv2_new_parent->attributes.s.attrs.mtime = lv2_new_parent->attributes.s.attrs.ctime = time(NULL);
 
-        if (export_lv2_write_attributes(e->trk_tb_p,lv2_new_parent) != 0)
+        if (export_lv2_write_attributes(e->trk_tb_p,lv2_new_parent,0/* No sync */) != 0)
             goto out;
     }
 
@@ -5406,7 +5511,7 @@ int export_rename(export_t *e, fid_t pfid, char *name, fid_t npfid,
     memcpy(&lv2_to_rename->attributes.s.pfid,npfid,sizeof(fid_t));
         
     // Write attributes of renamed file
-    if (export_lv2_write_attributes(e->trk_tb_p,lv2_to_rename) != 0)
+    if (export_lv2_write_attributes(e->trk_tb_p,lv2_to_rename, 1/* sync */) != 0)
         goto out;
 
     memcpy(attrs,&lv2_to_rename->attributes,sizeof(mattr_t));
@@ -5470,7 +5575,7 @@ int64_t export_read(export_t * e, fid_t fid, uint64_t offset, uint32_t len,
         goto error;
 
     // Write attributes of file
-    if (export_lv2_write_attributes(e->trk_tb_p,lv2) != 0)
+    if (export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */) != 0)
         goto error;
 
     // Return the length that can be read
@@ -5556,6 +5661,7 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
 	                   mattr_t *attrs) {
     int64_t length = -1;
     lv2_entry_t *lv2 = NULL;
+    int          sync = 0;
 
     START_PROFILING(export_write_block);
 
@@ -5563,6 +5669,23 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
     if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid)))
         goto out;
 
+    /*
+    ** check the case of the file mover
+    */
+    {
+       rozofs_inode_t *inode_p = (rozofs_inode_t*)fid;
+       if (inode_p->s.key == ROZOFS_REG_D_MOVER)
+       {
+          /*
+	  ** write block should be ignored
+	  */
+	  length = len;
+	  memcpy(attrs, &lv2->attributes.s.attrs, sizeof (mattr_t));
+          memcpy(attrs->fid,fid,sizeof(fid_t));
+	  if (test_no_extended_attr(lv2)) rozofs_clear_xattr_flag(&attrs->mode);
+	  goto out;	  
+       }
+    }
 
     // Update size of file
     if (off + len > lv2->attributes.s.attrs.size) {
@@ -5579,14 +5702,14 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
             goto out;
 
         lv2->attributes.s.attrs.size = off + len;
+	sync = 1;
     }
-
     // Update mtime and ctime
     lv2->attributes.s.attrs.mtime = lv2->attributes.s.attrs.ctime = time(NULL);
     /*
     ** write inode attributes on disk
     */
-    export_attr_thread_submit(lv2,e->trk_tb_p);
+    export_attr_thread_submit(lv2,e->trk_tb_p, sync);
     /*
     ** return the parent attributes
     */
@@ -5696,6 +5819,58 @@ out:
     if (fdp != -1) close(fdp);
     STOP_PROFILING(export_readdir);
 
+    return status;
+}
+
+/*
+**______________________________________________________________________________
+*/
+/** read a directory (version 2)
+ *
+ * @param e: the export managing the file
+ * @param fid: the id of the directory
+ * @param children: pointer to pointer where the first children we will stored
+ * @param cookie: index mdirentries where we must begin to list the mdirentries
+ * @param eof: pointer that indicates if we list all the entries or not
+ *
+ * @return: 0 on success -1 otherwise (errno is set)
+ */
+int export_readdir2(export_t * e, fid_t fid, uint64_t * cookie,
+        char *buf_readdir, uint8_t * eof) {
+    int status = -1;
+    lv2_entry_t *parent = NULL;
+    int fdp = -1;
+    
+        
+    START_PROFILING(export_readdir);
+
+    // Get the lv2 inode
+    if (!(parent = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid))) {
+        severe("export_readdir failed: %s", strerror(errno));
+        goto out;
+    }
+    /*
+    ** load the root_idx bitmap of the old parent
+    */
+    export_dir_load_root_idx_bitmap(e,fid,parent);
+    
+    // Verify that the target is a directory
+    if (!S_ISDIR(parent->attributes.s.attrs.mode)) {
+        severe("export_readdir failed: %s", strerror(errno));
+        errno = ENOTDIR;
+        goto out;
+    }
+
+    /*
+    ** set global variables associated with the export
+    */
+    fdp = export_open_parent_directory(e,fid);
+    status =list_mdirentries2(parent->dirent_root_idx_p,fdp, fid, buf_readdir, cookie, eof,&parent->attributes);
+out:
+    if (parent != NULL) export_dir_flush_root_idx_bitmap(e,fid,parent->dirent_root_idx_p);
+
+    if (fdp != -1) close(fdp);
+    STOP_PROFILING(export_readdir);
     return status;
 }
 /*
@@ -5817,11 +5992,28 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   rozofs_uuid_unparse(lv2->attributes.s.attrs.fid,p);
   p += 36;
   *p++ = '\n';
-  
+  if (S_ISREG(lv2->attributes.s.attrs.mode)) {
+
+     fid_t fidtmp;
+     rozofs_inode_t *fake_inode = (rozofs_inode_t*)fidtmp;
+     memcpy(fidtmp,lv2->attributes.s.attrs.fid,sizeof(fid_t));
+     fake_inode->s.key = ROZOFS_REG_S_MOVER;
+     DISPLAY_ATTR_TITLE( "FID_S"); 
+     rozofs_uuid_unparse(fidtmp,p);
+     p += 36;
+     *p++ = '\n';     
+     fake_inode->s.key = ROZOFS_REG_D_MOVER;
+     DISPLAY_ATTR_TITLE( "FID_M"); 
+     rozofs_uuid_unparse(fidtmp,p);
+     p += 36;
+     *p++ = '\n';                 
+  }
   rozofs_inode_t * fake_inode_p =  (rozofs_inode_t *) lv2->attributes.s.attrs.fid;
   DISPLAY_ATTR_TITLE( "SPLIT");   
   p += rozofs_string_append(p,"vers=");
   p += rozofs_u64_append(p,fake_inode_p->s.vers);
+  p += rozofs_string_append(p," mover_idx=");
+  p += rozofs_u64_append(p,fake_inode_p->s.mover_idx);
   p += rozofs_string_append(p," fid_high=");
   p += rozofs_u64_append(p,fake_inode_p->s.fid_high);
   p += rozofs_string_append(p," recycle=");
@@ -5902,7 +6094,52 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     p += rozofs_u32_padded_append(p,3, rozofs_zero,lv2->attributes.s.attrs.sids[idx]);
   } 
   p += rozofs_eol(p);
-  
+  /*
+  ** Check the case of a file that is currently move internally
+  */
+  {
+  rozofs_mover_sids_t *dist_mv_p;
+  dist_mv_p = (rozofs_mover_sids_t*)&lv2->attributes.s.attrs.sids;
+  if (dist_mv_p->dist_t.mover_cid != 0)
+  {  
+    DISPLAY_ATTR_INT("CLUSTERM",dist_mv_p->dist_t.mover_cid);
+    DISPLAY_ATTR_TITLE("STORAGEM");
+    p += rozofs_u32_padded_append(p,3,rozofs_zero, dist_mv_p->dist_t.mover_sids[0]); 
+    for (idx = 1; idx < rozofs_safe; idx++) {
+      *p++ = '-';
+      p += rozofs_u32_padded_append(p,3, rozofs_zero,dist_mv_p->dist_t.mover_sids[idx]);
+    } 
+    p += rozofs_eol(p);
+    }
+  }
+  DISPLAY_ATTR_HEX("CHILD",lv2->attributes.s.attrs.children);
+  if (lv2->time_move != 0)
+  {
+    bufall[0] = 0;
+    ctime_r((const time_t *)&lv2->time_move,bufall);
+    DISPLAY_ATTR_TXT_NOCR("MOVETM", bufall);  
+  }
+  /*
+  ** display the FID used for the storage
+  */
+  {
+     fid_t fid_storage;
+     int retcode;
+     
+     rozofs_build_storage_fid_from_attr(&lv2->attributes.s.attrs,fid_storage,ROZOFS_PRIMARY_FID);
+     DISPLAY_ATTR_TITLE( "FID_SP"); 
+     rozofs_uuid_unparse(fid_storage,p);
+     p += 36;
+     *p++ = '\n';     
+     retcode = rozofs_build_storage_fid_from_attr(&lv2->attributes.s.attrs,fid_storage,ROZOFS_MOVER_FID);
+     if (retcode == 0)
+     {
+       DISPLAY_ATTR_TITLE( "FID_SM"); 
+       rozofs_uuid_unparse(fid_storage,p);
+       p += 36;
+       *p++ = '\n';             
+     }  
+  }
   DISPLAY_ATTR_TITLE("ST.SLICE");
   p += rozofs_u32_append(p,rozofs_storage_fid_slice(lv2->attributes.s.attrs.fid)); 
   p += rozofs_eol(p);
@@ -5993,7 +6230,7 @@ static inline int set_rozofs_link_from_fid(export_t *e, lv2_entry_t *lv2, char *
     /*
     ** write the new link name on disk
     */
-    ret = exp_metadata_write_attributes(p,&fake_inode,link,length);
+    ret = exp_metadata_write_attributes(p,&fake_inode,link,length, 0 /* no sync */);
     if (ret < 0)
     { 
       return -1;      
@@ -6032,7 +6269,7 @@ static inline int set_rozofs_link_from_fid(export_t *e, lv2_entry_t *lv2, char *
       /*
       ** Save new size on disk
       */
-      ret = export_lv2_write_attributes(e->trk_tb_p,lv2);
+      ret = export_lv2_write_attributes(e->trk_tb_p,lv2, 0/* no sync */);
       if (ret < 0)
       { 
         return -1;      
@@ -6147,14 +6384,20 @@ out:
   if (fdp != -1) close(fdp);
   return status;    
 }
-static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value,int length) {
-  char       * p=value;
+static char buf_xattr[1024];
+
+static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_buf,int length) {
+  char       * p;
   int          idx,jdx;
   int          new_cid;
   int          new_sids[ROZOFS_SAFE_MAX]; 
   uint8_t      rozofs_safe;
   int          valint=-1;
-
+  char * value=buf_xattr;
+  
+  p=value;
+  memcpy(buf_xattr,input_buf,length);
+  buf_xattr[length]=0;
   /*
   ** Is this a backup mode change : 0: no backup/ 1: backup file of this directory only/ 2: backup recursive
   */  
@@ -6175,7 +6418,7 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value,i
       ** Save new distribution on disk
       */
       lv2->attributes.s.attrs.sids[0]=(sid_t)valint;
-      return export_lv2_write_attributes(e->trk_tb_p,lv2);
+      return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
     }
     return 0;
   }
@@ -6188,7 +6431,7 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value,i
       /*
       ** Save new distribution on disk
       */
-      return export_lv2_write_attributes(e->trk_tb_p,lv2);
+      return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
 
     }
     return 0;
@@ -6203,7 +6446,7 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value,i
       /*
       ** Save new distribution on disk
       */
-      return export_lv2_write_attributes(e->trk_tb_p,lv2);
+      return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
 
     }
     return 0;
@@ -6218,7 +6461,7 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value,i
       /*
       ** Save new distribution on disk
       */
-      return export_lv2_write_attributes(e->trk_tb_p,lv2);
+      return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
 
     }
     return 0;
@@ -6233,7 +6476,18 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value,i
       /*
       ** Save new distribution on disk
       */
-      return export_lv2_write_attributes(e->trk_tb_p,lv2);
+      return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
+
+    }
+    return 0;
+  }
+  if (sscanf(p," size = %d", &valint) == 1) {
+    if (lv2->attributes.s.attrs.size != valint) {
+      lv2->attributes.s.attrs.size = valint;
+      /*
+      ** Save new distribution on disk
+      */
+      return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
 
     }
     return 0;
@@ -6247,6 +6501,18 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value,i
   if (S_ISLNK(lv2->attributes.s.attrs.mode)) {
     errno = EMLINK;
     return -1;
+  }
+  /*
+  ** case of the mover: allocation of the new distribution for the file to move
+  */
+  if (sscanf(p," mover_allocate = %d", &new_cid) == 1)
+  {
+     return (rozofs_mover_allocate_scan(value,p,length,e,lv2,new_cid));  
+  }
+
+  if (sscanf(p," mover_validate = %d", &valint) == 1)
+  {
+     return (rozofs_mover_valid_scan(e,lv2,valint));  
   }
 
   /*
@@ -6321,7 +6587,7 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value,i
   /*
   ** Save new distribution on disk
   */
-  return export_lv2_write_attributes(e->trk_tb_p,lv2);  
+  return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);  
 } 
 /*
 **______________________________________________________________________________
@@ -6532,7 +6798,66 @@ out:
     STOP_PROFILING(export_getxattr);
 
     return status;
-}	       
+}
+
+/*
+**______________________________________________________________________________
+*/
+/** retrieve an extended attribute value in raw mode.
+ *
+ * @param e: the export managing the file or directory.
+ * @param fid: the id of the file or directory.
+ * @param name: the extended attribute name.
+ * @param value: the value of this extended attribute.
+ * @param size: the size of a buffer to hold the value associated
+ * @param ret: pointer to the array where extended attributes must be returned
+ *  with this extended attribute.
+ * 
+ * @return: On success, the size of the extended attribute value.
+ * On failure, -1 is returned and errno is set appropriately.
+ */
+ssize_t export_getxattr_raw(export_t *e, fid_t fid, const char *name, void *value, size_t size,epgw_getxattr_raw_ret_t *ret_p) {
+    ssize_t status = -1;
+    int ret;
+    lv2_entry_t *lv2 = 0;
+
+    START_PROFILING(export_getxattr);
+
+
+    if (!(lv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, fid))) {
+        severe("export_getattr failed: %s", strerror(errno));
+        goto out;
+    }
+    
+    ret = ext4_xattr_ibody_get_raw(lv2,
+                                   ret_p->status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_val,
+				   &ret_p->status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_len);
+    if ((ret < 0)&&(ret!= -ENODATA)) {
+      
+      status = 0;
+      goto out;
+    } 
+    errno = 0;
+    ext4_xattr_block_get_raw(lv2,
+                             ret_p->status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr_block.inode_xattr_block_val,
+			     &ret_p->status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr_block.inode_xattr_block_len);
+    if (errno== 0) status = 0;
+
+out:
+    /*
+    ** release the memory allocated for exetnded block if it exists
+    */
+    if (lv2) {
+      if (lv2->extended_attr_p != NULL) 
+      {
+        free(lv2->extended_attr_p);
+        lv2->extended_attr_p = NULL;
+      }
+    }  
+    STOP_PROFILING(export_getxattr);
+
+    return status;
+}	    	       
 /*
 **______________________________________________________________________________
 */
@@ -6900,7 +7225,7 @@ int export_setxattr(export_t *e, fid_t fid, char *name, const void *value, size_
 	 /*
 	 ** write child attributes on disk
 	 */
-	 export_attr_thread_submit(lv2,e->trk_tb_p);
+	 export_attr_thread_submit(lv2,e->trk_tb_p, 0 /* No sync */);
        }
        if (ret == 0)
        {

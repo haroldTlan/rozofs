@@ -32,6 +32,17 @@ extern int rozofs_bugwatch;
 extern uint64_t rozofs_opened_file;
 extern exportclt_t exportclt; 
 
+typedef struct dirbuf {
+    char *p;
+    size_t size;   /**< received size */
+    uint8_t eof;   /**< assert to 1 upon reaching end of file */
+    uint64_t cookie;  /**< next cookie  */
+    uint64_t last_cookie_buf;  /**< cookie of the last entry provided to the caller  */
+    size_t   cookie_offset_buf; /**< offset of the entry in the buffer               */
+} dirbuf_t;
+
+void rozofs_free_db(dirbuf_t * db);
+
 typedef enum 
 {
   BUF_ST_EMPTY = 0,
@@ -122,6 +133,7 @@ typedef struct file {
     uint64_t         off_wr_start;    /**< geo replication :write offset start  */
     uint64_t         off_wr_end;      /**< geo replication :write offset end  */
     int              pending_read_count; 
+    int              open_flags;     /**< flags given at opening time */
 #if 0
     char *buffer;
     int buf_write_wait;
@@ -130,6 +142,16 @@ typedef struct file {
     uint64_t buf_from;
 #endif
 } file_t;
+
+/**
+*  structure used on an opened directory
+*/
+typedef struct dir {
+   int      release_requested;  /**< assert to 1 when there a pending readdir    */
+   int      readdir_pending;    /**< assert to 1 when there is a pending readdir */
+   off_t    off;
+   dirbuf_t db; ///< buffer used for directory listing
+} dir_t;
 
 /**
 *  Reset the start and end offset to address the
@@ -144,6 +166,46 @@ static inline void rozofs_geo_write_reset(file_t *file)
     file->off_wr_start = 0xFFFFFFFFFFFFFFFF;
     file->off_wr_end = 0;
 }
+
+/**
+*  Init of the directory structure 
+
+ @param none
+ 
+ @retval popinter to the allocated structure
+ */
+static inline dir_t * rozofs_dir_working_var_init()
+{
+ dir_t * dir;
+ dir = xmalloc(sizeof (dir_t));
+ memset(dir,0,sizeof(dir_t));
+ return dir;
+
+}
+
+/**
+*  release of the directory structure 
+
+ @param none
+ 
+ @retval popinter to the allocated structure
+ */
+static inline void rozofs_dir_working_var_release(dir_t *dir_p)
+{
+
+ if (dir_p->readdir_pending !=0) 
+ {
+   dir_p->release_requested = 1;
+   return;
+ }
+ rozofs_free_db(&dir_p->db);
+ /*
+ ** release any buffer allocated for readdir
+ */
+ xfree(dir_p);
+
+}
+
 /**
 *  Init of the file structure 
 
@@ -261,9 +323,9 @@ static inline int file_close(file_t * f) {
      /*
      ** Release all memory allocated
      */
-     free(f->buffer);
+     xfree(f->buffer);
      f->chekWord = 0;
-     free(f);
+     xfree(f);
      rozofs_opened_file--;
     return 1;
 }

@@ -31,7 +31,7 @@ void show_common_config(char * argv[], uint32_t tcpRef, void *bufRef);
 void common_config_read(char * fname) ;
 
 #define COMMON_CONFIG_SHOW_NAME(val) {\
-  pChar += rozofs_string_padded_append(pChar, 32, rozofs_left_alignment, #val);\
+  pChar += rozofs_string_padded_append(pChar, 50, rozofs_left_alignment, #val);\
   pChar += rozofs_string_append(pChar, " = ");\
 }
   
@@ -150,4 +150,22 @@ void show_common_config(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 void common_config_read(char * fname) {
   common_config_generated_read(fname);
+
+
+  
+  /*
+  ** Add some consistency checks
+  */
+  
+  
+  /*
+  ** For self healing to be set, export host must be provided
+  */
+  if (strcasecmp(common_config.device_selfhealing_mode,"")!=0) {
+    if (strcasecmp(common_config.export_hosts,"")==0) {
+      severe("device_selfhealing_mode is \"%s\" while export_hosts is not defined -> set to \"\"",common_config.device_selfhealing_mode);
+      common_config.device_selfhealing_mode[0] = 0;
+    }
+  }
+  
 }

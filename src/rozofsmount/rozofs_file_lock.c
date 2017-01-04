@@ -565,6 +565,7 @@ void rozofs_ll_getlk_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -699,6 +700,11 @@ void rozofs_ll_flock_nb(fuse_req_t req,
     struct flock flock;
 
 
+    /*
+    ** Just keep significant bits
+    ** and clear all other
+    */
+    op = op & (LOCK_NB|LOCK_SH|LOCK_EX|LOCK_UN);
     
     /*
     ** Blocking or not blocking ? 
@@ -728,6 +734,9 @@ void rozofs_ll_flock_nb(fuse_req_t req,
         break;
       default:
 	lock_stat.einval++;      
+        if (lock_stat.einval%1024==1) {
+          severe("rozofs_ll_flock_nb op = 0x%x",(unsigned int)op);
+        }
         fuse_reply_err(req, EINVAL);
         return;
     }
@@ -961,6 +970,7 @@ void rozofs_ll_setlk_after_flush(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -1079,6 +1089,7 @@ void rozofs_ll_setlk_after_write_block(void *this,void *param) {
     ** OK now decode the received message
     */
     bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -1186,7 +1197,7 @@ int rozofs_ll_setlk_internal(file_t * file) {
     struct timeval tv;
     int ret;
 
-    gprofiler.rozofs_ll_setlk_int[P_COUNT]++;
+    gprofiler->rozofs_ll_setlk_int[P_COUNT]++;
     gettimeofday(&tv,(struct timezone *)0);
     file->timeStamp = MICROLONG(tv);
 
@@ -1220,7 +1231,7 @@ int rozofs_ll_setlk_internal(file_t * file) {
 #endif
    if (ret == 0) return ret;
    gettimeofday(&tv,(struct timezone *)0); 
-   gprofiler.rozofs_ll_setlk_int[P_ELAPSE] += (MICROLONG(tv)-file->timeStamp);  
+   gprofiler->rozofs_ll_setlk_int[P_ELAPSE] += (MICROLONG(tv)-file->timeStamp);  
    /* If lock request can not be sent, rechain the lock request immediatly */
    ruc_objInsertTail(&pending_lock_list,&file->pending_lock);
    return ret;   				         
@@ -1336,6 +1347,7 @@ void rozofs_ll_setlk_internal_cbk(void *this,void * param)
     ** OK now decode the received message
     */
     bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -1405,7 +1417,7 @@ error:
     
 out:   
     gettimeofday(&tv,(struct timezone *)0); 
-    gprofiler.rozofs_ll_setlk_int[P_ELAPSE] += (MICROLONG(tv)-file->timeStamp);   
+    gprofiler->rozofs_ll_setlk_int[P_ELAPSE] += (MICROLONG(tv)-file->timeStamp);   
      
     if (rozofs_tx_ctx_p != NULL) rozofs_tx_free_from_ptr(rozofs_tx_ctx_p);    
     if (recv_buf != NULL) ruc_buf_freeBuffer(recv_buf);           
@@ -1575,6 +1587,7 @@ error:
 void rozofs_ll_clear_client_file_lock(int eid, uint64_t client_hash) {
     epgw_lock_arg_t arg;
 
+    memset(&arg,0,sizeof(epgw_lock_arg_t));
     arg.arg_gw.eid             = exportclt.eid;
     arg.arg_gw.lock.client_ref = rozofs_client_hash; 
     strncpy(arg.arg_gw.client_info.vers,VERSION,ROZOFS_VERSION_STRING_LENGTH);    

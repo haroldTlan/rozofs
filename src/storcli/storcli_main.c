@@ -54,6 +54,7 @@
 #include <rozofs/core/rozofs_host2ip.h>
 #include <rozofs/core/ruc_traffic_shaping.h>
 #include <rozofs/core/rozofs_host_list.h>
+#include <rozofs/core/rozofs_numa.h>
 
 #include "rozofs_storcli_lbg_cnf_supervision.h"
 #include "rozofs_storcli.h"
@@ -65,7 +66,7 @@
 
 int rozofs_storcli_non_blocking_init(uint16_t dbg_port, uint16_t rozofsmount_instance);
 
-DEFINE_PROFILING(stcpp_profiler_t) = {0};
+DEFINE_PROFILING(stcpp_profiler_t);
 
 
 /*
@@ -153,32 +154,32 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 #define RESET_PROFILER_PROBE(probe) \
 { \
-         gprofiler.probe[P_COUNT] = 0;\
-         gprofiler.probe[P_ELAPSE] = 0; \
+         gprofiler->probe[P_COUNT] = 0;\
+         gprofiler->probe[P_ELAPSE] = 0; \
 }
 
 #define RESET_PROFILER_PROBE_BYTE(probe) \
 { \
    RESET_PROFILER_PROBE(probe);\
-   gprofiler.probe[P_BYTES] = 0; \
+   gprofiler->probe[P_BYTES] = 0; \
 }
 
 #define SHOW_PROFILER_PROBE_COUNT(probe) {\
-  if (gprofiler.probe[P_COUNT]) {\
+  if (gprofiler->probe[P_COUNT]) {\
     pChar += sprintf(pChar," %-18s | %15"PRIu64"  | %9s  | %18s  | %15s |\n",\
-                     #probe,gprofiler.probe[P_COUNT]," "," "," ");\
+                     #probe,gprofiler->probe[P_COUNT]," "," "," ");\
   }\
 }
 
 
 #define SHOW_PROFILER_PROBE_BYTE(probe) {\
-  if (gprofiler.probe[P_COUNT]) {\
+  if (gprofiler->probe[P_COUNT]) {\
     pChar += sprintf(pChar," %-18s | %15"PRIu64"  | %9"PRIu64"  | %18"PRIu64"  | %15"PRIu64" |\n",\
 		     #probe,\
-		     gprofiler.probe[P_COUNT],\
-		     gprofiler.probe[P_COUNT]?gprofiler.probe[P_ELAPSE]/gprofiler.probe[P_COUNT]:0,\
-		     gprofiler.probe[P_ELAPSE],\
-                     gprofiler.probe[P_BYTES]);\
+		     gprofiler->probe[P_COUNT],\
+		     gprofiler->probe[P_COUNT]?gprofiler->probe[P_ELAPSE]/gprofiler->probe[P_COUNT]:0,\
+		     gprofiler->probe[P_ELAPSE],\
+                     gprofiler->probe[P_BYTES]);\
   }\
 }
 
@@ -214,7 +215,7 @@ void show_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 
     // Compute uptime for storaged process
-    elapse = (int) (this_time - gprofiler.uptime);
+    elapse = (int) (this_time - gprofiler->uptime);
     days = (int) (elapse / 86400);
     hours = (int) ((elapse / 3600) - (days * 24));
     mins = (int) ((elapse / 60) - (days * 1440) - (hours * 60));
@@ -222,7 +223,7 @@ void show_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 
 
-    pChar += sprintf(pChar, "GPROFILER version %s uptime =  %d days, %2.2d:%2.2d:%2.2d\n", gprofiler.vers,days, hours, mins, secs);
+    pChar += sprintf(pChar, "GPROFILER version %s uptime =  %d days, %2.2d:%2.2d:%2.2d\n", gprofiler->vers,days, hours, mins, secs);
     pChar += sprintf(pChar, "   procedure        |     count        |  time(us)  | cumulated time(us)  |     bytes       |\n");
     pChar += sprintf(pChar, "--------------------+------------------+------------+---------------------+-----------------+\n");
 
@@ -260,6 +261,9 @@ void show_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
     SHOW_PROFILER_PROBE_COUNT(delete_prj_tmo);
     SHOW_PROFILER_PROBE_COUNT(delete_prj_err);
     
+    SHOW_PROFILER_PROBE_COUNT(resize);
+    SHOW_PROFILER_PROBE_COUNT(resize_prj);
+    SHOW_PROFILER_PROBE_COUNT(resize_prj_err);
     if (argv[1] != NULL)
     {
       if (strcmp(argv[1],"reset")==0) {
@@ -295,8 +299,13 @@ void show_profiler(char * argv[], uint32_t tcpRef, void *bufRef) {
 	RESET_PROFILER_PROBE_BYTE(delete_prj);
 	RESET_PROFILER_PROBE(delete_prj_tmo);
 	RESET_PROFILER_PROBE(delete_prj_err);  
+    
+	RESET_PROFILER_PROBE(resize);
+	RESET_PROFILER_PROBE(resize_prj);
+	RESET_PROFILER_PROBE(resize_prj_err);
+	
 	pChar += sprintf(pChar,"Reset Done\n");  
-	gprofiler.uptime = this_time;  
+	gprofiler->uptime = this_time;  
       }
       else {
 	/*
@@ -332,8 +341,9 @@ void man_corrupted(char * pChar) {
 **
 */
 char * display_corrupted(char * pChar) {
-  int        idx;
-  uint64_t * fid;
+  uint        idx;
+  uint8_t *   fid;
+  storcli_one_corrupted_fid_ctx * pCtx;
   int        first=1;
   
   
@@ -345,22 +355,25 @@ char * display_corrupted(char * pChar) {
   pChar += rozofs_string_append(pChar, ",\n         \"running\" : ");
   pChar += rozofs_string_append(pChar, (noReadFaultTolerant==0)?"\"Tolerant\"":"\"EIO\"");
   pChar += rozofs_string_append(pChar, "\n      },\n      \"corruption count\" : ");
-  pChar += rozofs_u64_append(pChar, gprofiler.read_blk_corrupted[P_COUNT]);
+  pChar += rozofs_u64_append(pChar, gprofiler->read_blk_corrupted[P_COUNT]);
   pChar += rozofs_string_append(pChar, ",\n");
 
   /*
   ** Display log of corrupted FID list
   */
   pChar += rozofs_string_append(pChar, "      \"corrupted FID\" : [\n");  
-  fid = (uint64_t *)storcli_fid_corrupted.fid[0];
-  for (idx=0; idx<STORCLI_MAX_CORRUPTED_FID_NB; idx++,fid+=2) {
-    if ((fid[0]==0)&&(fid[1]==0)) continue;
+  pCtx = storcli_fid_corrupted.ctx;
+  for (idx=0; idx<STORCLI_MAX_CORRUPTED_FID_NB; idx++,pCtx++) {
+    if (pCtx->count == 0) continue;
     if (first) first = 0;
-    else       pChar += rozofs_string_append(pChar, ",\n");  
-    pChar += rozofs_string_append(pChar, "         {\"FID\" : \"");  
+    else       pChar += rozofs_string_append(pChar, ",\n"); 
+    fid = (uint8_t  *)pCtx->fid;
+    pChar += rozofs_string_append(pChar, "         {\"FID\" : \"@rozofs_uuid@");  
     rozofs_uuid_unparse((uint8_t*)fid, pChar);
     pChar += 36;
-    pChar += rozofs_string_append(pChar, "\"}");  
+    pChar += rozofs_string_append(pChar, "\", \"count\" : ");  
+    pChar += rozofs_u64_append(pChar, pCtx->count);
+    pChar += rozofs_string_append(pChar, "}");  
   }
   pChar += rozofs_string_append(pChar, "\n      ]\n   }\n}\n");  
 
@@ -411,6 +424,125 @@ void show_corrupted(char * argv[], uint32_t tcpRef, void *bufRef) {
   }  
   else {
     pChar = display_corrupted(pChar);    
+  } 
+  
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
+}
+/* 
+**____________________________________________________
+** RW error buffer CLI man
+**
+*/
+void man_rwerror(char * pChar) {
+  pChar += rozofs_string_append(pChar,"rwerror          : display r/w error buffer.\n");
+  pChar += rozofs_string_append(pChar,"rwerror reset    : reset r/w error buffer.\n");
+  
+  pChar += rozofs_string_append(pChar,"\nThe error buffer contains a list of error records.\n");
+  pChar += rozofs_string_append(pChar,"Each error record contains the following information:\n");
+  pChar += rozofs_string_append(pChar," time  : the date when the error occured.\n");
+  pChar += rozofs_string_append(pChar," error : the errno associated to the error.\n");
+  pChar += rozofs_string_append(pChar," ope   : the operation in error (READ/WRITE/TRUNCATE)\n");
+  pChar += rozofs_string_append(pChar," line  : the line in the source code where the error was detected.\n");
+  pChar += rozofs_string_append(pChar," FID   : an identifier of the file on which the error occured.\n");
+  pChar += rozofs_string_append(pChar," bid   : the block number of the request.\n");
+  pChar += rozofs_string_append(pChar," size  : the size in block of the request.\n");
+  pChar += rozofs_string_append(pChar," lbg   : the status of the LBG toward the file distribution;\n");
+  pChar += rozofs_string_append(pChar,"         One character per sid giving the LBG status.\n");
+  pChar += rozofs_string_append(pChar,"         'U'=Up 'D'=Down 'S'=Shutting down '-'=Dependandcy\n");
+  pChar += rozofs_string_append(pChar," prj   : the projection context. Each projection is displayed on 2 characters.\n");
+  pChar += rozofs_string_append(pChar,"         1rst: storage index in the lbg status field.\n");
+  pChar += rozofs_string_append(pChar,"         2nd : 'D'=Done 'N'=No file 'P'=in progress 'E'=Error 'I'=Idle.\n");
+}
+
+char * storcli_ope2string(int ope) {       
+  switch(ope) {
+    case  STORCLI_READ:     return "READ";
+    case  STORCLI_WRITE:    return "WRITE";
+    case  STORCLI_TRUNCATE: return "TRUNCATE";
+  }
+  return "?";
+}   
+/*
+**____________________________________________________
+** Display counters and configuration
+**
+*/
+char * display_rwerror(char * pChar) {
+  uint        idx;
+  uint8_t *   fid;
+  int        first=1;
+  storcli_rw_error_record_t * pCtx;
+  struct tm  ts;
+
+  pChar += rozofs_string_append(pChar, "{\"rw errors\" : [\n");
+  
+  /*
+  ** Display log of corrupted FID list
+  */
+  pCtx = &storcli_rw_error.record[0];
+  for (idx=0; idx<ROZOFS_STORCLI_ERROR_RECORD_NB; idx++,pCtx++) {
+    if (pCtx->ts == 0) continue;
+    fid = (uint8_t  *)pCtx->fid;
+    
+    if (!first) pChar += rozofs_string_append(pChar, ",\n");  
+    first = 0;   
+    pChar += rozofs_string_append(pChar, "   {  \"time\" : \"");    
+    ts = *localtime(&pCtx->ts);
+    pChar += strftime(pChar, 100, "%Y-%m-%d %H:%M:%S\",", &ts);
+    pChar += rozofs_string_append(pChar, " \"error\" : \"");
+    pChar += rozofs_string_append(pChar, strerror(pCtx->error));   
+
+
+    pChar += rozofs_string_append(pChar, "\",\n      \"FID\" : \"@rozofs_uuid@");
+    rozofs_uuid_unparse((uint8_t*)fid, pChar);
+    pChar += 36;
+    
+    pChar += rozofs_string_append(pChar, "\",\n      \"ope\" : \"");
+    pChar += rozofs_string_append(pChar, storcli_ope2string(pCtx->opcode)); 
+    pChar += rozofs_string_append(pChar, "\", \"line\" : ");
+    pChar += rozofs_i32_append(pChar, pCtx->line);
+    pChar += rozofs_string_append(pChar, ", \"bid\" : ");  
+    pChar += rozofs_u64_append(pChar, pCtx->offset);
+    pChar += rozofs_string_append(pChar, ", \"size\" : ");  
+    pChar += rozofs_i32_append(pChar, pCtx->size);
+    pChar += rozofs_string_append(pChar, ",\n      \"prj\" : \"");  
+    pChar += rozofs_string_append(pChar, pCtx->prj);  
+    pChar += rozofs_string_append(pChar, "\", \"lbg\" : \"");  
+    pChar += rozofs_string_append(pChar, pCtx->lbg);  
+    pChar += rozofs_string_append(pChar, "\"\n   }");  
+  }
+  pChar += rozofs_string_append(pChar, "\n   ]\n}\n");
+
+  return pChar;
+}
+/*
+**____________________________________________________
+** Corrupted block CLI
+**
+*/
+void show_rwerror(char * argv[], uint32_t tcpRef, void *bufRef) {
+  char *pChar = uma_dbg_get_buffer();
+
+  if (argv[1] != NULL) {
+
+    /*
+    ** Reset counter
+    */
+    if (strcasecmp(argv[1],"reset")==0) {
+      pChar = display_rwerror(pChar);
+      memset(&storcli_rw_error,0,sizeof(storcli_rw_error));	   
+      pChar += rozofs_string_append(pChar, "\nrwerror buffer reset.\n");	
+    }
+
+    /*
+    ** Help
+    */      
+    else {
+      man_rwerror(pChar);  
+    }	 
+  }  
+  else {
+    pChar = display_rwerror(pChar);    
   } 
   
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
@@ -568,8 +700,50 @@ char *display_mstorage(mstorage_t *s,char *buffer)
   }
   return buffer;
 }
+/*
+**________________________________________________________________________
+*/
 
+void show_cnf_storaged(char * argv[], uint32_t tcpRef, void *bufRef) {
+   list_t *iterator = NULL;
+   char *pchar = uma_dbg_get_buffer();       
+   int i;
+   int lbg_id;
+   int cid,sid;
+   uint32_t *sid_lbg_id_p;
+   int first = 1;
 
+   pchar += sprintf(pchar,"{\"configuration status\" : [\n");
+    
+   /* Search if the node has already been created  */
+   list_for_each_forward(iterator, &exportclt.storages) {
+     mstorage_t *s = list_entry(iterator, mstorage_t, list);
+
+     for (i = 0; i< s->sids_nb; i++) {
+	cid = s->cids[i];
+	sid = s->sids[i];
+
+	sid_lbg_id_p = rozofs_storcli_cid_table[cid-1];
+	if (sid_lbg_id_p == NULL) {
+	  lbg_id = -1;
+	}
+	else {       
+	  lbg_id = sid_lbg_id_p[sid-1];
+	}
+	if (!first) {
+	  pchar += sprintf(pchar,",\n");
+	}
+	first = 0;
+	pchar += sprintf(pchar,"   {\"cid\" : %2d, \"sid\" : %2d, \"host\" : \"%s\", \"lbg\" : %3d,",cid,sid,s->host,lbg_id);
+	pchar += sprintf(pchar," \"status\" : \"");
+	pchar += mstorage_cnf_status2string(pchar,s->cnf_status);
+	pchar += sprintf(pchar,"\", \"count\" : %d, \"errno\" : \"%s\"}",s->cnf_count, strerror(s->error));
+     }     
+   }
+   pchar += sprintf(pchar,"\n  ]\n}\n");
+
+   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());      
+}      
 
 /**
 *  Display the configuration et operationbal status of the storaged
@@ -852,6 +1026,7 @@ static int get_storage_ports(mstorage_t *s) {
 
     /* Initialize connection with storage (by mproto) */
     if (mclient_connect(&mclt, timeo) != 0) {
+        s->error = errno;
         DEBUG("Warning: failed to join storage (host: %s), %s.\n",
                 s->host, strerror(errno));
         goto out;
@@ -860,6 +1035,7 @@ static int get_storage_ports(mstorage_t *s) {
     
     /* Send request to get storage TCP ports */
     if (mclient_ports(&mclt, &s->single_storio, io_address) != 0) {
+        s->error = errno;
         DEBUG("Warning: failed to get ports for storage (host: %s).\n",
                 s->host);
 	/* Release mclient*/
@@ -912,22 +1088,33 @@ void *connect_storage(void *v) {
 
 
 	struct timespec ts = { CONNECTION_THREAD_TIMESPEC, 0 };
-
+	mstorage->cnf_status = mstorage_cnf_idle;
+        mstorage->cnf_count  = 0;
+	mstorage->error      = 0;
+	
 	if (mstorage->sclients_nb != 0) {
 		configuration_done = 1;
 		ts.tv_sec = CONNECTION_THREAD_TIMESPEC * 20;
+		mstorage->cnf_status = mstorage_cnf_already_done;
 	}
 
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
 	for (;;) {
 		if (configuration_done == 0) {
+		
+			mstorage->cnf_count++;
+
 			/* We don't have the ports for this storage node */
 			if (mstorage->sclients_nb == 0) {
+			        mstorage->cnf_status = mstorage_cnf_get_ports;
 				/* Get ports for this storage node */
-				if (get_storage_ports(mstorage) != 0) {
-					DEBUG("Cannot get ports for host: %s", mstorage->host);
-				}
+				get_storage_ports(mstorage);
+				if (mstorage->sclients_nb != 0) {
+				  mstorage->cnf_status = mstorage_cnf_add_lbg;
+				  mstorage->cnf_count  = 0;
+				  mstorage->error = 0;
+				}  
 			}
 			if (mstorage->sclients_nb != 0) {
 				/*
@@ -938,10 +1125,12 @@ void *connect_storage(void *v) {
 				 ** we just can assert a flag to indicate that the configuration
 				 ** data of the lbg are available.
 				 */
-				storcli_sup_send_lbg_port_configuration((void *) mstorage);
-				configuration_done = 1;
-
-				ts.tv_sec = CONNECTION_THREAD_TIMESPEC * 20;
+				mstorage->cnf_status = mstorage_cnf_add_lbg;
+				if (storcli_sup_send_lbg_port_configuration((void *) mstorage) == 0) {				  
+				  configuration_done = 1;
+				  mstorage->cnf_status = mstorage_cnf_done;
+				  ts.tv_sec = CONNECTION_THREAD_TIMESPEC * 20;
+				}  
 			}
 		}
 
@@ -1343,6 +1532,8 @@ int main(int argc, char *argv[]) {
         { 0, 0, 0, 0}
     };
 
+    ALLOC_PROFILING(stcpp_profiler_t);
+
     /*
     ** Change local directory to "/"
     */
@@ -1650,10 +1841,23 @@ int main(int argc, char *argv[]) {
         conf.passwd = strdup("none");
     }
     
+    {
+         char path[256];
+	 
+	 sprintf(path,"%s/mount/inst_%d/storcli_%d/",ROZOFS_KPI_ROOT_PATH,conf.rozofsmount_instance,conf.module_index);
+	 ALLOC_KPI_FILE_PROFILING(path,"profiler",stcpp_profiler_t);    
+    }    
+    
     /*
     ** read common config file
     */
     common_config_read(NULL);    
+    
+    /*
+    **  set the numa node for rozofsmount and its storcli
+    */
+    rozofs_numa_allocate_node(conf.rozofsmount_instance);
+    
 
     rozofs_signals_declare("storcli",common_config.nb_core_file);
     rozofs_attach_crash_cbk(storlci_handle_signal);
@@ -1662,7 +1866,7 @@ int main(int argc, char *argv[]) {
     rozofs_storcli_cid_table_state_init();
     storcli_lbg_cnx_sup_init();
 
-    gprofiler.uptime = time(0);
+    gprofiler->uptime = time(0);
     
     /*
     ** Kill the eventual storcli with same instance that main be locked
@@ -1673,16 +1877,16 @@ int main(int argc, char *argv[]) {
       
       sprintf(cmd,"ps -o pid,cmd -C storcli | grep rozofsmount | grep \" -i %d \"  | grep \" -R %d \" > /tmp/stc1.%d",
              conf.module_index, conf.rozofsmount_instance, pid); 
-      system(cmd);
+      if (system(cmd)){};
       
       sprintf(cmd,"awk \'{if ($1!=pid) print $1; }\' pid=%d /tmp/stc1.%d >  /tmp/stc2.%d", pid, pid, pid); 
-      system(cmd);
+      if (system(cmd)){};
       
       sprintf(cmd,"for p in `cat /tmp/stc2.%d`; do kill -9 $p; done", pid); 
-      system(cmd); 
+      if (system(cmd)){};
       
       sprintf(cmd,"rm -f /tmp/stc1.%d; rm -f /tmp/stc2.%d", pid, pid); 
-      system(cmd); 
+      if (system(cmd)){};
          
     }
     
@@ -1790,6 +1994,7 @@ int main(int argc, char *argv[]) {
     ** Declare the debug entry to get the currrent configuration of the storcli
     */
     uma_dbg_addTopic("storaged_status", show_storage_configuration);
+    uma_dbg_addTopic("cnf_storaged", show_cnf_storaged);
     /*
     ** shared memory with rozofsmount
     */
@@ -1817,6 +2022,7 @@ int main(int argc, char *argv[]) {
      ** add the topic for the local profiler
      */
     uma_dbg_addTopicAndMan("corrupted", show_corrupted, man_corrupted, 0);
+    uma_dbg_addTopicAndMan("rwerror", show_rwerror, man_rwerror, 0);
 
     /*
     ** add the topic for repair capabilities

@@ -672,7 +672,7 @@ uint32_t ruc_sockctl_init(uint32_t maxConnection)
    ret = setrlimit(RLIMIT_NOFILE,&rlim);
    if (ret < 0)
    {
-      severe("setrlimit(RLIMIT_NOFILE,%d) %s",rlim.rlim_cur, strerror(errno));
+      severe("setrlimit(RLIMIT_NOFILE,%d) %s",(int)rlim.rlim_cur, strerror(errno));
       fprintf(stderr,"setrlimit(RLIMIT_NOFILE) %s\n",strerror(errno));
       exit(0);
    }
@@ -1577,9 +1577,11 @@ void rozofs_init_ticker()
 
   gettimeofday(&timeDay,(struct timezone *)0);  
   rozofs_ticker_microseconds = MICROLONG(timeDay);
+  rozofs_ticker_seconds = (uint64_t)timeDay.tv_sec;
 
 }
 uint64_t rozofs_ticker_microseconds = 0;  /**< ticker in microsecond ->see gettimeofday */
+uint64_t rozofs_ticker_seconds = 0;  /**< ticker in second ->see gettimeofday */
 /*
 **____________________________________________________________________________
 */
@@ -1605,6 +1607,7 @@ void ruc_sockCtrl_selectWait()
     gettimeofday(&timeDay,(struct timezone *)0);  
     timeBefore = MICROLONG(timeDay);
     rozofs_ticker_microseconds = timeBefore;
+    rozofs_ticker_seconds = timeDay.tv_sec;
 
     while (1)
     {
@@ -1635,6 +1638,7 @@ void ruc_sockCtrl_selectWait()
 	gettimeofday(&timeDay,(struct timezone *)0);  
 	timeAfter = MICROLONG(timeDay); 
         rozofs_ticker_microseconds = timeAfter;
+        rozofs_ticker_seconds = timeDay.tv_sec;
 	looptimeStart  = timeAfter;
       }
       else
@@ -1653,6 +1657,7 @@ void ruc_sockCtrl_selectWait()
       	gettimeofday(&timeDay,(struct timezone *)0);  
 	looptimeStart = MICROLONG(timeDay); 
         rozofs_ticker_microseconds = looptimeStart;
+        rozofs_ticker_seconds = timeDay.tv_sec;
 	if (ruc_sockCtrl_max_nr_select < nbrSelect) ruc_sockCtrl_max_nr_select = nbrSelect;
         ruc_sockCtrl_nr_socket_stats[nbrSelect]++;
 	
@@ -1665,6 +1670,7 @@ void ruc_sockCtrl_selectWait()
         gettimeofday(&timeDay,(struct timezone *)0);  
 	timeAfter = MICROLONG(timeDay); 
         rozofs_ticker_microseconds = timeAfter;
+        rozofs_ticker_seconds = timeDay.tv_sec;
       }
       /*
       ** socket polling (former receive ready callback)

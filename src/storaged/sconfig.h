@@ -36,7 +36,13 @@ typedef struct storage_config {
     sid_t sid;
     cid_t cid;
     char root[PATH_MAX];
-    sconfig_devices_t       device;    
+    sconfig_devices_t       device;  
+    /*
+    ** String to search for inside spare mark files when looking for a spare device
+    ** When null : look for empty "rozofs_spare" file
+    ** else      : look for "rozofs_spare" file containing string <spare_mark>"
+    */    
+    char                  * spare_mark;  
     list_t list;
 } storage_config_t;
 
@@ -44,7 +50,6 @@ typedef struct storage_config {
 typedef struct sconfig {
     int                     io_addr_nb; 
     struct mp_io_address_t  io_addr[STORAGE_NODE_PORTS_MAX];
-    int                     selfHealing;
     char                  * export_hosts;
     list_t storages;
 } sconfig_t;

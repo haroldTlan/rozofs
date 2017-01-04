@@ -105,6 +105,9 @@ add_executable(exportd
     quota_writeback_cache.c
     export_quota_thread.c
     rozofs_quota_intf_srv_thread.c        
+    rozofs_exp_mover.c
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h
 )
 target_link_libraries(exportd rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
@@ -144,6 +147,8 @@ add_executable(rozo_repquota
     rozofs_repquota.c
     econfig.h
     econfig.c
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h       
 )
 target_link_libraries(rozo_repquota rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
@@ -157,6 +162,8 @@ add_executable(rozo_setquota
     rozofs_quota_util.c
     econfig.h
     econfig.c
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h       
 )
 target_link_libraries(rozo_setquota rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
@@ -171,6 +178,8 @@ add_executable(rozo_quotaon
     rozofs_quota_util.c
     econfig.h
     econfig.c
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h   
 )
 target_link_libraries(rozo_quotaon rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
@@ -184,6 +193,8 @@ add_executable(rozo_warnquota
     rozofs_quota_util.c
     econfig.h
     econfig.c
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h       
 )
 target_link_libraries(rozo_warnquota rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 set (librozo_inode_sources
@@ -219,6 +230,9 @@ set_target_properties(rozofs_inode PROPERTIES COMPILE_FLAGS "-fPIC")
 #
 add_executable(rozo_fid2pathname
     rozo_fid2pathname.c  
+    econfig.c      
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h   
 )
 target_link_libraries(rozo_fid2pathname rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
@@ -228,12 +242,25 @@ add_executable(rozo_clusterstats
     rozo_clusterstats.c  
 )
 target_link_libraries(rozo_clusterstats rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
+#________________________________________________________
+add_executable(rozo_rebalance
+    rozo_rebalance.c  
+    rozo_rebalance_nblock_init.c
+    econfig.c     
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h        
+    rozofs_mover.c  
+    rozofs_mover.h
+)
+target_link_libraries(rozo_rebalance rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
 
 #________________________________________________________
 add_executable(rozo_buildfid_list
     rozo_fidlist_from_cidsid.c  
     econfig.c  
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h    
 )
 target_link_libraries(rozo_buildfid_list rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
@@ -244,7 +271,9 @@ target_link_libraries(rozo_buildfid_list rozofs_inode rozofs ${PTHREAD_LIBRARY} 
 #
 add_executable(rozo_rbsList
     rozo_rbsList.c  
-    econfig.c  
+    econfig.c 
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h        
 )
 target_link_libraries(rozo_rbsList rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
@@ -255,6 +284,8 @@ target_link_libraries(rozo_rbsList rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID
 add_executable(rozo_geoRepList
     rozo_geoRepList.c  
     econfig.c  
+    rozofs_ip4_flt.c 
+    rozofs_ip4_flt.h   
 )
 target_link_libraries(rozo_geoRepList rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 
@@ -327,6 +358,13 @@ install(TARGETS rozo_geoRepList
     ARCHIVE DESTINATION lib
     COMPONENT rozo_geoRepList
 )
+
+install(TARGETS rozo_rebalance
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    COMPONENT rozo_rebalance
+)
 install(FILES export.conf.sample DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
 install(FILES export.conf DESTINATION ${ROZOFS_CONFIG_DIR} COMPONENT export)
-install(PROGRAMS rozo_geoReplicationReinitialize.sh DESTINATION bin)
+install(PROGRAMS rozo_geoReplicationReinitialize DESTINATION bin)

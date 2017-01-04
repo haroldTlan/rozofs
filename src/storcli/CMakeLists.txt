@@ -39,6 +39,7 @@ add_executable(storcli
     rozofs_storcli_north_intf.c
     storcli_stub.c
     rozofs_storcli_read.c
+    rozofs_storcli_resize.c
     rozofs_storcli_rebuild_prj.c
     rozofs_storcli_reload_storage_config.c
     rozofs_storcli_reload_storage_config.h
@@ -54,7 +55,7 @@ add_executable(storcli
     rozofs_storcli_wr_repair.c
 )
 #pthread need by fuse
-target_link_libraries(storcli rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY})
+target_link_libraries(storcli rozofs ${PTHREAD_LIBRARY} ${CRYPT_LIBRARY} ${CONFIG_LIBRARY} ${NUMA_LIBRARY})
 
 # Install
 install(TARGETS storcli

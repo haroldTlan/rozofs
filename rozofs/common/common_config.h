@@ -90,8 +90,12 @@ typedef struct _common_config_global_t {
   // when the directory is already created 
   uint32_t    mkdir_ok_instead_of_eexist;
   // To activate workaround that make mknod respond OK instead of EEXIST
-  // when the file is already created 
+  // when the file is already created  
   uint32_t    mknod_ok_instead_of_eexist;
+  // To disable synchronous write of attributes when set to True
+  uint32_t    disable_sync_attributes;
+  // Minimum delay between the deletion request and the effective projections deletion
+  uint32_t    deletion_delay;
 
   /*
   ** client scope configuration elements
@@ -103,6 +107,18 @@ typedef struct _common_config_global_t {
   uint32_t    rozofsmount_fuse_reply_thread;
   // To activate fast reconnect from client to exportd
   uint32_t    client_fast_reconnect;
+  // delay is minutes after which a file is considered as an archived file (unit is minute)
+  uint32_t    archive_file_delay;
+  // dentry cache timeout for archive file type (unit is second)
+  uint32_t    archive_file_dentry_timeout;
+  // attribute cache timeout for archive file type (unit is second)
+  uint32_t    archive_file_attr_timeout;
+  // When that flag is asserted, the rozofsmount client can cache the extended attributes
+  uint32_t    client_xattr_cache;
+  // When that flag is asserted, the rozofsmount client performs setattr in asynchronous mode
+  uint32_t    async_setattr;
+  // statfs period in seconds. minimum is 0.
+  uint32_t    statfs_period;
 
   /*
   ** storage scope configuration elements
@@ -142,11 +158,40 @@ typedef struct _common_config_global_t {
   char *      device_automount_path;
   // Device mounting options
   char *      device_automount_option;
-  // Paralellism factor for device self healing feature
-  uint32_t    device_self_healing_process;
   // Directory to use on the storage node to build temporary files.
   // Used for instance by the rebuild process.
   char *      storage_temporary_dir;
+  // Port to be used for ssh or scp 
+  uint32_t    ssh_port;
+  // User name to be used for ssh or scp 
+  char *      ssh_user;
+  // Other ssh/scp parameter (such as key location) 
+  char *      ssh_param;
+  // self healing : Paralellism factor for device self healing feature
+  // i.e the number of process to run rebuild in //
+  uint32_t    device_self_healing_process;
+  // self healing : Fault duration in minutes before device selfhealing starts
+  uint32_t    device_selfhealing_delay;
+  // self healing :  throughput limitation in MB/s per rebuild process in //
+  // for reading external projections. The writing on disk is only
+  // 1/2 of that in layout 0, 1/4 in layout 1...
+  // 0 means no limit
+  uint32_t    device_selfhealing_read_throughput;
+  // self healing : possible modes
+  // spareOnly  only self repair on a spare disk
+  // relocate   also repair on remaining disks when no spare available
+  char *      device_selfhealing_mode;
+  // Export host names or IP addresses separated with / 
+  // Required for selfhealing.
+  // Required for spare file restoring to its nominal location.
+  char *      export_hosts;
+  // Spare file restoring : whether the service is active or not
+  uint32_t    spare_restore_enable;
+  // Spare file restoring : how often the process runs  
+  uint32_t    spare_restore_loop_delay;
+  // Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s
+  // 0 means no limit
+  uint32_t    spare_restore_read_throughput;
 } common_config_t;
 
 extern common_config_t common_config;

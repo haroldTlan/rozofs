@@ -49,7 +49,7 @@ void expnb_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
 {
     uint32_t  *com_hdr_p;
     rozofs_rpc_call_hdr_t   hdr;
-    sp_status_ret_t  arg_err;
+    epgw_status_ret_t  arg_err;
     char * arguments;
     int size = 0;
 
@@ -84,9 +84,9 @@ void expnb_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
     if (rozorpc_srv_ctx_p->decoded_arg == NULL) {
       rozorpc_srv_ctx_p->xmitBuf = rozorpc_srv_ctx_p->recv_buf;
       rozorpc_srv_ctx_p->recv_buf = NULL;
-      rozorpc_srv_ctx_p->xdr_result =(xdrproc_t) xdr_sp_status_ret_t;
-      arg_err.status = SP_FAILURE;
-      arg_err.sp_status_ret_t_u.error = ENOMEM;        
+      rozorpc_srv_ctx_p->xdr_result =(xdrproc_t) xdr_epgw_status_ret_t;
+      arg_err.status_gw.status = SP_FAILURE;
+      arg_err.status_gw.ep_status_ret_t_u.error = ENOMEM;        
       rozorpc_srv_forward_reply(rozorpc_srv_ctx_p,(char*)&arg_err);
       rozorpc_srv_release_context(rozorpc_srv_ctx_p);    
       return;
@@ -221,6 +221,13 @@ void expnb_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
 	     local =  ep_readdir_1_svc_nb;
 	     size = sizeof(epgw_readdir_arg_t);
 	     break;
+	     
+     case EP_READDIR2:
+	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_epgw_readdir_arg_t;
+	     rozorpc_srv_ctx_p->xdr_result = (xdrproc_t) xdr_epgw_readdir2_nodata_ret_t;
+	     local =  ep_readdir2_1_svc_nb;
+	     size = sizeof(epgw_readdir_arg_t);
+	     break;
 
      case EP_READ_BLOCK:
 	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_epgw_io_arg_t;
@@ -256,6 +263,14 @@ void expnb_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
 	     local =  ep_getxattr_1_svc_nb;
 	     size = sizeof(epgw_getxattr_arg_t);
 	     break;
+
+     case EP_GETXATTR_RAW:
+	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_epgw_getxattr_arg_t;
+	     rozorpc_srv_ctx_p->xdr_result = (xdrproc_t) xdr_epgw_getxattr_raw_ret_t;
+	     local =  ep_getxattr_raw_1_svc_nb;
+	     size = sizeof(epgw_getxattr_arg_t);
+	     break;
+
 
      case EP_REMOVEXATTR:
 	     rozorpc_srv_ctx_p->arg_decoder = (xdrproc_t) xdr_epgw_removexattr_arg_t;
@@ -343,9 +358,9 @@ void expnb_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
     default:
       rozorpc_srv_ctx_p->xmitBuf = rozorpc_srv_ctx_p->recv_buf;
       rozorpc_srv_ctx_p->recv_buf = NULL;
-      rozorpc_srv_ctx_p->xdr_result =(xdrproc_t) xdr_sp_status_ret_t;
-      arg_err.status = SP_FAILURE;
-      arg_err.sp_status_ret_t_u.error = EPROTO;        
+      rozorpc_srv_ctx_p->xdr_result =(xdrproc_t) xdr_epgw_status_ret_t;
+      arg_err.status_gw.status = SP_FAILURE;
+      arg_err.status_gw.ep_status_ret_t_u.error = ENOSYS;        
       rozorpc_srv_forward_reply(rozorpc_srv_ctx_p,(char*)&arg_err);
       rozorpc_srv_release_context(rozorpc_srv_ctx_p);    
       return;
@@ -362,9 +377,9 @@ void expnb_req_rcv_cbk(void *userRef,uint32_t  socket_ctx_idx, void *recv_buf)
     {    
       rozorpc_srv_ctx_p->xmitBuf = rozorpc_srv_ctx_p->recv_buf;
       rozorpc_srv_ctx_p->recv_buf = NULL;
-      rozorpc_srv_ctx_p->xdr_result = (xdrproc_t)xdr_sp_status_ret_t;
-      arg_err.status = SP_FAILURE;
-      arg_err.sp_status_ret_t_u.error = errno;        
+      rozorpc_srv_ctx_p->xdr_result = (xdrproc_t)xdr_epgw_status_ret_t;
+      arg_err.status_gw.status = SP_FAILURE;
+      arg_err.status_gw.ep_status_ret_t_u.error = errno;        
       rozorpc_srv_forward_reply(rozorpc_srv_ctx_p,(char*)&arg_err);
       /*
       ** release the context

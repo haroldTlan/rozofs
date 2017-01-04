@@ -189,6 +189,7 @@ void rozofs_ll_mkdir_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -292,8 +293,8 @@ void rozofs_ll_mkdir_cbk(void *this,void *param)
     if (nie->attrs.size < stbuf.st_size) nie->attrs.size = stbuf.st_size;
     stbuf.st_size = nie->attrs.size;
        
-    fep.attr_timeout = rozofs_tmr_get_attr();
-    fep.entry_timeout = rozofs_tmr_get_entry();
+    fep.attr_timeout = rozofs_tmr_get_attr(1);
+    fep.entry_timeout = rozofs_tmr_get_entry(1);
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
 
     rozofs_inode_t * finode = (rozofs_inode_t *) nie->attrs.fid;

@@ -113,7 +113,8 @@ int rozofs_export_send_common(exportclt_t * clt,uint32_t timeout_sec,uint32_t pr
     /*
     ** create the xdr_mem structure for encoding the message
     */
-    bufsize = rozofs_tx_get_small_buffer_size()-sizeof(uint32_t);
+    bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
     /*
     ** fill in the rpc header
@@ -257,7 +258,8 @@ int rozofs_expgateway_send_common(int lbg_id,uint32_t prog,uint32_t vers,
     /*
     ** create the xdr_mem structure for encoding the message
     */
-    bufsize = rozofs_tx_get_small_buffer_size()-sizeof(uint32_t);
+    bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
     /*
     ** fill in the rpc header
@@ -469,7 +471,8 @@ int rozofs_expgateway_send_routing_common(uint32_t eid,fid_t fid,uint32_t prog,u
     /*
     ** create the xdr_mem structure for encoding the message
     */
-    bufsize = rozofs_tx_get_small_buffer_size()-sizeof(uint32_t);
+    bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
     /*
     ** fill in the rpc header
@@ -747,8 +750,12 @@ int rozofs_storcli_send_common(exportclt_t * clt,uint32_t timeout_sec,uint32_t p
     /*
     ** insert the storcli load balancing context in the  stclbg_hash_table hash table.
     ** the context is embedded in the transaction context  
+    ** This context is not inserted for read request since read do not require other requests
+    ** to follow the same path.
     */
-    stclbg_hash_table_insert_ctx(&rozofs_tx_ctx_p->rw_lbg,fid,storcli_idx);
+    if (opcode != STORCLI_READ) {
+      stclbg_hash_table_insert_ctx(&rozofs_tx_ctx_p->rw_lbg,fid,storcli_idx);
+    }  
     /*
     ** Get the load balancing group reference associated with the storcli
     */
@@ -780,7 +787,8 @@ int rozofs_storcli_send_common(exportclt_t * clt,uint32_t timeout_sec,uint32_t p
     /*
     ** create the xdr_mem structure for encoding the message
     */
-    bufsize = ruc_buf_getMaxPayloadLen(xmit_buf)-sizeof(uint32_t);
+    bufsize = ruc_buf_getMaxPayloadLen(xmit_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/   
     xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
     /*
     ** fill in the rpc header

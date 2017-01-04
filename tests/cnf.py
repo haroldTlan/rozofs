@@ -21,11 +21,12 @@ def setLayout(l=0):
     sys.exit(-1)  
   
 #_____________________________________ 
-def setNbHosts(nbHosts):
+def setVolumeHosts(nbHosts):
   global layout_int
   global nbclusters
   global clients_nb
   global georep
+  global failures
     
   # Is there more server than sid per cluster
   factor=int(1)
@@ -36,7 +37,11 @@ def setNbHosts(nbHosts):
     nb=int(nb) * int(2)  
     
   # Create a volume
-  v1 = volume_class(layout,rozofs.failures(layout))
+  v1 = volume_class(layout)
+  if factor != 1:
+    failures = int(v1.get_failures())
+    failures = failures / factor
+    v1.set_failures(failures)
   
   # Create clusters on this volume
   for i in range(nbclusters):
@@ -48,7 +53,7 @@ def setNbHosts(nbHosts):
     for s in range(nbHosts):
       if georep == False:
         for f in range(factor):
-          c.add_sid_on_host(s+1,s % rozofs.site_number)
+          c.add_sid_on_host(s+1,(s % rozofs.site_number)+1)
       else:
         # In geo replication 
 	# host2 on site 1 replicates host1 on site 0
@@ -56,20 +61,34 @@ def setNbHosts(nbHosts):
         for f in range(factor):
           c.add_sid_on_host((2*s)+1,0,(2*s)+2,1)
         
-  # Create on export for 4K, and one mount point
-  e1 = v1.add_export(rozofs.bsize4K())
-  
-  for i in range(1,clients_nb+1): 
-    m = e1.add_mount((i-1) % rozofs.site_number)
-    if georep==True: m2 = e1.add_mount(1)
+  return v1  
     
+#_____________________________________ 
+def addExport(vol,layout=None):
+
+  # Create on export for 4K, and one mount point
+  e = vol.add_export(rozofs.bsize4K(),layout)
+
+  for i in range(1,clients_nb+1): 
+    # Georeplication : 1 clinet on each site
+    if georep==True: 
+      m1 = e.add_mount(0)
+      m2 = e.add_mount(1)
+    # Multi site one client on each site  
+    else:
+      if rozofs.site_number == 1:
+        m1 = e.add_mount(0)
+      else:	
+        for site in range(0,rozofs.site_number+1): 
+          m1 = e.add_mount(site)
+        
 
     
 #_____________________________________ 
 georep = False
 #georep = True
 
-# Number of sites
+# Number of sites : default is to have 1 site
 #rozofs.set_site_number(4)
 
 #rozofs.set_trace()
@@ -78,6 +97,9 @@ rozofs.set_alloc_mb(0);
 
 # Change number of core files
 # rozofs.set_nb_core_file(1);
+
+# Minimum delay in sec between remove and effective deletion
+rozofs.set_deletion_delay(12)
 
 # Enable FID recycling
 #rozofs.set_fid_recycle(10)
@@ -99,7 +121,7 @@ rozofs.set_self_healing(1)
 # rozofs.set_nb_listen(4)
 
 # Modify number of storio threads
-# rozofs.set_threads(8)
+#rozofs.set_threads(16)
 
 # Use fixed size file mounted through losetup for devices
 #rozofs.set_ext4(100)
@@ -120,31 +142,46 @@ rozofs.set_self_healing(1)
 # rozofs.set_mojette_threads_threshold(32*1024)
 
 # Dual STORCLI
-# rozofs.dual_storcli()
+rozofs.set_nb_storcli(4)
 
 # Disable POSIX lock
-#rozofs.no_posix_lock
+#rozofs.no_posix_lock()
 
 # Disable BSD lock
-#rozofs.no_bsd_lock
+#rozofs.no_bsd_lock()
 
 
-#-------------- NB devices
-devices    = 4
-mapper     = 2
+# Client fast reconnect
+#rozofs.set_client_fast_reconnect()
+
+#-------------- NB devices per sid
+devices    = 3
+mapper     = 3
 redundancy = 2
 
 # Nb cluster per volume
-nbclusters = 1
+nbclusters = 2
 
-# default is to have one mount point per site
-clients_nb = rozofs.site_number
+# default is to have one mount point per site and export
+clients_nb = 1
 
-# Define Layout
+# Define default layout
 setLayout(1)
 
-# Define number of Host 
-setNbHosts(8)
+# Define volume 1 on some hosts
+vol = setVolumeHosts(8)
+# Create an export on this volume with layout 1
+addExport(vol,1)
+# Add an other export on this volume with layout 1
+addExport(vol,1)
+
+
+# An other volume on the same hosts
+#vol = setVolumeHosts(8)
+# Create an export on this volume with layout 1
+#addExport(vol,1)
+# Add an other export on this volume with layout 1
+#addExport(vol,1)
 
 
 # Set host 1 faulty

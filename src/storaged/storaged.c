@@ -117,7 +117,7 @@ static SVCXPRT *storaged_monitoring_svc = 0;
 uint8_t storaged_nb_ports = 0;
 uint8_t storaged_nb_io_processes = 0;
 
-DEFINE_PROFILING(spp_profiler_t) = {0};
+DEFINE_PROFILING(spp_profiler_t);
 
 
 static int storaged_initialize() {
@@ -143,7 +143,7 @@ static int storaged_initialize() {
 		sc->device.total,
 		sc->device.mapper,
 		sc->device.redundancy,
-		-1,NULL) != 0) {
+                sc->spare_mark) != 0) {
             severe("can't initialize storage (cid:%d : sid:%d) with path %s",
                     sc->cid, sc->sid, sc->root);
             goto out;
@@ -154,6 +154,7 @@ static int storaged_initialize() {
 out:
     return status;
 }
+
 /*
 **____________________________________________________
 */
@@ -187,9 +188,47 @@ static void on_stop() {
     */
     rozofs_session_leader_killer(300000);
 }
+/*
+**____________________________________________________
+**
+** Start Spare restorer process
+**
+*/
+void storaged_start_spare_restorer_process() {
+  char   cmd[1024];
+  char   pidfile[128];
+  char * p;
+  int    ret;
 
-
-
+  p = cmd;
+      
+  /*
+  ** Get storio executable from same directory as storaged 
+  */
+  if (exe_path_name) {
+    p += rozofs_string_append(p,exe_path_name);
+    *p++ ='/'; 
+  }
+  p += rozofs_string_append(p, "stspare -c ");
+  p += rozofs_string_append(p,storaged_config_file);
+  if (pHostArray[0] != NULL) {
+    p += rozofs_string_append (p, " -H ");
+    p += rozofs_string_append (p, pHostArray[0]);
+    int idx=1;
+    while (pHostArray[idx] != NULL) {
+      *p++ ='/';
+      p += rozofs_string_append(p , pHostArray[idx++]);
+    }  
+  }	
+      
+  storaged_spare_restorer_pid_file(pidfile, pHostArray[0]);
+      
+  // Launch process throufh rozo launcher
+  ret = rozo_launcher_start(pidfile, cmd);
+  if (ret !=0) {
+    severe("rozo_launcher_start(%s,%s) %s",pidfile, cmd, strerror(errno));
+  }
+}
 /*
 **____________________________________________________
 */
@@ -214,7 +253,7 @@ void storaged_automount_devices() {
   /*
   ** Try to mount the devices
   */
-  storage_automount_devices(rozofs_storaged_path,&count);  
+  storaged_do_automount_devices(rozofs_storaged_path,&count);  
 }
 char storage_process_filename[NAME_MAX];
 
@@ -247,7 +286,7 @@ static void on_start() {
 //    SET_PROBE_VALUE(nb_rb_processes, 0);
 
     SET_PROBE_VALUE(uptime, time(0));
-    strncpy((char*) gprofiler.vers, VERSION, 20);
+    strncpy((char*) gprofiler->vers, VERSION, 20);
     SET_PROBE_VALUE(nb_io_processes, common_config.nb_disk_thread);
     
     // Create storio process(es)
@@ -363,6 +402,11 @@ static void on_start() {
         conf.nb_storio++;
       }
     }
+    
+    /*
+    ** Start spare restorer process
+    */
+    storaged_start_spare_restorer_process();
 
     // Create the debug thread of the parent
     conf.instance_id = 0;
@@ -371,18 +415,49 @@ static void on_start() {
     
     storaged_start_nb_th(&conf);
 }
-
-void usage() {
-
-    printf("RozoFS storage daemon - %s\n", VERSION);
-    printf("Usage: storaged [OPTIONS]\n\n");
-    printf("   -h, --help\t\t\tprint this message.\n");
-    printf("   -H, --host=storaged-host\tspecify the hostname to use for build pid name (default: none).\n");
-    printf("   -c, --config=config-file\tspecify config file to use (default: %s).\n",
-            STORAGED_DEFAULT_CONFIG);
-    printf("   -C, --check\tthe storaged just checks the configuration and returns an exit status (0 when OK).\n");
+/*-----------------------------------------------------------------------------
+**
+**  Display usage
+**
+**----------------------------------------------------------------------------
+*/
+void usage(char * fmt, ...) {
+  va_list   args;
+  char      error_buffer[512];
+  
+  /*
+  ** Display optionnal error message if any
+  */
+  if (fmt) {
+    va_start(args,fmt);
+    vsprintf(error_buffer, fmt, args);
+    va_end(args);   
+    severe("%s",error_buffer);
+    printf("%s\n",error_buffer);
+  }
+  
+  /*
+  ** Display usage
+  */
+  printf("RozoFS storage daemon - %s\n", VERSION);
+  printf("Usage: storaged [OPTIONS]\n\n");
+  printf("   -h, --help\t\t\tprint this message.\n");
+  printf("   -H, --host=storaged-host\tspecify the hostname to use for build pid name (default: none).\n");
+  printf("   -c, --config=config-file\tspecify config file to use (default: %s).\n",
+          STORAGED_DEFAULT_CONFIG);
+  printf("   -C, --check\tthe storaged just checks the configuration and returns an exit status (0 when OK).\n");  
+  
+  
+  if (fmt) exit(EXIT_FAILURE);
+  exit(EXIT_SUCCESS); 
 }
 
+/*-----------------------------------------------------------------------------
+**
+**  M A I N
+**
+**----------------------------------------------------------------------------
+*/
 int main(int argc, char *argv[]) {
     int c;
     int  justCheck=0; /* Run storaged. Not just a configuration check. */
@@ -395,6 +470,7 @@ int main(int argc, char *argv[]) {
         { 0, 0, 0, 0}
     };
 
+    ALLOC_PROFILING(spp_profiler_t);
     /*
     ** Change local directory to "/"
     */
@@ -409,7 +485,7 @@ int main(int argc, char *argv[]) {
 
     // Get the path name of the storaged executable
     if (strcmp("storaged",argv[0]) != 0) {
-      exe_path_name = strdup(argv[0]);
+      exe_path_name = xstrdup(argv[0]);
       exe_path_name = dirname(exe_path_name);
     }
     else {
@@ -427,8 +503,7 @@ int main(int argc, char *argv[]) {
         switch (c) {
 
             case 'h':
-                usage();
-                exit(EXIT_SUCCESS);
+                usage(NULL);
                 break;
             case 'C':
                 justCheck = 1;
@@ -443,16 +518,19 @@ int main(int argc, char *argv[]) {
 		parse_host_name(optarg);
                 break;
             case '?':
-                usage();
-                exit(EXIT_SUCCESS);
+                usage(NULL);
                 break;
             default:
-                usage();
-                exit(EXIT_FAILURE);
+                usage("Unexpected option \'%c\'",c);
                 break;
         }
     }
-
+    {
+         char path[256];
+	 
+	 sprintf(path,"%s/storage/%s/storaged/",ROZOFS_KPI_ROOT_PATH,(pHostArray[0]==NULL)?"localhost":pHostArray[0]);
+	 ALLOC_KPI_FILE_PROFILING(path,"profiler",spp_profiler_t);    
+    }
     
     /*
     ** read common config file

@@ -122,6 +122,7 @@ typedef struct rmfentry {
     ///< initial sids of storage nodes target for this file.
     sid_t current_dist_set[ROZOFS_SAFE_MAX];
     ///< current sids of storage nodes target for this file.
+    time_t   time; //< Time when the effective deletion can occur
     list_t list; ///<  pointer for extern list.
 } rmfentry_t;
 
@@ -189,6 +190,7 @@ typedef struct export {
     // of files to delete for each bucket trash
     pthread_t load_trash_thread; ///< pthread for load the list of trash and recycle files
     // to delete when we start or reload this export
+    rozofs_ip4_subnet_t * filter_tree;
     char md5[ROZOFS_MD5_SIZE]; ///< passwd
 } export_t;
 
@@ -273,6 +275,7 @@ int export_create(const char *root,export_t * e,lv2_cache_t *lv2_cache);
  *
  * @param export: pointer to the export
  * @param volume: pointer to the volume the export relies on
+ * @param layout: Layout of this export. May differ from the volume layout
  * @param bsize: Block size as defined in enum ROZOFS_BSIZE_E
  * @param lv2_cache: pointer to the cache to use
  * @param eid: id of this export
@@ -280,12 +283,12 @@ int export_create(const char *root,export_t * e,lv2_cache_t *lv2_cache);
  * @param md5: password
  * @param squota: soft quotas
  * @param: hard quotas
- *
+ * @param: IPv4 filter name
  * @return 0 on success -1 otherwise (errno is set)
  */
-int export_initialize(export_t * e, volume_t *volume, ROZOFS_BSIZE_E bsize,
+int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSIZE_E bsize,
         lv2_cache_t *lv2_cache, eid_t eid, const char *root, const char *md5,
-        uint64_t squota, uint64_t hquota);
+        uint64_t squota, uint64_t hquota, char * filter_name);
 
 /** initialize an export.
  *
@@ -521,6 +524,9 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
  */
 int export_readdir(export_t * e, fid_t fid, uint64_t * cookie, child_t **children, uint8_t *eof);
 
+int export_readdir2(export_t * e, fid_t fid, uint64_t * cookie,
+        char *buf_readdir, uint8_t * eof);
+	
 /** retrieve an extended attribute value.
  *
  * @param e: the export managing the file or directory.
@@ -535,6 +541,20 @@ int export_readdir(export_t * e, fid_t fid, uint64_t * cookie, child_t **childre
  */
 ssize_t export_getxattr(export_t *e, fid_t fid, const char *name, void *value, size_t size);
 
+
+/** retrieve an extended attribute value in raw mode.
+ *
+ * @param e: the export managing the file or directory.
+ * @param fid: the id of the file or directory.
+ * @param name: the extended attribute name.
+ * @param value: the value of this extended attribute.
+ * @param size: the size of a buffer to hold the value associated
+ *  with this extended attribute.
+ * 
+ * @return: On success, the size of the extended attribute value.
+ * On failure, -1 is returned and errno is set appropriately.
+ */
+ssize_t export_getxattr_raw(export_t *e, fid_t fid, const char *name, void *value, size_t size,epgw_getxattr_raw_ret_t *ret);
 /** set an extended attribute value for a file or directory.
  *
  * @param e: the export managing the file or directory.
@@ -944,4 +964,14 @@ int export_wr_attr_th_init();
     @retval: pointer to the exportd configuration file (full path)
 */
 char *export_get_config_file_path();
+/*
+**__________________________________________________________________
+*/
+/** Allocate a rmfentry_t structure to chain the deletion job
+ *
+ * @param trash_entry     The disk context of removed file
+ * 
+ * @return: the address of the allocated structure
+ */
+rmfentry_t * export_alloc_rmentry(rmfentry_disk_t * trash_entry);
 #endif

@@ -32,10 +32,12 @@
 #include <rozofs/rpc/eproto.h>
 #include "eproto_nb.h"
 #include <rozofs/rpc/sproto.h>
+#include <rozofs/core/af_unix_socket_generic.h>
 
 #include "export.h"
 #include "volume.h"
 #include "exportd.h"
+#include "rozofs_ip4_flt.h"
 
 DECLARE_PROFILING(epp_profiler_t);
 
@@ -52,8 +54,13 @@ DECLARE_PROFILING(epp_profiler_t);
     req_ctx_p->recv_buf = NULL; \
     rozorpc_srv_forward_reply(req_ctx_p,(char*)ret); \
     rozorpc_srv_release_context(req_ctx_p);
+ 
+#define  EXPORTS_SEND_REPLY_WITH_LEN(req_ctx_p,len) \
+    req_ctx_p->xmitBuf  = req_ctx_p->recv_buf; \
+    req_ctx_p->recv_buf = NULL; \
+    rozorpc_srv_forward_reply_with_extra_len(req_ctx_p,(char*)&ret,len); \
+    rozorpc_srv_release_context(req_ctx_p);
     
-
 ep_cnf_storage_node_t exportd_storage_host_table[STORAGE_NODES_MAX]; /**< configuration for each storage */
 epgw_conf_ret_t export_storage_conf; /**< preallocated area to build storage configuration message */
 
@@ -447,12 +454,26 @@ void ep_mount_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
         
     START_PROFILING(ep_mount);
     if (!eid) goto error;
-
+      
     requested_site = arg->hdr.gateway_rank;
     
     if (!(exp = exports_lookup_export(*eid)))
         goto error;
 
+    /*
+    ** Check whether this client is allowed
+    */
+    uint32_t ip = af_unix_get_remote_ip(req_ctx_p->socketRef);
+    if (rozofs_ip4_filter_check(exp->filter_tree, ip)) {
+      info("%u.%u.%u.%u mounting export %d on path %s : allowed",IP2FOURU8(ip), *eid, arg->path);
+    }
+    else {
+      warning("%u.%u.%u.%u mounting export %d on path %s : forbiden !!!",IP2FOURU8(ip), *eid, arg->path);
+      errno = EPERM;
+      goto error;
+    }
+    
+    
     /* Get lock on config */
     if ((errno = pthread_rwlock_rdlock(&config_lock)) != 0) {
         goto error;
@@ -600,7 +621,20 @@ void ep_mount_msite_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     
     if (!(exp = exports_lookup_export(*eid)))
         goto error;
-
+    
+    /*
+    ** Check whether this client is allowed
+    */
+    uint32_t ip = af_unix_get_remote_ip(req_ctx_p->socketRef);
+    if (rozofs_ip4_filter_check(exp->filter_tree, ip)) {
+      info("%u.%u.%u.%u mounting export %d on path %s : allowed",IP2FOURU8(ip), *eid, arg->path);
+    }
+    else {
+      warning("%u.%u.%u.%u mounting export %d on path %s : forbiden !!!",IP2FOURU8(ip), *eid, arg->path);
+      errno = EPERM;
+      goto error;
+    }
+    
     /* Get lock on config */
     if ((errno = pthread_rwlock_rdlock(&config_lock)) != 0) {
         goto error;
@@ -1084,12 +1118,14 @@ void ep_readlink_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
 
     START_PROFILING(ep_readlink);
 
-    xdr_free((xdrproc_t) xdr_epgw_readlink_ret_t, (char *) &ret);
 
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
 
-    ret.status_gw.ep_readlink_ret_t_u.link = xmalloc(ROZOFS_PATH_MAX);
+    if (ret.status_gw.ep_readlink_ret_t_u.link == NULL)
+    {
+      ret.status_gw.ep_readlink_ret_t_u.link = xmalloc(ROZOFS_PATH_MAX);
+    }
 
     if (export_readlink(exp, (unsigned char *) arg->arg_gw.fid,
             ret.status_gw.ep_readlink_ret_t_u.link) != 0)
@@ -1518,6 +1554,69 @@ out:
     STOP_PROFILING(ep_readdir);
     return ;
 }
+/*
+**______________________________________________________________________________
+*/
+/**
+*   exportd readdir: list the content of a directory
+
+    @param args : fid of the directory
+    
+    @retval: EP_SUCCESS :set of name and fid associated with the directory and cookie for next readdir
+    @retval: EP_FAILURE :error code associated with the operation (errno)
+*/
+void ep_readdir2_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    static epgw_readdir2_nodata_ret_t ret;
+    epgw_readdir_arg_t * arg = (epgw_readdir_arg_t*)pt;
+    export_t *exp;
+    int len= 0;
+    char *pbuf = NULL;
+    DEBUG_FUNCTION;
+
+    // Set profiler export index
+    export_profiler_eid = arg->arg_gw.eid;
+
+    START_PROFILING(ep_readdir);
+
+    ret.status_gw.ep_readdir2_nodata_ret_t_u.reply.len = 0;
+    ret.status_gw.ep_readdir2_nodata_ret_t_u.reply.eof = 0;
+
+    if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
+        goto error;
+
+   /*
+   ** generate a fake RPC reply
+   */
+   {
+      pbuf = ruc_buf_getPayload(req_ctx_p->recv_buf);
+      int position;
+      position =  sizeof(uint32_t); /* length header of the rpc message */
+      position += rozofs_rpc_get_min_rpc_reply_hdr_len();
+      position += (4*sizeof(uint32_t));   /* eid+nb_gateways+gateway_rank+hash_config field */
+      position += (4*sizeof(uint32_t));   /* eof + cookie */
+      position += sizeof(uint32_t);   /* length of the bins len field */
+      pbuf +=position;      
+   }
+    len =export_readdir2(exp, (unsigned char *) arg->arg_gw.fid, &arg->arg_gw.cookie,
+        	(char*) pbuf,
+        	(uint8_t *) & ret.status_gw.ep_readdir2_nodata_ret_t_u.reply.eof);
+    if (len < 0)
+        goto error;
+
+    ret.status_gw.ep_readdir2_nodata_ret_t_u.reply.cookie = arg->arg_gw.cookie;
+    ret.status_gw.ep_readdir2_nodata_ret_t_u.reply.len = len;
+
+    ret.status_gw.status = EP_SUCCESS;
+    goto out;
+error:
+    ret.status_gw.status = EP_FAILURE;
+    ret.status_gw.ep_readdir2_nodata_ret_t_u.error = errno;
+    len = 0;
+out:
+    EXPORTS_SEND_REPLY_WITH_LEN(req_ctx_p,len);
+    STOP_PROFILING(ep_readdir);
+    return ;
+}
 
 /* not used anymore
 ep_io_ret_t *ep_read_1_svc_nb(ep_io_arg_t * arg; void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
@@ -1722,10 +1821,11 @@ void ep_getxattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
         goto error;
 
-    xdr_free((xdrproc_t) xdr_epgw_getxattr_ret_t, (char *) &ret);
-
-    ret.status_gw.ep_getxattr_ret_t_u.value.value_val = xmalloc(ROZOFS_XATTR_VALUE_MAX);
-
+    if (ret.status_gw.ep_getxattr_ret_t_u.value.value_val == NULL)
+    {
+      ret.status_gw.ep_getxattr_ret_t_u.value.value_val = xmalloc(ROZOFS_XATTR_VALUE_MAX);
+    }
+    ret.status_gw.ep_getxattr_ret_t_u.value.value_len = 0;
     if ((size = export_getxattr(exp, (unsigned char *) arg->arg_gw.fid, arg->arg_gw.name,
             ret.status_gw.ep_getxattr_ret_t_u.value.value_val, arg->arg_gw.size)) == -1) {
         goto error;
@@ -1736,10 +1836,67 @@ void ep_getxattr_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
     ret.status_gw.status = EP_SUCCESS;
     goto out;
 error:
-    if (ret.status_gw.ep_getxattr_ret_t_u.value.value_val != NULL)
-        free(ret.status_gw.ep_getxattr_ret_t_u.value.value_val);
     ret.status_gw.status = EP_FAILURE;
     ret.status_gw.ep_getxattr_ret_t_u.error = errno;
+out:
+    EXPORTS_SEND_REPLY(req_ctx_p);
+    STOP_PROFILING(ep_getxattr);
+    return ;
+}
+
+/*
+**______________________________________________________________________________
+*/
+/**
+*   exportd getxattr: get extended attributes in raw mode
+
+    @param args : fid of the object, extended attribute name 
+    
+    @retval: EP_SUCCESS : extended attribute value
+    @retval: EP_FAILURE :error code associated with the operation (errno)
+*/
+
+void ep_getxattr_raw_1_svc_nb(void * pt, rozorpc_srv_ctx_t *req_ctx_p) {
+    static epgw_getxattr_raw_ret_t ret;
+    epgw_getxattr_arg_t * arg = (epgw_getxattr_arg_t*)pt; 
+    export_t *exp;
+    ssize_t size = -1;
+    DEBUG_FUNCTION;
+
+    // Set profiler export index
+    export_profiler_eid = arg->arg_gw.eid;
+    /*
+    ** Check if the buffers have been allocated: check only the first one
+    */
+    
+   if (ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_val == NULL)
+   {
+ 
+      ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_val = xmalloc(4096);
+      ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr_block.inode_xattr_block_val = xmalloc(4096);
+   }
+
+
+    START_PROFILING(ep_getxattr);
+    
+    ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_len = 0;
+    ret.status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr_block.inode_xattr_block_len = 0;
+
+
+    if (!(exp = exports_lookup_export(arg->arg_gw.eid)))
+        goto error;
+
+
+    if ((size = export_getxattr_raw(exp, (unsigned char *) arg->arg_gw.fid, arg->arg_gw.name,
+            NULL, arg->arg_gw.size,&ret
+	    )) == -1) {
+        goto error;
+    }
+    ret.status_gw.status = EP_SUCCESS;
+    goto out;
+error:
+    ret.status_gw.status = EP_FAILURE;
+    ret.status_gw.ep_getxattr_raw_ret_t_u.error = errno;
 out:
     EXPORTS_SEND_REPLY(req_ctx_p);
     STOP_PROFILING(ep_getxattr);

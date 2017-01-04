@@ -255,6 +255,7 @@ char * rbs_get_cluster_list(rpcclt_t * clt, const char *export_host_list, int si
 	  timeo.tv_sec++;	
 	}  
     }		
+    rpcclt_release(clt);
     return NULL;
 }
 /** Initialize a storage structure to reach a cid/sid by interogating
@@ -422,7 +423,13 @@ int rbs_get_fid_attr(rpcclt_t * clt, const char *export_host, fid_t fid, ep_matt
 
     // Release connection
     rpcclt_release(clt);
-
+    /*
+    ** Check the case of the mover (rozo_rebalancing)
+    */
+    if (rozofs_is_storage_fid_valid((mattr_t*)attr,fid) == 0) {
+       errno = ENOENT;
+       goto out;
+    }
     status = 0;
 out:
     if (ret)

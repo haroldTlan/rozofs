@@ -158,6 +158,7 @@ static inline int rozofs_storcli_all_prj_write_check(uint8_t layout,rozofs_storc
 **_________________________________________________________________________
 */
 
+#if 0
 /** 
  *  The purpose of that function is to split the input buffer (data write part) in sections that are
     a multiple of ROZOFS_BSIZE.
@@ -176,9 +177,10 @@ static inline int rozofs_storcli_all_prj_write_check(uint8_t layout,rozofs_storc
  * @param bid_p: pointer  to the array when the function returns the index of the first block to write
  * @param nb_blocks_p: pointer  to the array when the function returns the number of blocks to write
  *
- * @return: none
+ * @return: number of internal read required
  */
-void rozofs_storcli_prepare2write_empty_file(rozofs_storcli_ctx_t *working_ctx_p, 
+
+int rozofs_storcli_prepare2write_empty_file(rozofs_storcli_ctx_t *working_ctx_p, 
                                   uint32_t bsize,
                                   uint64_t off, 
                                   uint32_t len,
@@ -193,6 +195,7 @@ void rozofs_storcli_prepare2write_empty_file(rozofs_storcli_ctx_t *working_ctx_p
     int i;
     void * buffer;
     uint8_t * payload; 
+    int internal_read_count = 0;
     uint32_t bbytes = ROZOFS_BSIZE_BYTES(bsize); 
     
    *nb_blocks_p = 0;
@@ -301,7 +304,7 @@ void rozofs_storcli_prepare2write_empty_file(rozofs_storcli_ctx_t *working_ctx_p
     wr_proj_buf_p[ROZOFS_WR_FIRST].last_block_size    = loffset;               
     *nb_blocks_p += wr_proj_buf_p[ROZOFS_WR_FIRST].number_of_blocks;
 }
-
+#endif
 /** 
  *  The purpose of that function is to split the input buffer (data write part) in sections that are
     a multiple of ROZOFS_BSIZE.
@@ -319,9 +322,9 @@ void rozofs_storcli_prepare2write_empty_file(rozofs_storcli_ctx_t *working_ctx_p
  * @param nb_blocks_p: pointer  to the array when the function returns the number of blocks to write
  * @param flags: flags of the write request (when STORCLI_FLAGS_NO_END_REREAD is set, no need to re-read the last block)
  *
- * @return: none
+ * @return: number of internal read required
  */
-void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p, 
+int rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p, 
                                   uint32_t bsize,
                                   uint64_t off, 
                                   uint32_t len,
@@ -337,6 +340,7 @@ void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p,
     uint16_t loffset = 0;
     int i;
     uint32_t bbytes = ROZOFS_BSIZE_BYTES(bsize); 
+    int internal_read_count = 0;
     
    *nb_blocks_p = 0;
    //working_ctx_p->last_block_size = 0;       
@@ -412,7 +416,7 @@ void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p,
             wr_proj_buf_p[ROZOFS_WR_FIRST].number_of_blocks   = 1;  
             *nb_blocks_p += 1;          
             wr_proj_buf_p[ROZOFS_WR_FIRST].last_block_size = bbytes; 
-            return;            
+            return 1;            
         } 
         /**
         * write the full block since it is ROZOFS_BSIZE
@@ -425,7 +429,7 @@ void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p,
         wr_proj_buf_p[ROZOFS_WR_FIRST].number_of_blocks   = 1;            
         *nb_blocks_p += 1;          
         wr_proj_buf_p[ROZOFS_WR_FIRST].last_block_size = len;
-        return;              
+        return 0;              
     }
     /*
     ** Here we must write more than one block
@@ -439,7 +443,8 @@ void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p,
         wr_proj_buf_p[ROZOFS_WR_FIRST].len   = bbytes;
         wr_proj_buf_p[ROZOFS_WR_FIRST].first_block_idx    = 0;            
         wr_proj_buf_p[ROZOFS_WR_FIRST].number_of_blocks   = 1;  
-        *nb_blocks_p += 1;          
+        *nb_blocks_p += 1;    
+	internal_read_count=1;      
                         
         wr_proj_buf_p[ROZOFS_WR_MIDDLE].state = ROZOFS_WR_ST_TRANSFORM_REQ;
         wr_proj_buf_p[ROZOFS_WR_MIDDLE].off   = (first+1) * bbytes;            
@@ -467,9 +472,9 @@ void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p,
         wr_proj_buf_p[ROZOFS_WR_LAST].first_block_idx    = (last-first);            
         wr_proj_buf_p[ROZOFS_WR_LAST].number_of_blocks   = 1;  
         *nb_blocks_p += wr_proj_buf_p[ROZOFS_WR_LAST].number_of_blocks;
-
+	internal_read_count++;      
       }
-      return;
+      return internal_read_count;
     }
     /*
     ** all is aligned on ROZOFS_BSIZE
@@ -481,6 +486,7 @@ void rozofs_storcli_prepare2write(rozofs_storcli_ctx_t *working_ctx_p,
     wr_proj_buf_p[ROZOFS_WR_FIRST].first_block_idx    = 0;            
     wr_proj_buf_p[ROZOFS_WR_FIRST].number_of_blocks   = ((last - first) + 1);            
     *nb_blocks_p += wr_proj_buf_p[ROZOFS_WR_FIRST].number_of_blocks;
+    return 0;
 
 }
 
@@ -517,7 +523,10 @@ void rozofs_storcli_write_req_processing_exec(rozofs_storcli_ctx_t *working_ctx_
     int errcode=0;
     int ret;
     int read_req = 0;
-
+    /*
+    ** Release the pre-allocated storcli contexts
+    */
+    rozofs_storcli_rsvd_context_release(working_ctx_p);
     /*
     ** need to lock to avoid the sending a a direct reply error on internal reading
     */
@@ -533,6 +542,7 @@ void rozofs_storcli_write_req_processing_exec(rozofs_storcli_ctx_t *working_ctx_
          {
            working_ctx_p->write_ctx_lock = 0;
            errcode = errno;
+           storcli_trace_error(__LINE__,errcode, working_ctx_p);     	   
            severe("fatal error on internal read");
            goto failure;        
          }
@@ -549,6 +559,7 @@ void rozofs_storcli_write_req_processing_exec(rozofs_storcli_ctx_t *working_ctx_
       ** direct error while attempting to read
       */
       errcode = EFAULT;
+      storcli_trace_error(__LINE__,errcode, working_ctx_p);     	   
       goto failure;   
    }
    /*
@@ -562,6 +573,8 @@ void rozofs_storcli_write_req_processing_exec(rozofs_storcli_ctx_t *working_ctx_
      if (ret < 0) 
      {
         errno = EPROTO;
+        storcli_trace_error(__LINE__,errcode, working_ctx_p);     	   
+	
 	goto failure;
      }
      return;   
@@ -649,6 +662,7 @@ void rozofs_storcli_write_req_init(uint32_t  socket_ctx_idx, void *recv_buf,rozo
    int      len;       /* effective length of application message               */
    uint8_t  *pmsg;     /* pointer to the first available byte in the application message */
    uint32_t header_len;
+   int nb_internal_read=0;
    XDR xdrs;
    int errcode = EINVAL;
    /*
@@ -857,15 +871,16 @@ void rozofs_storcli_write_req_init(uint32_t  socket_ctx_idx, void *recv_buf,rozo
    ** That situation occurs when the data to write does not start on a ROZOFS_BSIZE boundary (first) or
    ** does not end of a ROZOFS_BSIZE boundary (last)
    */
-   rozofs_storcli_prepare2write(working_ctx_p, 
-                              storcli_write_rq_p->bsize,
-                              storcli_write_rq_p->off , 
-                              storcli_write_rq_p->len,
-                              &working_ctx_p->wr_bid,
-                              &working_ctx_p->wr_nb_blocks,
-			      storcli_write_rq_p->flags
-                              );				
+   nb_internal_read = rozofs_storcli_prepare2write(working_ctx_p, 
+                        			   storcli_write_rq_p->bsize,
+                        			   storcli_write_rq_p->off , 
+                        			   storcli_write_rq_p->len,
+                        			   &working_ctx_p->wr_bid,
+                        			   &working_ctx_p->wr_nb_blocks,
+						   storcli_write_rq_p->flags
+                        			   );				
 
+   rozofs_storcli_rsvd_context_alloc(working_ctx_p,nb_internal_read);
    /*
    ** Prepare for request serialization
    */
@@ -978,6 +993,7 @@ void rozofs_storcli_write_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
         ** the source has aborted the request
         */
         error = EPROTO;
+        storcli_trace_error(__LINE__,error, working_ctx_p);     	   
         goto fail;
       }      
   }   
@@ -1005,6 +1021,7 @@ void rozofs_storcli_write_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
        */
        error = EIO;
        STORCLI_ERR_PROF(write_sid_miss);
+       storcli_trace_error(__LINE__,error,working_ctx_p);     	   
        goto fail;
     }
   }  
@@ -1026,6 +1043,7 @@ void rozofs_storcli_write_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
        ** fatal error since the ressource control already took place
        */       
        error = EIO;
+       storcli_trace_error(__LINE__,error,working_ctx_p);     	   
        goto fatal;     
      }
      /*
@@ -1092,6 +1110,8 @@ retry:
          /*
          ** Out of storage !!-> too many storages are down
          */
+         storcli_trace_error(__LINE__,error,working_ctx_p);     	   
+
          goto fatal;
        } 
        /*
@@ -1107,6 +1127,8 @@ retry:
        if (prj_cxt_p[projection_id].prj_state == ROZOFS_PRJ_WR_ERROR)
        {
           error = prj_cxt_p[projection_id].errcode;
+          storcli_trace_error(__LINE__,error,working_ctx_p);     	   
+
           goto fatal;       
        }
      }
@@ -1169,6 +1191,7 @@ void rozofs_storcli_write_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,u
     storcli_write_arg_no_data_t *storcli_write_rq_p = (storcli_write_arg_no_data_t*)&working_ctx_p->storcli_write_arg;
     int error=0;
     int storage_idx;
+    int line = 0;
 
     rozofs_storcli_projection_ctx_t *prj_cxt_p   = working_ctx_p->prj_ctx;   
     rozofs_storcli_lbg_prj_assoc_t  *lbg_assoc_p = working_ctx_p->lbg_assoc_tb;
@@ -1203,12 +1226,14 @@ void rozofs_storcli_write_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,u
       {
         error = EIO;
         prj_cxt_p[projection_id].errcode = error;
+	line = __LINE__;
         goto reject;      
       }
       if (++prj_cxt_p[projection_id].retry_cpt >= ROZOFS_STORCLI_MAX_RETRY)
       {
         error = EIO;
         prj_cxt_p[projection_id].errcode = error;
+	line = __LINE__;
         goto reject;          
       }
     } 
@@ -1284,6 +1309,7 @@ void rozofs_storcli_write_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,u
        */
        error = EFAULT;
        prj_cxt_p[projection_id].errcode = error;
+       line = __LINE__;
        goto fatal;     
      }
      /*
@@ -1350,6 +1376,7 @@ retry:
          /*
          ** Out of storage !!-> too many storages are down
          */
+  	 line = __LINE__;
          goto fatal;
        } 
        /*
@@ -1364,6 +1391,7 @@ retry:
      if ( prj_cxt_p[projection_id].prj_state == ROZOFS_PRJ_WR_ERROR)
      {
         error = prj_cxt_p[projection_id].errcode;
+	line = __LINE__;
         goto fatal;     
      }    
     return;
@@ -1375,6 +1403,9 @@ retry:
     
 reject:  
      if (working_ctx_p->write_ctx_lock != 0) return;
+
+     storcli_trace_error(line,error, working_ctx_p);     	   
+     
      /*
      ** we fall in that case when we run out of  storage
      */
@@ -1391,6 +1422,9 @@ fatal:
      ** caution -> reply error is only generated if the ctx_lock is 0
      */
      if (working_ctx_p->write_ctx_lock != 0) return;
+
+     storcli_trace_error(line,error, working_ctx_p);     	   
+
      /*
      ** we fall in that case when we run out of  resource-> that case is a BUG !!
      */
@@ -1430,7 +1464,7 @@ void rozofs_storcli_write_req_processing_cbk(void *this,void *param)
    storcli_write_arg_no_data_t *storcli_write_rq_p = NULL;
    rpc_reply.acpted_rply.ar_results.proc = NULL;
    int lbg_id;
-
+   int line = 0;
    
    int status;
    void     *recv_buf = NULL;   
@@ -1529,6 +1563,7 @@ void rozofs_storcli_write_req_processing_cbk(void *this,void *param)
        error = EFAULT;  
        working_ctx_p->prj_ctx[projection_id].prj_state = ROZOFS_PRJ_WR_ERROR;
        working_ctx_p->prj_ctx[projection_id].errcode = error;
+       line = __LINE__;
        goto fatal;         
     }
     /*
@@ -1680,6 +1715,9 @@ fatal:
     ** caution lock can be asserted either by a write retry attempt or an initial attempt
     */
     if (working_ctx_p->write_ctx_lock != 0) return;
+
+    storcli_trace_error(line,error, working_ctx_p);     	   
+
     /*
     ** unrecoverable error : mostly a bug!!
     */  
@@ -1888,6 +1926,7 @@ int rozofs_storcli_internal_read_rsp_cbk(void *buffer,uint32_t socket_ref,void *
      if (errcode != ENOENT) {
        wr_proj_buf_p[match_idx].state = ROZOFS_WR_ST_ERROR;
        wr_proj_buf_p[match_idx].errcode = errcode;
+       storcli_trace_error(__LINE__,errcode, working_ctx_p);     	   
        goto write_procedure_failure;
      }
      
@@ -2130,6 +2169,7 @@ int rozofs_storcli_internal_read_req(rozofs_storcli_ctx_t *working_ctx_p,rozofs_
    ** create the xdr_mem structure for encoding the message
    */
    bufsize = (int)ruc_buf_getMaxPayloadLen(xmit_buf);
+   bufsize -= sizeof(uint32_t); /* skip length*/   
    xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
    /*
    ** fill in the rpc header

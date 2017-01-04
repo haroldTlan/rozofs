@@ -56,7 +56,7 @@ enum ep_status_t {
 };
 
 union ep_status_ret_t switch (ep_status_t status) {
-    case EP_FAILURE:    uint64_t error;
+    case EP_FAILURE:    int error;
     default:            void;
 };
 
@@ -530,6 +530,48 @@ struct  epgw_readdir_ret_t
   ep_readdir_ret_t    status_gw;
 };
 
+
+
+struct dirlist2_nodata_t {
+	uint8_t eof;
+        uint64_t cookie;	
+	uint32_t len;
+};
+
+union ep_readdir2_nodata_ret_t switch (ep_status_t status) {
+    case EP_SUCCESS:    dirlist2_nodata_t       reply;
+    case EP_FAILURE:    int             error;
+    default:            void;
+};
+
+struct  epgw_readdir2_nodata_ret_t 
+{
+  struct ep_gateway_t hdr;
+  ep_readdir2_nodata_ret_t    status_gw;
+};
+
+
+struct dirlist2_t {
+	uint8_t eof;
+        uint64_t cookie;	
+	opaque          value<>;
+};
+
+union ep_readdir2_ret_t switch (ep_status_t status) {
+    case EP_SUCCESS:    dirlist2_t       reply;
+    case EP_FAILURE:    int             error;
+    default:            void;
+};
+
+
+
+struct  epgw_readdir2_ret_t 
+{
+  struct ep_gateway_t hdr;
+  ep_readdir2_ret_t    status_gw;
+};
+
+
 struct ep_rename_arg_t {
     uint32_t    eid;
     ep_uuid_t   pfid;
@@ -675,6 +717,25 @@ struct  epgw_getxattr_ret_t
   ep_getxattr_ret_t    status_gw;
 };
 
+
+struct ep_getxattr_raw_ret_val_t
+{
+  opaque          inode_xattr<>;
+  opaque          inode_xattr_block<>;
+};
+
+union ep_getxattr_raw_ret_t switch (ep_status_t status) {
+    case EP_SUCCESS:    ep_getxattr_raw_ret_val_t  raw;
+    case EP_FAILURE:    int             error;
+    default:            void;
+};
+
+
+struct  epgw_getxattr_raw_ret_t 
+{
+  struct ep_gateway_t hdr;
+  ep_getxattr_raw_ret_t    status_gw;
+};
 
 struct ep_removexattr_arg_t {
     uint32_t          eid;
@@ -872,6 +933,12 @@ program EXPORT_PROGRAM {
 
         epgw_cluster2_ret_t
         EP_LIST_CLUSTER2(epgw_cluster_arg_t)       = 35;
+
+        epgw_getxattr_raw_ret_t
+        EP_GETXATTR_RAW(epgw_getxattr_arg_t)       = 36;
+
+        epgw_readdir2_ret_t
+        EP_READDIR2(epgw_readdir_arg_t)            = 37;
 
 	
     } = 1;

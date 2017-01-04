@@ -541,27 +541,27 @@ void show_vfstat(char * argv[], uint32_t tcpRef, void *bufRef) {
     
     pbuf = show_file_distibution_rule(pbuf);
     
-    for (i = 0; i < gprofiler.nb_volumes; i++) {
+    for (i = 0; i < gprofiler->nb_volumes; i++) {
         pbuf+=sprintf(pbuf, "Volume: %d georep: %s  Bsize: %d Blocks: %"PRIu64" Bfree: %"PRIu64" PercentFree: %d\n",
-                gprofiler.vstats[i].vid,
-                gprofiler.vstats[i].georep?"YES":"NO",
-		 gprofiler.vstats[i].bsize,gprofiler.vstats[i].blocks, gprofiler.vstats[i].bfree,
-                (int)((gprofiler.vstats[i].blocks==0)? 0:gprofiler.vstats[i].bfree*100/gprofiler.vstats[i].blocks));
+                gprofiler->vstats[i].vid,
+                gprofiler->vstats[i].georep?"YES":"NO",
+		 gprofiler->vstats[i].bsize,gprofiler->vstats[i].blocks, gprofiler->vstats[i].bfree,
+                (int)((gprofiler->vstats[i].blocks==0)? 0:gprofiler->vstats[i].bfree*100/gprofiler->vstats[i].blocks));
         pbuf+=sprintf(pbuf, "\n%-6s | %-6s | %-20s | %-20s |\n", "Sid", "Status", "Capacity(B)","Free(B)");
         pbuf+=sprintf(pbuf, "-------+--------+----------------------+----------------------+\n");
-        for (j = 0; j < gprofiler.vstats[i].nb_storages; j++) {
-            pbuf+=sprintf(pbuf, "%6d | %-6s | %20"PRIu64" | %20"PRIu64" |\n", gprofiler.vstats[i].sstats[j].sid,
-                    (gprofiler.vstats[i].sstats[j].status==1)?"UP":"DOWN", gprofiler.vstats[i].sstats[j].size,
-                    gprofiler.vstats[i].sstats[j].free);
+        for (j = 0; j < gprofiler->vstats[i].nb_storages; j++) {
+            pbuf+=sprintf(pbuf, "%6d | %-6s | %20"PRIu64" | %20"PRIu64" |\n", gprofiler->vstats[i].sstats[j].sid,
+                    (gprofiler->vstats[i].sstats[j].status==1)?"UP":"DOWN", gprofiler->vstats[i].sstats[j].size,
+                    gprofiler->vstats[i].sstats[j].free);
         }
-	if (gprofiler.vstats[i].georep)
+	if (gprofiler->vstats[i].georep)
 	{
           pbuf+=sprintf(pbuf, "-------+--------+----------------------+----------------------+\n");
-	  int k = gprofiler.vstats[i].nb_storages;
-          for (j = 0; j < gprofiler.vstats[i].nb_storages; j++) {
-              pbuf+=sprintf(pbuf, "%6d | %-6s | %20"PRIu64" | %20"PRIu64" |\n", gprofiler.vstats[i].sstats[j+k].sid,
-                      (gprofiler.vstats[i].sstats[j+k].status==1)?"UP":"DOWN", gprofiler.vstats[i].sstats[j+k].size,
-                      gprofiler.vstats[i].sstats[j+k].free);
+	  int k = gprofiler->vstats[i].nb_storages;
+          for (j = 0; j < gprofiler->vstats[i].nb_storages; j++) {
+              pbuf+=sprintf(pbuf, "%6d | %-6s | %20"PRIu64" | %20"PRIu64" |\n", gprofiler->vstats[i].sstats[j+k].sid,
+                      (gprofiler->vstats[i].sstats[j+k].status==1)?"UP":"DOWN", gprofiler->vstats[i].sstats[j+k].size,
+                      gprofiler->vstats[i].sstats[j+k].free);
           }
 	}
 
@@ -569,12 +569,12 @@ void show_vfstat(char * argv[], uint32_t tcpRef, void *bufRef) {
         pbuf += sprintf(pbuf, "-------+--------+----------------------+----------------------+--------------+--------------+\n");
 
 
-        for (j = 0; j < gprofiler.nb_exports; j++) {
+        for (j = 0; j < gprofiler->nb_exports; j++) {
 
-            if (gprofiler.estats[j].vid == gprofiler.vstats[i].vid)
-                pbuf += sprintf(pbuf, "%6d | %6d | %20"PRIu64" | %20"PRIu64" | %12"PRIu64" | %12"PRIu64" |\n", gprofiler.estats[j].eid,
-                    gprofiler.estats[j].bsize, gprofiler.estats[j].blocks, gprofiler.estats[j].bfree,
-                    gprofiler.estats[j].files, gprofiler.estats[j].ffree);
+            if (gprofiler->estats[j].vid == gprofiler->vstats[i].vid)
+                pbuf += sprintf(pbuf, "%6d | %6d | %20"PRIu64" | %20"PRIu64" | %12"PRIu64" | %12"PRIu64" |\n", gprofiler->estats[j].eid,
+                    gprofiler->estats[j].bsize, gprofiler->estats[j].blocks, gprofiler->estats[j].bfree,
+                    gprofiler->estats[j].files, gprofiler->estats[j].ffree);
         }
         pbuf += sprintf(pbuf, "\n");
     }
@@ -597,12 +597,12 @@ void show_vfstat_vol(char * argv[], uint32_t tcpRef, void *bufRef) {
     char *pbuf = uma_dbg_get_buffer();
     int i;
 
-    for (i = 0; i < gprofiler.nb_volumes; i++) {
+    for (i = 0; i < gprofiler->nb_volumes; i++) {
         pbuf+=sprintf(pbuf, "Volume: %d georep: %s  Bsize: %d Blocks: %"PRIu64" Bfree: %"PRIu64" PercentFree: %d\n",
-                gprofiler.vstats[i].vid, 
-		gprofiler.vstats[i].georep?"YES":"NO",
-		gprofiler.vstats[i].bsize,gprofiler.vstats[i].blocks, gprofiler.vstats[i].bfree,
-               (int)((gprofiler.vstats[i].blocks==0)? 0:gprofiler.vstats[i].bfree*100/gprofiler.vstats[i].blocks));
+                gprofiler->vstats[i].vid, 
+		gprofiler->vstats[i].georep?"YES":"NO",
+		gprofiler->vstats[i].bsize,gprofiler->vstats[i].blocks, gprofiler->vstats[i].bfree,
+               (int)((gprofiler->vstats[i].blocks==0)? 0:gprofiler->vstats[i].bfree*100/gprofiler->vstats[i].blocks));
 
         pbuf+=sprintf(pbuf, "\n");
     }
@@ -627,31 +627,31 @@ void show_vfstat_stor(char * argv[], uint32_t tcpRef, void *bufRef) {
 
     pbuf = show_file_distibution_rule(pbuf);
 
-    for (i = 0; i < gprofiler.nb_volumes; i++) {
+    for (i = 0; i < gprofiler->nb_volumes; i++) {
  
         pbuf+=sprintf(pbuf, "\n%-6s | %-6s | %-6s | %-6s | %-20s | %-20s | %-8s |\n","Vid", "Cid", "Sid", "Status", "Capacity(B)","Free(B)","Free(%)");
         pbuf+=sprintf(pbuf, "-------+--------+--------+--------+----------------------+----------------------+----------+\n");
-        for (j = 0; j < gprofiler.vstats[i].nb_storages; j++) {
+        for (j = 0; j < gprofiler->vstats[i].nb_storages; j++) {
             pbuf+=sprintf(pbuf, "%6d | %6d | %6d | %-6s | %20"PRIu64" | %20"PRIu64" | %8d |\n",
-                   gprofiler.vstats[i].vid,gprofiler.vstats[i].sstats[j].cid,
-                   gprofiler.vstats[i].sstats[j].sid,
-                   (gprofiler.vstats[i].sstats[j].status==1)?"UP":"DOWN", 
-                   gprofiler.vstats[i].sstats[j].size,
-                   gprofiler.vstats[i].sstats[j].free,
-                   (int)((gprofiler.vstats[i].sstats[j].size==0)? 0:gprofiler.vstats[i].sstats[j].free*100/gprofiler.vstats[i].sstats[j].size));
+                   gprofiler->vstats[i].vid,gprofiler->vstats[i].sstats[j].cid,
+                   gprofiler->vstats[i].sstats[j].sid,
+                   (gprofiler->vstats[i].sstats[j].status==1)?"UP":"DOWN", 
+                   gprofiler->vstats[i].sstats[j].size,
+                   gprofiler->vstats[i].sstats[j].free,
+                   (int)((gprofiler->vstats[i].sstats[j].size==0)? 0:gprofiler->vstats[i].sstats[j].free*100/gprofiler->vstats[i].sstats[j].size));
         }
-	if (gprofiler.vstats[i].georep)
+	if (gprofiler->vstats[i].georep)
 	{
         pbuf+=sprintf(pbuf, "-------+--------+--------+--------+----------------------+----------------------+----------+\n");
-	  int k = gprofiler.vstats[i].nb_storages;
-          for (j = 0; j < gprofiler.vstats[i].nb_storages; j++) {
+	  int k = gprofiler->vstats[i].nb_storages;
+          for (j = 0; j < gprofiler->vstats[i].nb_storages; j++) {
             pbuf+=sprintf(pbuf, "%6d | %6d | %6d | %-6s | %20"PRIu64" | %20"PRIu64" | %8d |\n",
-                   gprofiler.vstats[i].vid,gprofiler.vstats[i].sstats[j+k].cid,
-                   gprofiler.vstats[i].sstats[j+k].sid,
-                   (gprofiler.vstats[i].sstats[j+k].status==1)?"UP":"DOWN", 
-                   gprofiler.vstats[i].sstats[j+k].size,
-                   gprofiler.vstats[i].sstats[j+k].free,
-                   (int)((gprofiler.vstats[i].sstats[j+k].size==0)? 0:gprofiler.vstats[i].sstats[j+k].free*100/gprofiler.vstats[i].sstats[j+k].size));
+                   gprofiler->vstats[i].vid,gprofiler->vstats[i].sstats[j+k].cid,
+                   gprofiler->vstats[i].sstats[j+k].sid,
+                   (gprofiler->vstats[i].sstats[j+k].status==1)?"UP":"DOWN", 
+                   gprofiler->vstats[i].sstats[j+k].size,
+                   gprofiler->vstats[i].sstats[j+k].free,
+                   (int)((gprofiler->vstats[i].sstats[j+k].size==0)? 0:gprofiler->vstats[i].sstats[j+k].free*100/gprofiler->vstats[i].sstats[j+k].size));
           }
 	}
         pbuf+=sprintf(pbuf, "\n");
@@ -677,17 +677,17 @@ void show_vstor(char * argv[], uint32_t tcpRef, void *bufRef) {
 
     pbuf = show_file_distibution_rule(pbuf);
 
-    for (i = 0; i < gprofiler.nb_volumes; i++) {
+    for (i = 0; i < gprofiler->nb_volumes; i++) {
  
         pbuf+=sprintf(pbuf, "\n%4s | %-3s | %-3s | %-3s | %s\n","Site","Vid", "Cid", "Sid", "host");
         pbuf+=sprintf(pbuf, "-----+-----+-----+-----+----------------------\n");
-        for (j = 0; j < gprofiler.vstats[i].nb_storages; j++) {
+        for (j = 0; j < gprofiler->vstats[i].nb_storages; j++) {
             pbuf+=sprintf(pbuf, " %3d | %3d | %3d | %3d | %s\n", 
-	           gprofiler.vstats[i].sstats[j].site, 
-                   gprofiler.vstats[i].vid,
-		   gprofiler.vstats[i].sstats[j].cid,
-                   gprofiler.vstats[i].sstats[j].sid,
-                   gprofiler.vstats[i].sstats[j].host);
+	           gprofiler->vstats[i].sstats[j].site, 
+                   gprofiler->vstats[i].vid,
+		   gprofiler->vstats[i].sstats[j].cid,
+                   gprofiler->vstats[i].sstats[j].sid,
+                   gprofiler->vstats[i].sstats[j].host);
         }
     }
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
@@ -711,18 +711,18 @@ void show_geo_vfstat_stor(char * argv[], uint32_t tcpRef, void *bufRef) {
     pbuf = show_file_distibution_rule(pbuf);
     
     sprintf(pbuf, "Empty\n");
-    for (i = 0; i < gprofiler.nb_volumes; i++) {
-       if (gprofiler.vstats[i].georep == 0) continue;
-       int k = gprofiler.vstats[i].nb_storages;
+    for (i = 0; i < gprofiler->nb_volumes; i++) {
+       if (gprofiler->vstats[i].georep == 0) continue;
+       int k = gprofiler->vstats[i].nb_storages;
  
         pbuf+=sprintf(pbuf, "\n%-6s | %-6s | %-6s | %-6s | %-6s |\n","Vid", "Cid", "Sid", "Local", "Remote");
         pbuf+=sprintf(pbuf, "-------+--------+--------+--------+--------+\n");
-        for (j = 0; j < gprofiler.vstats[i].nb_storages; j++) {
+        for (j = 0; j < gprofiler->vstats[i].nb_storages; j++) {
             pbuf+=sprintf(pbuf, "%6d | %6d | %6d | %-6s | %-6s |\n",
-                   gprofiler.vstats[i].vid,gprofiler.vstats[i].sstats[j].cid,
-                   gprofiler.vstats[i].sstats[j].sid,
-                   (gprofiler.vstats[i].sstats[j].status==1)?"UP":"DOWN", 
-                   (gprofiler.vstats[i].sstats[j+k].status==1)?"UP":"DOWN");
+                   gprofiler->vstats[i].vid,gprofiler->vstats[i].sstats[j].cid,
+                   gprofiler->vstats[i].sstats[j].sid,
+                   (gprofiler->vstats[i].sstats[j].status==1)?"UP":"DOWN", 
+                   (gprofiler->vstats[i].sstats[j+k].status==1)?"UP":"DOWN");
         }
         pbuf+=sprintf(pbuf, "\n");
     }
@@ -749,12 +749,12 @@ void show_vfstat_eid(char * argv[], uint32_t tcpRef, void *bufRef) {
         pbuf+=sprintf(pbuf, "-------+--------+--------+----------------------+----------------------+--------------+--------------+--------------\n");
 
 
-        for (j = 0; j < gprofiler.nb_exports; j++) {
+        for (j = 0; j < gprofiler->nb_exports; j++) {
 
-                pbuf+=sprintf(pbuf, "%6d | %6d | %6d | %20"PRIu64" | %20"PRIu64" | %12"PRIu64" | %12"PRIu64" | %s\n", gprofiler.estats[j].eid,
-                    gprofiler.estats[j].vid,
-                    gprofiler.estats[j].bsize, gprofiler.estats[j].blocks, gprofiler.estats[j].bfree,
-                    gprofiler.estats[j].files, gprofiler.estats[j].ffree, gprofiler.estats[j].path);
+                pbuf+=sprintf(pbuf, "%6d | %6d | %6d | %20"PRIu64" | %20"PRIu64" | %12"PRIu64" | %12"PRIu64" | %s\n", gprofiler->estats[j].eid,
+                    gprofiler->estats[j].vid,
+                    gprofiler->estats[j].bsize, gprofiler->estats[j].blocks, gprofiler->estats[j].bfree,
+                    gprofiler->estats[j].files, gprofiler->estats[j].ffree, gprofiler->estats[j].path);
         }
         pbuf+=sprintf(pbuf, "\n");
 
@@ -1068,7 +1068,7 @@ int expgwc_start_nb_blocking_th(void *args) {
     /*
     ** set the uptime
     */
-    gprofiler.uptime = time(0);
+    gprofiler->uptime = time(0);
     
     ret = expgwc_non_blocking_init(args_p->debug_port, args_p->instance);
     if (ret != RUC_OK) {

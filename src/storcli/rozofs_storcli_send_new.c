@@ -135,6 +135,7 @@ int rozofs_sorcli_send_rq_common(uint32_t lbg_id,uint32_t timeout_sec, uint32_t 
     ** create the xdr_mem structure for encoding the message
     */
     bufsize = (int)ruc_buf_getMaxPayloadLen(xmit_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
     /*
     ** fill in the rpc header
@@ -244,7 +245,132 @@ int rozofs_sorcli_send_rq_common(uint32_t lbg_id,uint32_t timeout_sec, uint32_t 
     return -1;    
 }
 
+/*
+**__________________________________________________________________________
+*/
+/**
+* send a success read reply
+  That API fill up the common header with the SP_READ_RSP opcode
+  insert the transaction_id associated with the inittial request transaction id
+  insert a status OK
+  insert the length of the data payload
+  
+  In case of a success it is up to the called function to release the xmit buffer
+  
+  @param p : pointer to the root transaction context used for the read
+  
+  @retval none
 
+*/
+
+void rozofs_storcli_resize_reply_success(rozofs_storcli_ctx_t *p, uint32_t nb_blocks, uint32_t last_block_size)
+{
+   int ret;
+   uint8_t *pbuf;           /* pointer to the part that follows the header length */
+   uint32_t *header_len_p;  /* pointer to the array that contains the length of the rpc message*/
+   XDR xdrs;
+   int len;
+   storcli_status_t status = STORCLI_SUCCESS;
+   int data_len = 0;
+   uint32_t alignment;
+   
+    /*
+    ** create xdr structure on top of the buffer that will be used for sending the response
+    */
+    header_len_p = (uint32_t*)ruc_buf_getPayload(p->xmitBuf); 
+    pbuf = (uint8_t*) (header_len_p+1);            
+    len = (int)ruc_buf_getMaxPayloadLen(p->xmitBuf);
+    len -= sizeof(uint32_t);
+    xdrmem_create(&xdrs,(char*)pbuf,len,XDR_ENCODE); 
+    if (rozofs_encode_rpc_reply(&xdrs,(xdrproc_t)xdr_storcli_status_t,(caddr_t)&status,p->src_transaction_id) != TRUE)
+    {
+      severe("rpc reply encoding error");
+      goto error;     
+    }
+    /*
+    ** Encode the length of returned data
+    */ 
+    STORCLI_STOP_NORTH_PROF(p,read,0);
+
+    //int position;
+    //position = xdr_getpos(&xdrs);
+    /*
+    ** check the case of the shared memory
+    */
+    if (p->shared_mem_p != NULL)
+    {
+       uint32_t *sharedmem_p = (uint32_t*)p->shared_mem_p;
+       sharedmem_p[1] = data_len;
+
+       alignment = 0x53535353;
+       XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
+       XDR_PUTINT32(&xdrs, (int32_t *)&nb_blocks);
+       XDR_PUTINT32(&xdrs, (int32_t *)&last_block_size);
+       alignment = 0;       
+       XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
+       /*
+       ** insert the length in the shared memory
+       */
+       /*
+       ** compute the total length of the message for the rpc header and add 4 bytes more bytes for
+       ** the ruc buffer to take care of the header length of the rpc message.
+       */
+       int total_len = xdr_getpos(&xdrs) ;
+       *header_len_p = htonl(0x80000000 | total_len);
+       total_len +=sizeof(uint32_t);
+
+       ruc_buf_setPayloadLen(p->xmitBuf,total_len);    
+    }
+    else
+    {
+      /*
+      ** skip the alignment
+      */
+      alignment = 0;
+      XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
+      XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
+      XDR_PUTINT32(&xdrs, (int32_t *)&alignment);
+      XDR_PUTINT32(&xdrs, (int32_t *)&data_len);
+      /*
+      ** round up data_len to 4 bytes alignment
+      */
+      if ((data_len%4)!= 0) data_len = (data_len &(~0x3))+4;
+
+      /*
+      ** compute the total length of the message for the rpc header and add 4 bytes more bytes for
+      ** the ruc buffer to take care of the header length of the rpc message.
+      */
+      int total_len = xdr_getpos(&xdrs)+data_len ;
+      *header_len_p = htonl(0x80000000 | total_len);
+      total_len +=sizeof(uint32_t);
+
+      ruc_buf_setPayloadLen(p->xmitBuf,total_len);
+    }
+    /*
+    ** Clear the reference of the seqnum to prevent any late response to be processed
+    ** by setting seqnum to 0 any late response is ignored and the associated ressources
+    ** will released (buffer associated with the response). This typically permits to
+    ** avoid sending again the response while this has already been done
+    */
+    p->read_seqnum = 0;
+    /*
+    ** Get the callback for sending back the response:
+    ** A callback is needed since the request for read might be local or remote
+    */
+    ret = (*p->response_cbk)(p->xmitBuf,p->socketRef,p->user_param);
+    if (ret == 0)
+    {
+      /**
+      * success so remove the reference of the xmit buffer since it is up to the called
+      * function to release it
+      */
+      p->xmitBuf = NULL;
+    }
+    
+error:
+//    #warning need to consider the case of a local read triggers by a write request. Without a guard time the write working can be lost!!
+    return;
+} 
 
 
 /*
@@ -978,4 +1104,67 @@ void storcli_lbg_cnx_sup_increment_tmo(int lbg_id)
  ** attempt to poll
  */
  storcli_poll_lbg_with_null_proc(p,lbg_id);
+}
+
+/*
+**____________________________________________
+** Peridoic timer to relaunch polling on LGB
+** in POLL_ERROR state
+*/
+void storcli_lbg_cnx_sup_periodic(void *ns) 
+{
+  int lbg_count = north_lbg_context_allocated_get();
+  storcli_lbg_cnx_supervision_t *p = storcli_lbg_cnx_supervision_tab;
+  int idx;
+  
+  
+  for (idx=0; idx<lbg_count; idx++,p++) {
+
+    if (p->storage == 0) continue;
+    
+    /*
+    ** Restart polling when in POLL_ERR since
+    ** no other tmer is running
+    */
+    if (p->poll_state == STORCLI_POLL_ERR) {
+      /*
+      ** attempt to poll
+      */
+      storcli_poll_lbg_with_null_proc(p,idx);    
+    }
+  }
+  
+}
+/*
+**----------------------------------------------
+**  Create periodic timer to relaunch storage LBG
+** polling
+**----------------------------------------------
+**
+**   charging timer service initialisation request
+**    
+**  IN : period_ms : period between two queue sequence reading in ms
+**
+**  OUT : OK/NOK
+**
+**-----------------------------------------------
+*/
+int storcli_lbg_cnx_sup_tmr_init(uint32_t period_ms)
+{
+    struct timer_cell * timer_cell = NULL;    
+
+    /*
+    ** charging timer periodic launching
+    */
+    timer_cell = ruc_timer_alloc(0,0);
+    if (timer_cell == (struct timer_cell *)NULL){
+        severe( "No timer available" );
+        return(RUC_NOK);
+    }
+    ruc_periodic_timer_start(timer_cell,
+	      (period_ms*TIMER_TICK_VALUE_100MS/100),
+	      &storcli_lbg_cnx_sup_periodic,
+	      0);
+	      
+    return(RUC_OK);
 }

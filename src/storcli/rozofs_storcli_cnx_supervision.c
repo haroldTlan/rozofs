@@ -116,6 +116,7 @@ int rozofs_sorcli_poll_tx(af_unix_ctx_generic_t  *sock_p,
     ** create the xdr_mem structure for encoding the message
     */
     bufsize = (int)ruc_buf_getMaxPayloadLen(xmit_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)arg_p,bufsize,XDR_ENCODE);
     /*
     ** fill in the rpc header

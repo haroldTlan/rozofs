@@ -85,7 +85,7 @@ static inline uint32_t dentry_hash(fuse_ino_t parent,char *name) {
     @retval 1 : found
     @retval 0: not found
 */
-int rozofs_lookup_insert_queue(void *buffer,fuse_ino_t parent, const char *name,fuse_req_t req,int trc_idx)
+int rozofs_lookup_insert_queue(void *buffer,fuse_ino_t parent, const char *name,fuse_req_t req,int trc_idx,int lookup_flags)
 {
    ruc_obj_desc_t   * phead;
    ruc_obj_desc_t   * elt;
@@ -113,6 +113,7 @@ int rozofs_lookup_insert_queue(void *buffer,fuse_ino_t parent, const char *name,
       {
          fuse_save_ctx_p->lookup_tb[fuse_save_ctx_p->lkup_cpt].req = req;
          fuse_save_ctx_p->lookup_tb[fuse_save_ctx_p->lkup_cpt].trc_idx = trc_idx;
+         fuse_save_ctx_p->lookup_tb[fuse_save_ctx_p->lkup_cpt].flags = lookup_flags;
 	 fuse_save_ctx_p->lkup_cpt++;
 	 return 1;
       }
@@ -303,8 +304,31 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
     struct stat stbuf;
     int allocated = 0;
     int len_name;
+    fuse_ino_t child = 0;   
+//    int  local_lookup_success = 0;
+    uint32_t lookup_flags=0;
+    int extra_length = 0;
+    fuse_ino_t ino = 0;
+    int trace_flag = 0;
     
-    trc_idx = rozofs_trc_req_name(srv_rozofs_ll_lookup,parent,(char*)name);
+    extra_length = rozofs_check_extra_inode_in_lookup((char*)name, &len_name);
+    if (extra_length !=0)
+    {
+       uint8_t *pdata_p;
+       uint32_t *lookup_flags_p = (uint32_t*)&name[len_name+1];
+       lookup_flags =*lookup_flags_p;
+       if (extra_length > 4)
+       {
+         pdata_p = (uint8_t*)&name[len_name+1];
+	 pdata_p+=sizeof(uint32_t);
+	 fuse_ino_t *inode_p = (fuse_ino_t*)pdata_p;
+	 child = *inode_p;
+	 ino = child;
+       }
+    }
+    trace_flag = lookup_flags;
+    if (ino != 0) {trace_flag |=(1<<31);}
+    trc_idx = rozofs_trc_req_name_flags(srv_rozofs_ll_lookup,parent,(char*)name,(int)(trace_flag));
     /*
     ** allocate a context for saving the fuse parameters
     */
@@ -319,6 +343,8 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
     SAVE_FUSE_PARAM(buffer_p,parent);
     SAVE_FUSE_STRING(buffer_p,name);
     SAVE_FUSE_PARAM(buffer_p,trc_idx);
+    SAVE_FUSE_PARAM(buffer_p,ino);
+    SAVE_FUSE_PARAM(buffer_p,lookup_flags);
     
 
     DEBUG("lookup (%lu,%s)\n", (unsigned long int) parent, name);
@@ -352,14 +378,36 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
     ** Queue the request and attempt to check if there is already the same
     ** request queued
     */
-    if (rozofs_lookup_insert_queue(buffer_p,parent,name,req,trc_idx)== 1)
+    if (rozofs_lookup_insert_queue(buffer_p,parent,name,req,trc_idx,lookup_flags)== 1)
     {
       /*
       ** There is already a pending request, so nothing to send to the export
       */
-      gprofiler.rozofs_ll_lookup_agg[P_COUNT]++;
+      gprofiler->rozofs_ll_lookup_agg[P_COUNT]++;
       rozofs_fuse_release_saved_context(buffer_p);
       return;
+    }
+    /*
+    ** check if the lookup is a lookup revalidate. In such a case, the VFS provides*
+    ** the inode. So if the i-node attributes are fine, we do not worry
+    */
+    if ((child != 0) && ((lookup_flags & 0x100) == 0))
+    {
+      uint64_t attr_us = rozofs_tmr_get_attr_us(rozofs_is_directory_inode(ino));    
+      nie = get_ientry_by_inode(child);
+      if (nie != NULL)
+      {
+	if (
+           /* check regular file */
+           ((((nie->timestamp+attr_us) > rozofs_get_ticker_us()) || (rozofs_mode == 1))&&(S_ISREG(nie->attrs.mode))) ||
+	   /* check directory */
+	   (((nie->pending_getattr_cnt>0)||((nie->timestamp+attr_us) > rozofs_get_ticker_us()))&&(S_ISDIR(nie->attrs.mode)))
+	   ) 
+        {
+	  mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
+	  goto success;    
+	}                
+      }    
     }
     /*
     ** fill up the structure that will be used for creating the xdr message
@@ -370,6 +418,30 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
     /*
     ** now initiates the transaction towards the remote end
     */
+    
+    
+    /*
+    ** In case the EXPORT LBG is down ans we know this ientry, let's respond to
+    ** the requester with the current available information
+    */
+#if 1
+    if ((common_config.client_fast_reconnect) && (child != 0)) {
+      expgw_tx_routing_ctx_t routing_ctx; 
+      
+      if (expgw_get_export_routing_lbg_info(arg.arg_gw.eid,ie->fid,&routing_ctx) != 0) {
+         goto error;
+      }
+      if (north_lbg_get_state(routing_ctx.lbg_id[0]) != NORTH_LBG_UP) {
+	  if (!(nie = get_ientry_by_inode(child))) {
+              errno = ENOENT;
+              goto error;
+	  }
+	  mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
+	  goto success;        
+      }      
+    }  
+#endif         
+    
 #if 1
     ret = rozofs_expgateway_send_routing_common(arg.arg_gw.eid,ie->fid,EXPORT_PROGRAM, EXPORT_VERSION,
                               EP_LOOKUP,(xdrproc_t) xdr_epgw_lookup_arg_t,(void *)&arg,
@@ -380,8 +452,23 @@ void rozofs_ll_lookup_nb(fuse_req_t req, fuse_ino_t parent, const char *name)
                               EP_LOOKUP,(xdrproc_t) xdr_epgw_lookup_arg_t,(void *)&arg,
                               rozofs_ll_lookup_cbk,buffer_p); 
 #endif
-    if (ret < 0) goto error;
-    
+    if (ret < 0) {
+      /*
+      ** In case of fast reconnect mode let's respond with the previously knows 
+      ** parameters instead of failing
+      */
+      if (common_config.client_fast_reconnect) {
+        if (child != 0) {
+	  if (!(nie = get_ientry_by_inode(child))) {
+              errno = ENOENT;
+              goto error;
+	  }
+	  mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
+	  goto success;
+        }
+      }
+      goto error;
+    }
     /*
     ** no error just waiting for the answer
     */
@@ -430,13 +517,15 @@ lookup_objectmode:
       nie->attrs.gid = 0;
       nie->nlookup   = 0;
     }   
-//    info("FDL %d mode %d  uid %d gid %d",allocated,nie->attrs.mode,nie->attrs.uid,nie->attrs.gid);
-    memset(&fep, 0, sizeof (fep));
     mattr_to_stat(&nie->attrs, &stbuf,exportclt.bsize);
+
+//    info("FDL %d mode %d  uid %d gid %d",allocated,nie->attrs.mode,nie->attrs.uid,nie->attrs.gid);
+success:
+    memset(&fep, 0, sizeof (fep));
     stbuf.st_ino = nie->inode;
     fep.ino = nie->inode;    
-    fep.attr_timeout = rozofs_tmr_get_attr();
-    fep.entry_timeout = rozofs_tmr_get_entry();
+    fep.attr_timeout = rozofs_tmr_get_attr(rozofs_is_directory_inode(nie->inode));
+    fep.entry_timeout = rozofs_tmr_get_entry(rozofs_is_directory_inode(nie->inode));
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
     nie->nlookup++;
 
@@ -481,7 +570,9 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
    ientry_t *pie = 0;
    mattr_t  pattrs;
    int errcode=0;
-    
+   fuse_ino_t ino = 0;
+   rozofs_inode_t *fake_id_p;
+   
    GET_FUSE_CTX_P(fuse_ctx_p,param);  
    /*
    ** dequeue the buffer from the pending list
@@ -491,6 +582,7 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
    rpc_reply.acpted_rply.ar_results.proc = NULL;
    RESTORE_FUSE_PARAM(param,req);
    RESTORE_FUSE_PARAM(param,trc_idx);
+   RESTORE_FUSE_PARAM(param,ino);
    RESTORE_FUSE_STRUCT_PTR(param,name);
     /*
     ** get the pointer to the transaction context:
@@ -506,7 +598,22 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
        /*
        ** something wrong happened
        */
-       errno = rozofs_tx_get_errno(this);  
+       errno = rozofs_tx_get_errno(this); 
+       /*
+       ** In case of fast reconnect mode let's respond with the previously knows 
+       ** parameters instead of failing
+       */
+       if ((common_config.client_fast_reconnect)&&(errno==ETIME)) {
+         if (ino != 0) {
+	   if (!(nie = get_ientry_by_inode(ino))) {
+               errno = ENOENT;
+               goto error;
+	   }
+           memcpy(&attrs, &nie->attrs, sizeof (mattr_t));
+	   errno = EAGAIN;	   
+	   goto success;
+         }
+       }        
        goto error; 
     }
     /*
@@ -527,6 +634,7 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
     ** OK now decode the received message
     */
     bufsize = rozofs_tx_get_small_buffer_size();
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -597,8 +705,8 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
 	  memset(&fep, 0, sizeof (fep));
 	  errcode = errno;
 	  fep.ino = 0;
-	  fep.attr_timeout = rozofs_tmr_get_attr();
-	  fep.entry_timeout = rozofs_tmr_get_entry();
+	  fep.attr_timeout = rozofs_tmr_get_attr(0);
+	  fep.entry_timeout = rozofs_tmr_get_entry(0);
 	  rz_fuse_reply_entry(req, &fep);
 	  /*
 	  ** OK now let's check if there was some other lookup request for the same
@@ -654,7 +762,8 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
       pie->timestamp = rozofs_get_ticker_us();
       ientry_update_parent(nie,pie->fid);
     }   
-    
+
+success:    
     memset(&fep, 0, sizeof (fep));
     mattr_to_stat(&attrs, &stbuf,exportclt.bsize);
     stbuf.st_ino = nie->inode;
@@ -674,9 +783,17 @@ void rozofs_ll_lookup_cbk(void *this,void *param)
       fep.ino = nie->inode;
     }
     stbuf.st_size = nie->attrs.size;
-
-    fep.attr_timeout = rozofs_tmr_get_attr();
-    fep.entry_timeout = rozofs_tmr_get_entry();
+    fake_id_p = (rozofs_inode_t *) attrs.fid;
+    if (fake_id_p->s.del)
+    {
+      fep.attr_timeout  = 0;
+      fep.entry_timeout = 0;
+    }
+    else
+    {
+      fep.attr_timeout = rozofs_tmr_get_attr(rozofs_is_directory_inode(nie->inode));
+      fep.entry_timeout = rozofs_tmr_get_entry(rozofs_is_directory_inode(nie->inode));    
+    }
     memcpy(&fep.attr, &stbuf, sizeof (struct stat));
     nie->nlookup++;
 

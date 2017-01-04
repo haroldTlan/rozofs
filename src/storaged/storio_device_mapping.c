@@ -292,7 +292,12 @@ void storage_device_error_reset(void) {
   */
   storio_device_error_log_reset();
 }  
-
+void storage_device_man(char * pChar) {
+  pChar += rozofs_string_append(pChar,"device reset : clears error counters on every device.\n");  
+  pChar += rozofs_string_append(pChar,"device       : display the storio devices status.\n");  
+  pChar += rozofs_string_append(pChar,"It first displays some configuration information, and then displays for each device\n");  
+  pChar += rozofs_string_append(pChar,"some specific informations.\n");  
+}
 void storage_device_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   char                         * pChar=uma_dbg_get_buffer();
   int                            idx,threadNb; 
@@ -303,7 +308,8 @@ void storage_device_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   
   if ((argv[1] != NULL)&&(strcmp(argv[1],"reset")==0)) {
     storage_device_error_reset();
-    uma_dbg_send(tcpRef,bufRef,TRUE,"Device error counters have been reset");    
+    uma_dbg_send(tcpRef,bufRef,TRUE,"Device error counters have been reset");  
+    return;  
   } 
 
   st = NULL;
@@ -328,17 +334,15 @@ void storage_device_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
     		          
     pChar += rozofs_string_append(pChar,"\n    device_number     = ");
     pChar += rozofs_u32_append(pChar,st->device_number);
-    
-    if (st->selfHealing == -1) {
-      pChar += rozofs_string_append(pChar,"\n    self-healing      = No\n");
+    pChar += rozofs_string_append(pChar,"\n    self-healing-mode  = ");
+    pChar += rozofs_string_append(pChar, common_config.device_selfhealing_mode);
+    pChar += rozofs_string_append(pChar,"\n    self-healing-delay = ");
+    pChar += rozofs_u32_append(pChar,common_config.device_selfhealing_delay);
+    pChar += rozofs_string_append(pChar,"\n    spare-mark         = \"");
+    if (st->spare_mark != NULL) {   
+      pChar += rozofs_string_append(pChar, st->spare_mark);
     }  
-    else {
-      pChar += rozofs_string_append(pChar,"\n    self-healing      = ");
-      pChar += rozofs_u32_append(pChar, st->selfHealing);
-      pChar += rozofs_string_append(pChar," min (");
-      pChar += rozofs_u32_append(pChar, (st->selfHealing * 60)/STORIO_DEVICE_PERIOD);
-      pChar += rozofs_string_append(pChar," failures)\n");
-    }  
+    pChar += rozofs_string_append(pChar, "\"\n"); 
       
     pChar += rozofs_string_append(pChar,"\n    device | status | failures |    blocks    |    errors    | diagnostic      |  monitor | inactive | last activity\n");
     pChar += rozofs_string_append(pChar,"    _______|________|__________|______________|______________|_________________|__________|__________|_______________\n");
@@ -507,7 +511,6 @@ void storage_rebuild_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   
    @param st: storage context
 */
-uint32_t storio_allocated_device=0;
 uint32_t storio_device_mapping_allocate_device(storage_t * st) {
   uint32_t      dev=0;
   uint64_t    * pBlocks;
@@ -664,7 +667,7 @@ uint32_t storio_device_mapping_init()
   /*
   ** Add a debug topic
   */
-  uma_dbg_addTopic("device", storage_device_debug); 
+  uma_dbg_addTopicAndMan("device", storage_device_debug, storage_device_man, 0); 
   uma_dbg_addTopic("fid", storage_fid_debug); 
   uma_dbg_addTopic_option("rebuild", storage_rebuild_debug, UMA_DBG_OPTION_RESET); 
   return 0;

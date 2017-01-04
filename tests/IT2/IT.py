@@ -22,7 +22,7 @@ STORCLI_SID_NB=int(8)
 nbGruyere=int(256)
 stopOnFailure=True
 fuseTrace=False
-DEFAULT_RETRIES=int(20)
+DEFAULT_RETRIES=int(40)
 tst_file="tst_file"
 device_number=""
 mapper_modulo=""
@@ -41,6 +41,7 @@ safe=None
 nb_failures=None
 sids=[]
 hosts=[]
+verbose=False
 
 #___________________________________________________
 def clean_cache(val=1): os.system("echo %s > /proc/sys/vm/drop_caches"%val)
@@ -168,7 +169,7 @@ def export_count_sid_up ():
 #___________________________________________________
   global vid
   
-  string="./build/src/rozodiag/rozodiag -T export -c vfstat_stor"
+  string="./build/src/rozodiag/rozodiag -T export:1 -t 12 -c vfstat_stor"
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -717,6 +718,40 @@ def truncate():
   return os.system("./IT2/test_trunc.exe -process %d -loop %d -mount %s"%(process,loop,exepath))
 
 #___________________________________________________
+def makeBigFName(c):
+#___________________________________________________
+  FNAME="%s/bigFName/"%(exepath)
+  for i in range(510): FNAME=FNAME+c
+  return FNAME
+
+#___________________________________________________
+def bigFName():
+#___________________________________________________
+  charList="abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_-#:$@:=.;"
+  
+  if os.path.exists("%s/bigFName"%(exepath)):
+    os.system("rm -rf %s/bigFName"%(exepath))
+  
+  if not os.path.exists("%s/bigFName"%(exepath)):
+    os.system("mkdir -p %s/bigFName"%(exepath))
+    
+  for c in charList:
+    FNAME=makeBigFName(c)
+    f = open(FNAME, 'w')
+    f.write(FNAME) 
+    f.close()
+    
+  for c in charList:
+    FNAME=makeBigFName(c)
+    f = open(FNAME, 'r')
+    data = f.read(1000) 
+    f.close()   
+    if data != FNAME:
+      syslog.syslog("%s\nbad content %s\n"%(FNAME,data))
+      return -1
+  return 0
+	  
+#___________________________________________________
 def lock_race():
 #___________________________________________________ 
   zefile='%s/%s'%(exepath,tst_file)
@@ -774,7 +809,7 @@ def lock_bsd_blocking():
     os.remove(zefile)
   except:
     pass  
-  return os.system("./IT2/test_file_lock.exe -process %d -loop %d -file %s -nonBlocking"%(process,loop,zefile))  
+  return os.system("./IT2/test_file_lock.exe -process %d -loop %d -file %s -bsd "%(process,loop,zefile))  
 #___________________________________________________
 def check_one_criteria(attr,f1,f2):
 #___________________________________________________
@@ -976,7 +1011,7 @@ def gruyere_one_reread():
 #___________________________________________________ 
   clean_cache()
   syslog.syslog("re-read %d files"%(int(nbGruyere)))
-  res=os.system("./IT2/test_rebuild.exe -action check -nbfiles %d -mount %s"%(int(nbGruyere),exepath))
+  res=cmd_returncode("./IT2/test_rebuild.exe -action check -nbfiles %d -mount %s"%(int(nbGruyere),exepath))
   syslog.syslog("re-read result %s"%(res))
   return res
   
@@ -1013,7 +1048,7 @@ def gruyere():
     return gruyere_reread()
   return 0
 #___________________________________________________
-def rebuild_one_dev() :
+def rebuild_1dev() :
 # test rebuilding device per device
 #___________________________________________________
   global sids
@@ -1029,18 +1064,16 @@ def rebuild_one_dev() :
     
     dev=int(hid)%int(mapper_modulo)
     clean_rebuild_dir()    
-    string="./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s 1> /dev/null"%(cid,sid,dev,cid,sid,dev)
-    os.system("./setup.py sid %s %s device-delete %s"%(cid,sid,dev))
-    os.system("./setup.py sid %s %s device-create %s"%(cid,sid,dev))
-    ret = os.system(string)
+    string="./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s"%(cid,sid,dev,cid,sid,dev)
+    os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev))
+    ret = cmd_returncode(string)
     if ret != 0:
       return ret
       
     if int(mapper_modulo) > 1:
       dev=(dev+1)%int(mapper_modulo)
-      os.system("./setup.py sid %s %s device-delete %s"%(cid,sid,dev))
-      os.system("./setup.py sid %s %s device-create %s"%(cid,sid,dev))
-      ret = os.system("./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s 1> /dev/null"%(cid,sid,dev,cid,sid,dev))
+      os.system("./setup.py sid %s %s device-clear %s"%(cid,sid,dev))
+      ret = cmd_returncode("./setup.py sid %s %s rebuild -fg -d %s -o one_cid%s_sid%s_dev%s "%(cid,sid,dev,cid,sid,dev))
       if ret != 0:
 	return ret
 	
@@ -1054,13 +1087,14 @@ def rebuild_one_dev() :
     return ret
   return 0
 #___________________________________________________
-def relocate_one_dev() :
+def relocate_1dev() :
 # test rebuilding device per device
 #___________________________________________________
 
 
   ret=1 
   modulo=1
+  selfHealing="No"
   for s in sids:
     
     if modulo == 3:
@@ -1073,40 +1107,61 @@ def relocate_one_dev() :
     cid=s.split('-')[1]
     sid=s.split('-')[2]
 
-    # Get storio mode: single or multuple
-    string="./build/src/rozodiag/rozodiag -i localhost%s -T storaged -c storio_nb"%(hid)
+
+    # Check wether automount is configured
+    string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c cc | grep 'device_automount ' "%(hid,cid)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    
-    mode = "unknown"
+    automount = False
     for line in cmd.stdout:
-      if "mode" in line:
-        words=line.split()
-	mode=words[2]
-	break;     
-
+      # No automount 
+      if "False" in line:
+  	automount = False
+	break
+      if "True" in line:
+        automount = True
+        break
+        
     # Check wether self healing is configured
-    string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c device "%(hid,cid)
+    string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c cc | grep device_selfhealing_mode"%(hid,cid)
     parsed = shlex.split(string)
     cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    
+    delay       = 1
+    selfHealing ="spareOnly"
     for line in cmd.stdout:
-      if "self-healing" in line:
-        words=line.split()
-	selfHealing=words[2]
-	break; 
-
+      if "spareOnly" in line:
+  	selfHealing="spareOnly"
+	continue
+      if "relocate" in line:
+  	selfHealing="relocate"  
+	continue          
+        
     clean_rebuild_dir()
-     
-    # No self healing configured. Ask for a rebuild with relocation	      
-    if selfHealing == "No":
-      syslog.syslog("No self healing => call relocate")	      
-      ret = os.system("./setup.py sid %s %s rebuild -fg -d 0 -o reloc_cid%s_sid%s_dev0 1> /dev/null"%(cid,sid,cid,sid))
-      if ret != 0:
-	return ret
+    
+    
+    # Create a spare device in automount mode
+    if automount == True:
+      syslog.syslog("automount %s and selHealing %s : Wait rebuild on spare"%(automount,selfHealing))	          
+      os.system("./setup.py spare")
+      waitRebuild = True
+      	      
+    else :
+
+      # No automount and spare only          
+      if selfHealing == "spareOnly":
+        syslog.syslog("automount %s and selHealing %s : call relocate"%(automount,selfHealing))	          
+        ret = cmd_returncode("./setup.py sid %s %s rebuild -fg -d 0 -R -o reloc_cid%s_sid%s_dev0 "%(cid,sid,cid,sid))
+        if ret != 0: return ret
+        waitRebuild = False
+        status="IS"
+        
+      # No automount but relocate enabled	      
+      if selfHealing == "relocate":
+        syslog.syslog("automount %s and selHealing %s : Wait relocate"%(automount,selfHealing))	          
+        waitRebuild = True
 	
-    # Self healing is configured. Remove device and wait for automatic relocation	
-    else:
+    # Wait for selhealing	
+    if waitRebuild == True:
     
       ret = os.system("./setup.py sid %s %s device-delete 0"%(cid,sid))
       if ret != 0:
@@ -1117,7 +1172,11 @@ def relocate_one_dev() :
       
       while count != int(0):
 
-	if "OOS" in status:
+	if "OOS" == status:
+	  syslog.syslog("count %d device is %s"%(count,status))
+	  break    
+	      
+	if "IS" == status:
 	  syslog.syslog("count %d device is %s"%(count,status))
 	  break        
 
@@ -1125,8 +1184,7 @@ def relocate_one_dev() :
         time.sleep(10)
 	
         # Check The status of the device
-        if mode == "multiple": string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c device 1> /dev/null"%(hid,cid)
-	else                 : string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:0 -c device 1> /dev/null"%(hid)
+        string="./build/src/rozodiag/rozodiag -i localhost%s -T storio:%s -c device "%(hid,cid)
 	parsed = shlex.split(string)
 	cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 	curcid=0
@@ -1145,7 +1203,7 @@ def relocate_one_dev() :
 	  try:
 	    if int(words[0]) != int(0):
 	      continue
-	    status=words[1]
+	    status=words[1].split()[0]
 	    break
 	  except:
 	    pass    
@@ -1159,11 +1217,14 @@ def relocate_one_dev() :
       if ret != 0:
 	return ret 
       
-    if selfHealing != "No":
+    if status == "OOS":
+      # Re create the device
       ret = os.system("./setup.py sid %s %s device-create 0"%(cid,sid))
-      ret = os.system("./setup.py sid %s %s rebuild -fg -d 0 -C -o clear_cid%s_sid%s_dev0 1> /dev/null"%(cid,sid,cid,sid))
-      
-      
+      # re initialize it
+      ret = os.system("./setup.py sid %s %s rebuild -fg -d 0 -K"%(cid,sid))
+      time.sleep(11)
+      ret = os.system("./setup.py sid %s %s rebuild -fg -d 0"%(cid,sid))
+            
   if rebuildCheck == True:      
     ret = gruyere_reread()          
     return ret         
@@ -1183,9 +1244,8 @@ def rebuild_all_dev() :
 
     clean_rebuild_dir()
 
-    os.system("./setup.py sid %s %s device-delete all 1> /dev/null"%(cid,sid))
-    os.system("./setup.py sid %s %s device-create all 1> /dev/null"%(cid,sid))
-    ret = os.system("./setup.py sid %s %s rebuild -fg -o all_cid%s_sid%s 1> /dev/null"%(cid,sid,cid,sid))
+    os.system("./setup.py sid %s %s device-clear all 1> /dev/null"%(cid,sid))
+    ret = cmd_returncode("./setup.py sid %s %s rebuild -fg -o all_cid%s_sid%s "%(cid,sid,cid,sid))
     if ret != 0:
       return ret
 
@@ -1200,7 +1260,7 @@ def rebuild_all_dev() :
   return 0  
 
 #___________________________________________________
-def rebuild_one_node() :
+def rebuild_1node() :
 # test re-building a whole storage
 #___________________________________________________
   global hosts
@@ -1219,13 +1279,12 @@ def rebuild_one_node() :
       cid=s.split('-')[1]
       sid=s.split('-')[2]
       
-      os.system("./setup.py sid %s %s device-delete all 1> /dev/null"%(cid,sid))
-      os.system("./setup.py sid %s %s device-create all 1> /dev/null"%(cid,sid))      
+      os.system("./setup.py sid %s %s device-clear all 1> /dev/null"%(cid,sid))
 
     clean_rebuild_dir()
     
-    string="./setup.py storage %s rebuild -fg -o node_%s 1> /dev/null"%(hid,hid)
-    ret = os.system(string)
+    string="./setup.py storage %s rebuild -fg -o node_%s"%(hid,hid)
+    ret = cmd_returncode(string)
     if ret != 0:
       return ret
 
@@ -1237,7 +1296,50 @@ def rebuild_one_node() :
   if rebuildCheck == True:      
     ret = gruyere_reread()          
     return ret
-  return 0  
+  return 0 
+#___________________________________________________
+def rebuild_1node_parts() :
+# test re-building a whole storage
+#___________________________________________________
+  global hosts
+  global sids
+    
+  ret=1 
+  # Loop on every host
+  for hid in hosts:
+ 
+    # Delete every device of every CID/SID on this host
+    for s in sids:
+
+      zehid=s.split('-')[0]
+      if int(zehid) != int(hid): continue
+      
+      cid=s.split('-')[1]
+      sid=s.split('-')[2]
+      
+      os.system("./setup.py sid %s %s device-clear all 1> /dev/null"%(cid,sid))
+
+    clean_rebuild_dir()
+    
+    string="./setup.py storage %s rebuild -fg -o node_nominal_%s --nominal"%(hid,hid)
+    ret = cmd_returncode(string)
+    if ret != 0:
+      return ret
+    
+    string="./setup.py storage %s rebuild -fg -o node_spare_%s --spare"%(hid,hid)
+    ret = cmd_returncode(string)
+    if ret != 0:
+      return ret
+
+    if rebuildCheck == True:	
+      ret = gruyere_one_reread()  
+      if ret != 0:
+	return ret    
+
+  if rebuildCheck == True:      
+    ret = gruyere_reread()          
+    return ret
+  return 0    
 #___________________________________________________
 def delete_rebuild() :
 # test re-building a whole storage
@@ -1301,12 +1403,10 @@ def rebuild_fid() :
 
       clean_rebuild_dir()
 	    	
-      string="./setup.py sid %s %s rebuild -fg -f %s -o fid%s_cid%s_sid%s 1> /dev/null"%(cid,sid,fid,fid,cid,sid)
-      parsed = shlex.split(string)
-      cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-      cmd.wait()
+      string="./setup.py sid %s %s rebuild -fg -f %s -o fid%s_cid%s_sid%s"%(cid,sid,fid,fid,cid,sid)
+      ret = cmd_returncode(string)
 
-      if cmd.returncode != 0:
+      if ret != 0:
         print "%s failed"%(string)
 	return 1 	       
 
@@ -1464,7 +1564,15 @@ def do_list():
     dis.new_line()  
     dis.set_column(1,"%s"%num)
     dis.set_column(2,tst)
-    dis.set_column(3,'basic')  
+    dis.set_column(3,'basic') 
+     
+  dis.end_separator()  
+  for tst in TST_FLOCK:
+    num=num+1
+    dis.new_line()  
+    dis.set_column(1,"%s"%num)
+    dis.set_column(2,tst)
+    dis.set_column(3,'flock')  
     
   dis.end_separator()         
   for tst in TST_REBUILD:
@@ -1579,7 +1687,20 @@ def resolve_mnt(inst):
   if pid == None:
     print "RozoFS instance %s is not running"%(instance)
     exit(1)      
-    
+#___________________________________________  
+def cmd_returncode (string):
+  global verbose
+  if verbose: print string
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  cmd.wait()
+  return cmd.returncode
+#___________________________________________  
+def cmd_system (string):
+  global verbose
+  if verbose: print string
+  os.system(string)
+        
 #___________________________________________________
 def usage():
 #___________________________________________________
@@ -1637,10 +1758,12 @@ parser.add_option("-n","--nfs", action="store_true",dest="nfs", default=False, h
 # Read/write test list
 TST_RW=['read_parallel','write_parallel','rw2','wr_rd_total','wr_rd_partial','wr_rd_random','wr_rd_total_close','wr_rd_partial_close','wr_rd_random_close','wr_close_rd_total','wr_close_rd_partial','wr_close_rd_random','wr_close_rd_total_close','wr_close_rd_partial_close','wr_close_rd_random_close']
 # Basic test list
-TST_BASIC=['readdir','xattr','link','symlink', 'rename','chmod','truncate','lock_posix_passing','lock_posix_blocking','lock_race','crc32','rsync','compil']
-TST_BASIC_NFS=['readdir','link', 'rename','chmod','truncate','lock_posix_passing','lock_posix_blocking','lock_race','crc32','rsync','compil']
+TST_BASIC=['readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','compil']
+TST_BASIC_NFS=['readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','compil']
 # Rebuild test list
-TST_REBUILD=['gruyere','rebuild_fid','rebuild_one_dev','relocate_one_dev','rebuild_all_dev','rebuild_one_node','gruyere_reread']
+TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','gruyere_reread']
+# File locking
+TST_FLOCK=['lock_posix_passing','lock_posix_blocking','lock_bsd_passing','lock_bsd_blocking','lock_race']
 
 ifnumber=get_if_nb()
 
@@ -1718,6 +1841,7 @@ list=[]
 for arg in args:  
   if arg == "all":
     list.extend(TST_BASIC)
+    list.extend(TST_FLOCK)
     list.extend(TST_REBUILD)
     list.extend(TST_RW)
     append_circumstance_test_list(list,TST_RW,'storageFailed')
@@ -1739,7 +1863,9 @@ for arg in args:
   elif arg == "basic":
     list.extend(TST_BASIC)
   elif arg == "rebuild":
-    list.extend(TST_REBUILD)  
+    list.extend(TST_REBUILD) 
+  elif arg == "flock":
+    list.extend(TST_FLOCK)  
   else:
     list.append(arg)              
 # No list of test. Print usage

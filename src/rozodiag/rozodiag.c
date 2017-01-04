@@ -73,7 +73,8 @@ char prompt[64];
 **   lnkdebug <IPADDR> <PORT>
 */
 void syntax_display() {
-  printf("\n%s ([-i <hostname>] {-p <port>|-T <target>})... [-c <cmd|all>]... [-f <cmd file>]... [-period <seconds>] [-t <seconds>]\n\n",prgName);
+  printf("\n%s - RozoFS %s\n\n", prgName, VERSION);
+  printf("%s ([-i <hostname>] {-p <port>|-T <target>})... [-c <cmd|all>]... [-f <cmd file>]... [-period <seconds>] [-t <seconds>]\n\n",prgName);
   printf("Several diagnostic targets can be specified ( [-i <hostname>] {-p <port>|-T <target>} )...\n");
   printf("  -i <hostname>  IP address or hostname of the diagnostic target.\n");
   printf("                 When omitted previous -i value in the command line is taken as default\n");
@@ -83,12 +84,14 @@ void syntax_display() {
   printf("    -T <target>    The diagnostic target in the format:\n");
   printf("                     export                               for an export\n");
   printf("                     storaged                             for a storaged\n");
+  printf("                     stspare                              for a storaged spare restorer\n");
   printf("                     storio[:<instance>]                  for a storio\n");
   printf("                     mount[:<mount instance>]             for a rozofsmount\n");
   printf("                     mount[:<mount instance>[:<1|2>]]     for a storcli of a rozofsmount\n");
   printf("                     geomgr                               for a geomgr\n");
   printf("                     geocli[:<geocli instance>]           for a geo-replication client\n");
   printf("                     geocli[:<geocli instance>[:<1|2>]]   for a storcli of a geo-replication client\n");    
+  printf("                     rebalancer[:<instance>]              for rebalancer instance <instance>\n");    
   printf(" At least one -p or -m value must be given.\n");
   printf("\nOptionnaly a list of command to run can be specified:\n");
   printf("  [-c <cmd|all>]...\n"); 
@@ -485,6 +488,9 @@ char *argv[];
       else if (strncasecmp(pt,"storaged",strlen("storaged"))==0) {
         port32 = rozofs_get_service_port_storaged_diag();
       }
+      else if (strncasecmp(pt,"stspare",strlen("stspare"))==0) {
+        port32 = rozofs_get_service_port_stspare_diag();
+      }      
       else if (strncasecmp(pt,"export",strlen("export"))==0) {
         pt += strlen("export");
 	if (*pt == ':') {
@@ -547,7 +553,26 @@ char *argv[];
 	  // storcli:x:y 
 	  port32 = rozofs_get_service_port_fsmount_storcli_diag(port32,val32);
 	}
-      }          
+      }  
+      else if (strncasecmp(pt,"rebalancer",strlen("rebalancer"))==0) {
+      
+	pt += strlen("rebalancer");
+        
+        if (*pt == 0) { 
+	  port32 = rozofs_get_service_port_rebalancing_diag(0);
+	}  
+        else {
+          if (*pt != ':') { 
+	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
+	  }  
+	  pt++;
+	  ret = sscanf(pt,"%u",&port32);
+	  if (ret != 1) {
+	    stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);
+          }
+          port32 = rozofs_get_service_port_rebalancing_diag(port32);
+	}
+      }                
       else {
 	stop_on_error ("%s option with unexpected value \"%s\" !!!\n",argv[idx-1],argv[idx]);       
       }

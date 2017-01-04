@@ -22,6 +22,11 @@
 
 DECLARE_PROFILING(mpp_profiler_t);
 
+/*
+** cache value of last stats (for asynchronous case
+*/
+ep_statfs_t rozofs_cache_estat;
+uint64_t  rozofs_cache_estat_time = 0; 
 
 /**
 * Get file system statistics
@@ -41,7 +46,10 @@ void rozofs_ll_statfs_nb(fuse_req_t req, fuse_ino_t ino) {
     int    ret;        
     void *buffer_p = NULL;
     int trc_idx = rozofs_trc_req(srv_rozofs_ll_statfs,ino,NULL);
+    uint64_t attr_us = common_config.statfs_period;
+    struct statvfs st={0};
 
+   attr_us = attr_us*0x100000;
     /*
     ** allocate a context for saving the fuse parameters
     */
@@ -57,6 +65,10 @@ void rozofs_ll_statfs_nb(fuse_req_t req, fuse_ino_t ino) {
     SAVE_FUSE_PARAM(buffer_p,trc_idx);
 
     START_PROFILING_NB(buffer_p,rozofs_ll_statfs);
+    if ((rozofs_cache_estat_time+attr_us) > rozofs_get_ticker_us())
+    {
+       goto async_statfs;   
+    }
     /*
     ** now initiates the transaction towards the remote end
     */
@@ -85,6 +97,25 @@ error:
     rozofs_trc_rsp_attr(srv_rozofs_ll_statfs,ino,NULL,1,-1,trc_idx);
 
     return;
+    
+async_statfs:
+    memset(&st, 0, sizeof(struct statvfs));
+    st.f_blocks = rozofs_cache_estat.blocks; // + estat.bfree;
+    st.f_bavail = st.f_bfree = rozofs_cache_estat.bfree;
+    st.f_frsize = st.f_bsize = rozofs_cache_estat.bsize;
+    st.f_favail = st.f_ffree = rozofs_cache_estat.ffree;
+    st.f_files = rozofs_cache_estat.files + rozofs_cache_estat.ffree;
+    st.f_namemax = rozofs_cache_estat.namemax;
+
+    fuse_reply_statfs(req, &st);
+    errno = EAGAIN;
+    /*
+    ** release the buffer if has been allocated
+    */
+    STOP_PROFILING_NB(buffer_p,rozofs_ll_statfs);
+    if (buffer_p != NULL) rozofs_fuse_release_saved_context(buffer_p);
+    rozofs_trc_rsp_attr(srv_rozofs_ll_statfs,ino,NULL,1,-1,trc_idx);
+
 }
 
 
@@ -153,6 +184,7 @@ error:
     ** OK now decode the received message
     */
     bufsize = (int) ruc_buf_getPayloadLen(recv_buf);
+    bufsize -= sizeof(uint32_t); /* skip length*/
     xdrmem_create(&xdrs,(char*)payload,bufsize,XDR_DECODE);
     /*
     ** decode the rpc part
@@ -194,10 +226,19 @@ error:
 	st.f_favail = st.f_ffree = estat.ffree;
 	st.f_files = estat.files + estat.ffree;
 	st.f_namemax = estat.namemax;
+   /*
+   ** cache the last statfs
+   */
+   rozofs_cache_estat_time = rozofs_get_ticker_us();
+   memcpy(&rozofs_cache_estat,&estat,sizeof (ep_statfs_t));
 
     fuse_reply_statfs(req, &st);
     errno = 0;
     status = 0;
+    /*
+    ** check if some more write blocks are pending
+    */
+    rozofs_export_write_block_list_process();    
     goto out;
 error:
     fuse_reply_err(req, errno);

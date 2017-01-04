@@ -115,7 +115,7 @@ int exportclt_msite_initialize(exportclt_t * clt, const char *host, char *root,i
 	int xerrno = 0;	
     DEBUG_FUNCTION;
 
-
+    memset(&args,0,sizeof(epgw_mount_arg_t));
     /* Prepare mount request */
     strncpy(clt->host, host, ROZOFS_HOSTNAME_MAX);
     clt->root = strdup(root);
@@ -238,7 +238,11 @@ int exportclt_initialize(exportclt_t * clt, const char *host, char *root,int sit
 	*/
 	status = exportclt_msite_initialize(clt, host, root,site_number,passwd, 
 	                                  bufsize, min_read_size,retries, timeout);		
-	if (status == 0) goto out;									
+	if (status == 0) goto out;
+        if (errno == EPERM) {
+          xerrno = errno;
+          goto error;
+        }  									
 
     /*
 	** Multi site mount failed. Let's try the old mount.

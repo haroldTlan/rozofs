@@ -363,7 +363,7 @@ int flockUnflock (int fd, FLOCK_MODE_E mode) {
     
   if (mode == FLOCK_MODE_WRITE) opcode = LOCK_EX;
   else                          opcode = LOCK_SH;
-  if (!blocking) opcode = opcode | LOCK_NB;
+  if (!blocking) opcode |= LOCK_NB;
   
 
   while (retry) {
@@ -380,7 +380,9 @@ int flockUnflock (int fd, FLOCK_MODE_E mode) {
     return -1;    
   }
 
-  ret = flock(fd, LOCK_UN);     
+  opcode = LOCK_UN;
+  if (!blocking) opcode |= LOCK_NB;
+  ret = flock(fd, opcode);     
   if (ret != 0) {
     sprintf("flock(unclok) %s\n", strerror(errno));
   }
@@ -455,7 +457,7 @@ int do_posix_test(int count) {
 
   }
 
-  set_lock(fd, F_SETLKW, F_WRLCK,0,0, SEEK_SET);       
+  set_lock(fd, blocking?F_SETLKW:F_SETLK, F_WRLCK,0,0, SEEK_SET);       
   close(fd);
   return ret;
 }

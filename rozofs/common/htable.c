@@ -115,7 +115,7 @@ inline void *htable_del(htable_t * h, void *key) {
         if (h->cmp(he->key, key) == 0) {
             value = he->value;
             list_remove(p);
-            free(he);
+            xfree(he);
             break;
         }
     }

@@ -49,7 +49,7 @@
 #include <rozofs/common/profile.h>
 #include <rozofs/rpc/stcpproto.h>
 #include "storcli_ring.h"
-
+#include <rozofs/rozofs_srv.h>
 
  
 #ifndef TEST_STORCLI_TEST
@@ -61,7 +61,7 @@ int test_north_lbg_get_state(int lbg_idx);
 
 extern uint64_t storcli_buf_depletion_count; /**< buffer depletion on storcli buffers */
 extern uint64_t storcli_rng_full_count; /**< ring request full counter */
-
+extern uint64_t rozofs_storcli_ctx_wrap_count_err;
 /**
 *  STORCLI Resource configuration
 */
@@ -77,8 +77,8 @@ extern uint64_t storcli_rng_full_count; /**< ring request full counter */
 /**
 * Buffer s associated with the reception of the load balancing group on north interface
 */
-#define STORCLI_NORTH_LBG_BUF_RECV_CNT   STORCLI_CTX_CNT  /**< number of reception buffer to receive from rozofsmount */
-#define STORCLI_NORTH_LBG_BUF_RECV_SZ    (1024*12)  /**< max user data payload is 12K       */
+#define STORCLI_NORTH_LBG_BUF_RECV_CNT   (STORCLI_CTX_CNT)  /**< number of reception buffer to receive from rozofsmount */
+#define STORCLI_NORTH_LBG_BUF_RECV_SZ    (1024*2)  /**< max user data payload is 12K       */
 /**
 * Storcli buffer mangement configuration
 *  INTERNAL_READ are small buffer used when a write request requires too trigger read of first and/or last block
@@ -86,8 +86,8 @@ extern uint64_t storcli_rng_full_count; /**< ring request full counter */
 #define STORCLI_NORTH_MOD_INTERNAL_READ_BUF_CNT   STORCLI_CTX_CNT  /**< rozofs_storcli_north_small_buf_count  */
 #define STORCLI_NORTH_MOD_INTERNAL_READ_BUF_SZ   1024  /**< rozofs_storcli_north_small_buf_sz  */
 
-#define STORCLI_NORTH_MOD_XMIT_BUF_CNT   STORCLI_CTX_CNT  /**< rozofs_storcli_north_large_buf_count  */
-#define STORCLI_NORTH_MOD_XMIT_BUF_SZ    STORCLI_NORTH_LBG_BUF_RECV_SZ  /**< rozofs_storcli_north_large_buf_sz  */
+#define STORCLI_NORTH_MOD_XMIT_BUF_CNT   (STORCLI_CTX_CNT)  /**< rozofs_storcli_north_large_buf_count  */
+#define STORCLI_NORTH_MOD_XMIT_BUF_SZ    (1024*8)             /**< rozofs_storcli_north_large_buf_sz  */
 
 #define STORCLI_SOUTH_TX_XMIT_BUF_CNT   (STORCLI_CTX_CNT*ROZOFS_MAX_LAYOUT)  /**< rozofs_storcli_south_large_buf_count  */
 #define STORCLI_SOUTH_TX_XMIT_BUF_SZ    (1024*160)                           /**< rozofs_storcli_south_large_buf_sz  */
@@ -218,7 +218,8 @@ typedef struct _rozofs_storcli_ctx_t
   uint32_t   src_transaction_id;  /**< transaction id of the source request                                       */
   void      *xmitBuf;             /**< reference of the xmit buffer that will use for sending the response        */
   uint32_t   read_seqnum;         /**< read sequence number that must be found in the reply to correlate with ctx */
-  uint32_t   reply_done;         /**< assert to one when reply has been sent to rozofsmount */
+  uint16_t   reply_done;         /**< assert to one when reply has been sent to rozofsmount */
+  uint16_t   rsvd_ctx_count;         /**< number of pre-reserved storcli context for processing the current request */
   rozofs_storcli_projection_ctx_t  prj_ctx[ROZOFS_SAFE_MAX_STORCLI];
   rozofs_storcli_lbg_prj_assoc_t lbg_assoc_tb[ROZOFS_SAFE_MAX_STORCLI]; /**< association table between lbg and projection */
   rozofs_storcli_inverse_block_t block_ctx_table[ROZOFS_MAX_BLOCK_PER_MSG];  
@@ -329,8 +330,8 @@ extern storcli_kpi_t storcli_kpi_transform_inverse;
  { \
   unsigned long long time;\
   struct timeval     timeDay;  \
-  gprofiler.the_probe[P_COUNT]++;\
-  gprofiler.the_probe[P_BYTES] += the_bytes;\
+  gprofiler->the_probe[P_COUNT]++;\
+  gprofiler->the_probe[P_BYTES] += the_bytes;\
   if (buffer != NULL)\
     {\
         gettimeofday(&timeDay,(struct timezone *)0);  \
@@ -343,8 +344,8 @@ extern storcli_kpi_t storcli_kpi_transform_inverse;
  { \
   unsigned long long time;\
   struct timeval     timeDay;  \
-  gprofiler.the_probe[P_COUNT]++;\
-  gprofiler.the_probe[P_BYTES] += the_bytes;\
+  gprofiler->the_probe[P_COUNT]++;\
+  gprofiler->the_probe[P_BYTES] += the_bytes;\
   if (buffer != NULL)\
     {\
         gettimeofday(&timeDay,(struct timezone *)0);  \
@@ -359,12 +360,12 @@ extern storcli_kpi_t storcli_kpi_transform_inverse;
 { \
   unsigned long long timeAfter;\
   struct timeval     timeDay;  \
-  gprofiler.the_probe[P_BYTES] += the_bytes;\
+  gprofiler->the_probe[P_BYTES] += the_bytes;\
   if (buffer != NULL)\
   { \
     gettimeofday(&timeDay,(struct timezone *)0);  \
     timeAfter = MICROLONG(timeDay); \
-    gprofiler.the_probe[P_ELAPSE] += (timeAfter-(buffer)->timestamp); \
+    gprofiler->the_probe[P_ELAPSE] += (timeAfter-(buffer)->timestamp); \
   }\
 }
 
@@ -372,24 +373,24 @@ extern storcli_kpi_t storcli_kpi_transform_inverse;
 { \
   unsigned long long timeAfter;\
   struct timeval     timeDay;  \
-  gprofiler.the_probe[P_BYTES] += the_bytes;\
+  gprofiler->the_probe[P_BYTES] += the_bytes;\
   if (buffer != NULL)\
   { \
     gettimeofday(&timeDay,(struct timezone *)0);  \
     timeAfter = MICROLONG(timeDay); \
-    gprofiler.the_probe[P_ELAPSE] += (timeAfter-(buffer)->timestamp2); \
+    gprofiler->the_probe[P_ELAPSE] += (timeAfter-(buffer)->timestamp2); \
   }\
 }
 
 
 #define STORCLI_ERR_PROF(the_probe)\
  { \
-  gprofiler.the_probe[P_COUNT]++;\
+  gprofiler->the_probe[P_COUNT]++;\
 }
 
 #define STORCLI_ERR_COUNT_PROF(the_probe,count)\
  { \
-  gprofiler.the_probe[P_COUNT] = gprofiler.the_probe[P_COUNT] + count;\
+  gprofiler->the_probe[P_COUNT] = gprofiler->the_probe[P_COUNT] + count;\
 }
 /**
 * transaction statistics
@@ -506,7 +507,8 @@ typedef struct _storcli_lbg_cnx_supervision_t
 {
 //  uint64_t   expiration_date;  /**< date for which the lbg  leaves the quarantine  */
   uint64_t   next_poll_date;   /**< date for the next polling  */
-  uint16_t   state:2 ;         /*< state : RUNNING/DOWNGRADED  */
+  uint16_t   storage:1 ;         /*< 1 when LBG toward storage  */
+  uint16_t   state:1 ;         /*< state : RUNNING/DOWNGRADED  */
   uint16_t   poll_state:2 ;         /*< polling state  */
   uint16_t   tmo_counter ; 
   uint16_t   poll_counter ; 
@@ -521,6 +523,7 @@ typedef struct _storcli_lbg_cnx_supervision_t
 extern storcli_lbg_cnx_supervision_t storcli_lbg_cnx_supervision_tab[];
 
 
+
 /**
 *  init of the load balancing group supervision table
 */
@@ -532,12 +535,29 @@ static inline void storcli_lbg_cnx_sup_init()
   {
     storcli_lbg_cnx_supervision_tab[i].state = STORCLI_LBG_RUNNING;
     storcli_lbg_cnx_supervision_tab[i].poll_state = STORCLI_POLL_IDLE;
+    storcli_lbg_cnx_supervision_tab[i].storage = 0;
     storcli_lbg_cnx_supervision_tab[i].tmo_counter = 0;
     storcli_lbg_cnx_supervision_tab[i].poll_counter = 0;
 //    storcli_lbg_cnx_supervision_tab[i].expiration_date = 0;  
     storcli_lbg_cnx_supervision_tab[i].next_poll_date = 0;  
   }
 }
+/*
+**----------------------------------------------
+**  Create periodic timer to relaunch storage LBG
+** polling
+**----------------------------------------------
+**
+**   charging timer service initialisation request
+**    
+**  IN : period_ms : period between two queue sequence reading in ms
+**
+**  OUT : OK/NOK
+**
+**-----------------------------------------------
+*/
+int storcli_lbg_cnx_sup_tmr_init(uint32_t period_ms);
+#define STORCLI_LBG_STORAGE_POLL_FREQ_MS 1000
 
 /**
 *  Increment the time-out counter of a load balancing group
@@ -632,6 +652,32 @@ rozofs_storcli_ctx_t *storcli_hash_table_search_ctx(fid_t fid);
   @retval NULL out of free context
 */
 rozofs_storcli_ctx_t *rozofs_storcli_alloc_context();
+/*
+**____________________________________________________
+*/
+/**
+   rozofs_storcli_rsvd_context_release
+
+  Pre-reserve a set of storcli context
+
+@param     p: main storcli context
+@param     count: number of context to release
+@retval   : none
+*/
+void  rozofs_storcli_rsvd_context_release(rozofs_storcli_ctx_t *p);
+/*
+**____________________________________________________
+*/
+/**
+   rozofs_storcli_rsvd_context_alloc
+
+  Pre-reserve a set of storcli context
+
+@param     p: main storcli context
+@param     count: number of context to reserve
+@retval   : none
+*/
+void  rozofs_storcli_rsvd_context_alloc(rozofs_storcli_ctx_t *p,int count);
 
 /*
 **__________________________________________________________________________
@@ -649,6 +695,8 @@ void rozofs_storcli_release_context(rozofs_storcli_ctx_t *ctx_p);
 
 extern uint32_t    rozofs_storcli_ctx_count;           /**< Max number of contexts    */
 extern uint32_t    rozofs_storcli_ctx_allocated;      /**< current number of allocated context        */
+extern int         rozofs_storcli_ctx_rsvd;       /**< current number of pre-reserved storcli contexts       */
+
 /*
 **__________________________________________________________________________
 */
@@ -661,7 +709,16 @@ extern uint32_t    rozofs_storcli_ctx_allocated;      /**< current number of all
 */
 static inline uint32_t rozofs_storcli_get_free_transaction_context()
 {
-  return(rozofs_storcli_ctx_count - rozofs_storcli_ctx_allocated);
+  if ((rozofs_storcli_ctx_allocated+rozofs_storcli_ctx_rsvd) > rozofs_storcli_ctx_count)
+  {
+     if (rozofs_storcli_ctx_wrap_count_err ==0) severe("too much allocated storcli context: %u+%d > %u",
+                                                        rozofs_storcli_ctx_allocated,
+							rozofs_storcli_ctx_rsvd,
+							rozofs_storcli_ctx_count);
+     rozofs_storcli_ctx_wrap_count_err++;
+     return 0;
+  }
+  return(rozofs_storcli_ctx_count - (rozofs_storcli_ctx_allocated+rozofs_storcli_ctx_rsvd));
 
 }
 /*
@@ -714,7 +771,25 @@ int rozofs_sorcli_send_rq_common(uint32_t lbg_id,uint32_t timeout_sec, uint32_t 
 
 #endif
 
+/*
+**__________________________________________________________________________
+*/
+/**
+* send a success read reply
+  That API fill up the common header with the SP_READ_RSP opcode
+  insert the transaction_id associated with the inittial request transaction id
+  insert a status OK
+  insert the length of the data payload
+  
+  In case of a success it is up to the called function to release the xmit buffer
+  
+  @param p : pointer to the root transaction context used for the read
+  
+  @retval none
 
+*/
+
+void rozofs_storcli_resize_reply_success(rozofs_storcli_ctx_t *p, uint32_t nb_blocks, uint32_t last_block_size);
 /*
 **__________________________________________________________________________
 */
@@ -1505,7 +1580,19 @@ void rozofs_storcli_truncate_timeout(rozofs_storcli_ctx_t *working_ctx_p);
  */
 
 void rozofs_storcli_write_timeout(rozofs_storcli_ctx_t *working_ctx_p) ;
+/*
+**__________________________________________________________________________
+*/
+/**
+*  Call back function call upon a success rpc, timeout or any other rpc failure
+*
+ @param this : pointer to the transaction context
+ @param param: pointer to the associated rozofs_fuse_context
+ 
+ @return none
+ */
 
+void rozofs_storcli_resize_timeout(rozofs_storcli_ctx_t *working_ctx_p) ;
 /*
 **____________________________________________________
 ** Corrupted block read information
@@ -1514,12 +1601,143 @@ void rozofs_storcli_write_timeout(rozofs_storcli_ctx_t *working_ctx_p) ;
 // Whether the STORCLI is actualy block corrupted tolerant
 extern int noReadFaultTolerant;
 
+/*
+** Description of one corrupted FID
+*/
+typedef struct _storcli_one_corrupted_fid_ctx {
+  fid_t            fid;
+  uint64_t         count;
+} storcli_one_corrupted_fid_ctx;
 
+/*
+** Max number of kept corrupted FID
+*/
 #define      STORCLI_MAX_CORRUPTED_FID_NB   16
+
+/*
+** Table of corrupted FID
+*/
 typedef struct _storcli_corrupted_fid_ctx {
-  int              nextIdx;
-  fid_t            fid[STORCLI_MAX_CORRUPTED_FID_NB];
+  int                           nextIdx;
+  storcli_one_corrupted_fid_ctx ctx[STORCLI_MAX_CORRUPTED_FID_NB];
 } storcli_corrupted_fid_ctx;
 extern storcli_corrupted_fid_ctx storcli_fid_corrupted;
+
+
+/*
+**____________________________________________________
+** Read/write error trace buffer
+**
+*/
+typedef struct _storcli_rw_error_record_t {
+  int32_t     line;     /**< Line where the error has been traced */
+  int         error;    /**< The error encountered */
+  uint64_t    offset;   /**< Offset of the operation in the file */
+  time_t      ts;       /**< Time stamp in second */
+  int         size;     /**< Size of the operation */
+  fid_t       fid;      /**< File id on which the operation took place */
+  uint16_t    opcode;   /**< Operation */ 
+  char        lbg[ROZOFS_SAFE_MAX+1];   
+  char        prj[(ROZOFS_SAFE_MAX*2)+1]; 
+} storcli_rw_error_record_t; 
+
+#define ROZOFS_STORCLI_ERROR_RECORD_NB 64
+
+typedef struct _storcli_rw_err_t {
+  int                       curIdx;     //*< Next record index to write
+  storcli_rw_error_record_t record[ROZOFS_STORCLI_ERROR_RECORD_NB];
+} storcli_rw_err_t;
+
+extern storcli_rw_err_t storcli_rw_error;
+
+static inline void storcli_trace_lbg_status(char * pChar, uint8_t rozofs_safe,rozofs_storcli_ctx_t * working_ctx_p) {
+  int projection_id;
+  
+  for (projection_id = 0; projection_id <rozofs_safe; projection_id++) {
+    switch (working_ctx_p->lbg_assoc_tb[projection_id].state) {
+      case NORTH_LBG_DEPENDENCY:      *pChar++ = '-'; break;
+      case NORTH_LBG_UP:              *pChar++ = 'U'; break;
+      case NORTH_LBG_DOWN:            *pChar++ = 'D'; break;
+      case NORTH_LBG_SHUTTING_DOWN:   *pChar++ = 'S'; break;
+      default: pChar += rozofs_i32_append(pChar, working_ctx_p->lbg_assoc_tb[projection_id].state);break;
+    }
+  }       
+}
+static inline void storcli_trace_prj_status(char * pChar, uint8_t rozofs_safe,rozofs_storcli_ctx_t * working_ctx_p) {
+  int projection_id;
+  
+  for (projection_id = 0; projection_id <rozofs_safe; projection_id++) {  
+    pChar += rozofs_i32_append(pChar, working_ctx_p->prj_ctx[projection_id].stor_idx);        
+    switch (working_ctx_p->prj_ctx[projection_id].prj_state) {
+      case ROZOFS_PRJ_READ_IDLE:      *pChar++ = 'I'; break;
+      case ROZOFS_PRJ_READ_IN_PRG:    *pChar++ = 'P'; break;
+      case ROZOFS_PRJ_READ_DONE:      *pChar++ = 'D'; break;
+      case ROZOFS_PRJ_READ_ERROR:     *pChar++ = 'E'; break;
+      case ROZOFS_PRJ_READ_ENOENT:    *pChar++ = 'N'; break; 
+      default: pChar += rozofs_i32_append(pChar, working_ctx_p->prj_ctx[projection_id].prj_state);break;
+    }
+  }       
+}
+/*
+** Trace an error in the memory buffer
+*/
+static inline void storcli_trace_error(int line, int error, rozofs_storcli_ctx_t * working_ctx_p) {
+  uint8_t rozofs_safe;
+  uint64_t now = time(NULL);
+  
+  storcli_rw_error_record_t * rec = &storcli_rw_error.record[storcli_rw_error.curIdx];
+  
+  if ((now == rec->ts) 
+  &&  (working_ctx_p->opcode_key == rec->opcode)
+  &&  (memcmp(working_ctx_p->fid_key,rec->fid,16)==0)) return;
+
+  storcli_rw_error.curIdx++;
+  if (storcli_rw_error.curIdx >= ROZOFS_STORCLI_ERROR_RECORD_NB) {
+    storcli_rw_error.curIdx = 0;
+  }  
+  rec = &storcli_rw_error.record[storcli_rw_error.curIdx];
+
+  
+  rec->line   = line;
+  rec->error  = error;
+  switch(working_ctx_p->opcode_key) {
+  
+    case STORCLI_READ:    
+    { 
+      storcli_read_arg_t * storcli_read_rq_p = (storcli_read_arg_t*)&working_ctx_p->storcli_read_arg;
+      rec->offset = storcli_read_rq_p->bid;
+      rec->size   = storcli_read_rq_p->nb_proj;
+      rozofs_safe = rozofs_get_rozofs_safe(storcli_read_rq_p->layout);
+    }  
+    break;
+    
+    case STORCLI_WRITE:  
+    { 
+      storcli_write_arg_no_data_t *storcli_write_rq_p = (storcli_write_arg_no_data_t*)&working_ctx_p->storcli_write_arg;
+      rec->offset = storcli_write_rq_p->off;
+      rec->size   = storcli_write_rq_p->len;
+      rozofs_safe = rozofs_get_rozofs_safe(storcli_write_rq_p->layout);
+    }       
+    break;
+    
+    case  STORCLI_TRUNCATE: 
+    {
+      storcli_truncate_arg_t *storcli_truncate_rq_p = (storcli_truncate_arg_t *) &working_ctx_p->storcli_truncate_arg;
+      rec->offset = storcli_truncate_rq_p->bid;
+      rec->size   = storcli_truncate_rq_p->last_seg;
+      rozofs_safe = rozofs_get_rozofs_safe(storcli_truncate_rq_p->layout);
+    }
+    break;
+    
+    default:
+      return;
+  }    
+
+  memcpy(rec->fid,working_ctx_p->fid_key,16);
+  rec->opcode =  working_ctx_p->opcode_key; 
+  rec->ts = now;
+  storcli_trace_lbg_status(&rec->lbg[0], rozofs_safe, working_ctx_p);
+  storcli_trace_prj_status(&rec->prj[0], rozofs_safe, working_ctx_p);
+}
 
 #endif
