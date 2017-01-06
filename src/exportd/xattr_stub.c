@@ -8,7 +8,7 @@
 #include <rozofs/common/export_track.h>
 
 #define BUFFER_HEAD_MAX 16
-int fake_buffer_idx = 0;
+uint32_t fake_buffer_idx = 0;
 struct buffer_head   fake_buffer_head[BUFFER_HEAD_MAX];
 
 /*
@@ -21,7 +21,7 @@ struct buffer_head *allocate_buffer_head()
 {
    struct buffer_head *bh;
    
-    int idx  = (++fake_buffer_idx)%(BUFFER_HEAD_MAX);
+    uint32_t idx  = (++fake_buffer_idx)%(BUFFER_HEAD_MAX);
     bh = &fake_buffer_head[idx];
     memset(bh,0,sizeof(struct buffer_head));
     bh->b_blocknr = 0;
