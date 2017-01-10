@@ -695,9 +695,10 @@ int prepare_lock_for_pending_list(fuse_req_t              req,
 void rozofs_ll_flock_nb(fuse_req_t req, 
                               fuse_ino_t ino,
 		              struct fuse_file_info *fi, 
-		              int op) {
+		              int input_op) {
     int          sleep ;
     struct flock flock;
+    int          op = input_op;
 
 
     /*
@@ -734,8 +735,8 @@ void rozofs_ll_flock_nb(fuse_req_t req,
         break;
       default:
 	lock_stat.einval++;      
-        if (lock_stat.einval%1024==1) {
-          severe("rozofs_ll_flock_nb op = 0x%x",(unsigned int)op);
+        if (lock_stat.einval%(8*1024)==1) {
+          severe("rozofs_ll_flock_nb op = 0x%x",(unsigned int)input_op);
         }
         fuse_reply_err(req, EINVAL);
         return;
