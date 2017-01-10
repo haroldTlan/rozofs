@@ -412,20 +412,23 @@ void buf_file_write_nb(ientry_t * ie,
   ** Check whether some pending data written by an other application
   ** on the same file is pending. In that case flush it immediatly.
   */
-  while (ie->write_pending != NULL)
-  { 
-    if  (ie->write_pending != p) {
-      flush_write_ientry(ie);  
-      break;  
-    }
-    if (len >= ROZOFS_MAX_FILE_BUF_SZ)
-    {
-      flush_write_ientry(ie);
-      p->read_from = p->read_pos = 0;    
-    }
-    break;
+  if (ie->write_pending != p) {
+    flush_write_ientry(ie);  
   }
-    
+
+  /*
+  ** Write is bigger than the buffer size.
+  ** Flush the buffer if needed and reset buffer pointers
+  ** so the buffer is empty. 
+  ** => action BUF_ACT_COPY_EMPTY will be called
+  */
+  if (len >= ROZOFS_MAX_FILE_BUF_SZ)
+  {
+    flush_write_ientry(ie);
+    p->read_from = p->read_pos = 0;    
+  }
+  
+      
   /*
   ** Check whether the buffer content is valid or if it must be forgotten
   */
