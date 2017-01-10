@@ -1481,6 +1481,7 @@ void usage() {
     printf("\t-R,--rozo_instance ROZO_INSTANCE\t\trozofsmount instance number \n");
     printf("\t-i,--instance index\t\t unique index of the module instance related to export \n");
     printf("\t-s,--storagetmr \t\t define timeout (s) for IO storaged requests (default: 3)\n");
+    printf("\t-t,--sparetmrms\t\t define timeout (ms) for switching to a spare storage\n");
     printf("\t-S,--shaper VALUE\t\tShaper initial value (default 1)\n");
     printf("\t-g,--geosite <0|1>\t\tSite number for geo-replication case (default 0)\n");
     printf("\t-o,--owner <string>\t\tstorcli owner name(default: rozofsmount)\n");
@@ -1520,6 +1521,7 @@ int main(int argc, char *argv[]) {
         { "instance", required_argument, 0, 'i'},
         { "rozo_instance", required_argument, 0, 'R'},
         { "storagetmr", required_argument, 0, 's'},
+        { "sparetmrms", required_argument, 0, 't'},
         { "mojThreadRead", required_argument, 0, 'r'},
         { "mojThreadWrite", required_argument, 0, 'w'},
         { "mojThreadThreshold", required_argument, 0, 'm'},
@@ -1596,7 +1598,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hH:E:P:i:D:M:R:s:k:c:l:S:g:o:r:w:m:L:B:Ff", long_options, &option_index);
+        c = getopt_long(argc, argv, "hH:E:P:i:D:M:R:s:t:k:c:l:S:g:o:r:w:m:L:B:Ff", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -1720,6 +1722,17 @@ int main(int argc, char *argv[]) {
                 }
                 rozofs_tmr_configure(TMR_STORAGE_PROGRAM,val);
                 break;
+	   case 't':
+                errno = 0;
+                val = (int) strtol(optarg, (char **) NULL, 10);
+                if (errno != 0) {
+                    strerror(errno);
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+                rozofs_tmr_configure(TMR_PRJ_READ_SPARE,val);
+                break;
+
             case 'k':
                 errno = 0;
                 val = (int) strtol(optarg, (char **) NULL, 10);
