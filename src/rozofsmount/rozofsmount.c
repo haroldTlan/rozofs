@@ -222,6 +222,8 @@ static void usage() {
     fprintf(stderr, "    -o noReadFaultTolerant\t\t\tGive back blocks with 0 on read for corrupted block instead of EIO\n");
     fprintf(stderr, "    -o xattrcache\t\t\tpermits to cache the extended attribute on client(same timer as attributes)\n");
     fprintf(stderr, "    -o asyncsetattr\t\t\toperates asynchronous mode for setattr operations)\n");
+    fprintf(stderr, "    -o rozofssparestoragems=N\tdefine timeout for switching to a spare storaged for read/write requests (default: %d ms)\n",
+                            rozofs_tmr_get(TMR_PRJ_READ_SPARE));
 
 
 }
@@ -251,6 +253,7 @@ static struct fuse_opt rozofs_opts[] = {
     MYFS_OPT("rozofsmaxretry=%u", max_retry, 0),
     MYFS_OPT("rozofsexporttimeout=%u", export_timeout, 0),
     MYFS_OPT("rozofsstoragetimeout=%u", storage_timeout, 0),
+    MYFS_OPT("rozofssparestoragems=%u", spare_timeout, 0),
     MYFS_OPT("rozofsstorclitimeout=%u", storcli_timeout, 0),
     MYFS_OPT("rozofsattrtimeout=%u", attr_timeout, 0),
     MYFS_OPT("rozofsattrtimeoutms=%u", attr_timeout_ms, 0),
@@ -409,6 +412,7 @@ void show_start_config(char * argv[], uint32_t tcpRef, void *bufRef) {
   DISPLAY_UINT32_CONFIG(export_timeout);
   DISPLAY_UINT32_CONFIG(storcli_timeout);
   DISPLAY_UINT32_CONFIG(storage_timeout);
+  DISPLAY_UINT32_CONFIG(spare_timeout);
   DISPLAY_UINT32_CONFIG(fs_mode); 
   DISPLAY_UINT32_CONFIG(cache_mode);  
   DISPLAY_UINT32_CONFIG(attr_timeout);
@@ -1507,7 +1511,9 @@ void rozofs_start_one_storcli(int instance) {
     cmd_p += sprintf(cmd_p, "-D %d ", debug_port_value);
     cmd_p += sprintf(cmd_p, "-R %d ", conf.instance);
     cmd_p += sprintf(cmd_p, "--shaper %d ", conf.shaper);
+
     cmd_p += sprintf(cmd_p, "-s %d ", ROZOFS_TMR_GET(TMR_STORAGE_PROGRAM));
+    cmd_p += sprintf(cmd_p, "-t %d ", ROZOFS_TMR_GET(TMR_PRJ_READ_SPARE));
     
     /*
     ** Storcli Mojette thread parameters
@@ -2261,6 +2267,15 @@ int main(int argc, char *argv[]) {
                 "timeout for storaged requests is out of range: revert to default setting");
         }
     }
+    
+    if (conf.spare_timeout != 0) {
+        if (rozofs_tmr_configure(TMR_PRJ_READ_SPARE,conf.spare_timeout)< 0)
+        {
+          fprintf(stderr,
+                "timeout for spare requests is out of range: revert to default setting");
+        }
+    }    
+    
 
     if (conf.storcli_timeout != 0) {
         if (rozofs_tmr_configure(TMR_STORCLI_PROGRAM,conf.storcli_timeout)< 0)
