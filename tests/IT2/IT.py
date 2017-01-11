@@ -43,6 +43,16 @@ sids=[]
 hosts=[]
 verbose=False
 
+
+#___________________________________________________
+# Messages and logs
+#___________________________________________________
+def log(string): syslog.syslog(string)
+def console(string): print string
+def report(string): 
+  console(string)
+  log(string)
+  
 #___________________________________________________
 def clean_cache(val=1): os.system("echo %s > /proc/sys/vm/drop_caches"%val)
 #___________________________________________________
@@ -183,7 +193,101 @@ def export_count_sid_up ():
       match=match+1
 
   return match
- 
+#___________________________________________________
+def export_all_sid_available (total):
+# Use debug interface to check all SID are seen UP
+#___________________________________________________
+  global vid
+  
+  string="./build/src/rozodiag/rozodiag -T export:1 -t 12 -c vfstat_stor"
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+  match=int(0)
+  for line in cmd.stdout:
+    if len(line.split()) == 0:
+      continue
+    if line.split()[0] != vid:
+      continue
+    if "UP" in line:
+      match=match+1
+      
+  if match != total: return False
+  return True
+#___________________________________________________
+def wait_until_export_all_sid_available (total,retries):
+#___________________________________________________
+
+  sys.stdout.write("E")
+  count = int(retries)
+  
+  while True:
+
+    sys.stdout.write(".")
+    sys.stdout.flush()     
+     
+    if export_all_sid_available(total) == True: return True    
+
+    count = count-1      
+    if count == 0: break;
+    time.sleep(1)    
+    
+  report("wait_until_export_all_sid_available : Maximum retries reached %s"%(retries))
+  return False  
+#___________________________________________________
+def storcli_all_sid_available (total):
+# Use debug interface to check all SID are seen UP
+#___________________________________________________
+  
+  string="./build/src/rozodiag/rozodiag -T mount:%s -c stc"%(instance)       
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  
+  nbstorcli = 0
+  for line in cmd.stdout:
+    words=line.split(':')
+    if words[0] == "number of configured storcli":
+      nbstorcli = int(words[1])
+      break;
+  
+  nbstorcli = nbstorcli + 1
+  for storcli in range(1,nbstorcli):
+  
+    string="./build/src/rozodiag/rozodiag -T mount:%s:%d -c storaged_status"%(instance,storcli)       
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # Looking for state=UP and selectable=YES
+    match=int(0)
+    for line in cmd.stdout:
+      words=line.split('|')
+      if len(words) >= 11:
+        if 'YES' in words[6] and 'UP' in words[4]:
+          match=match+1               
+    if match != total: return False
+    
+  return True
+#___________________________________________________
+def wait_until_storcli_all_sid_available (total,retries):
+#___________________________________________________
+  
+  sys.stdout.write("S")
+  count = int(retries)
+
+  while True:
+
+    sys.stdout.write(".")
+    sys.stdout.flush()     
+     
+    if storcli_all_sid_available(total) == True: return True    
+
+    count = count-1      
+    if count == 0: break;
+    time.sleep(1)    
+    
+  report("wait_until_storcli_all_sid_available : Maximum retries reached %s"%(retries))
+  return False
+
 #___________________________________________________
 def storcli_count_sid_available ():
 # Use debug interface to count the number of sid 
@@ -215,7 +319,7 @@ def loop_wait_until (success,retries,function):
 
     retries=retries-1
     if retries == 0:
-      print "Maximum retries reached. %s is %s\n"%(function,up)      
+      report("Maximum retries reached. %s is %s\n"%(function,up))     
       return False
       
     sys.stdout.write(".")
@@ -237,7 +341,7 @@ def loop_wait_until_less (success,retries,function):
 
     retries=retries-1
     if retries == 0:
-      print "Maximum retries reached. %s is %s\n"%(function,up)      
+      report( "Maximum retries reached. %s is %s\n"%(function,up))      
       return False
       
     sys.stdout.write(".")
@@ -262,12 +366,8 @@ def start_all_sid () :
 def wait_until_all_sid_up (retries=DEFAULT_RETRIES) :
 # Wait for all sid up seen by storcli as well as export
 #___________________________________________________
-  if loop_wait_until(STORCLI_SID_NB,retries,'storcli_count_sid_available') == False: 
-    print "storcli_count_sid_available %s failed"%(STORCLI_SID_NB)
-    return False
-  if loop_wait_until(EXPORT_SID_NB,retries,'export_count_sid_up') == False:
-    print "export_count_sid_up %s failed"%(EXPORT_SID_NB)
-    return False
+  wait_until_storcli_all_sid_available(STORCLI_SID_NB,retries)
+  wait_until_export_all_sid_available(EXPORT_SID_NB,retries)
   return True  
   
     
@@ -290,7 +390,7 @@ def wait_until_x_sid_down (x,retries=DEFAULT_RETRIES) :
 #___________________________________________________
 def storageStart (hid,count=int(1)) :
 
-  sys.stdout.write("\r                                   ")
+  sys.stdout.write("\r                                                                   ")
   sys.stdout.write("\rStorage start ")
 
   for idx in range(int(count)): 
@@ -310,7 +410,7 @@ def storageStartAndWait (hid,count=int(1)) :
 #___________________________________________________
 def storageStop (hid,count=int(1)) :
 
-  sys.stdout.write("\r                                   ")
+  sys.stdout.write("\r                                                                   ")
   sys.stdout.write("\rStorage stop ")
 
   for idx in range(int(count)): 
@@ -353,7 +453,7 @@ def storageFailed (test) :
       # Resolve and call <test> function
       ret = getattr(sys.modules[__name__],test)()         
     except:
-      print "Error on %s"%(test)
+      report("Error on %s"%(test))
       ret = 1
       
     # Restart every storages  
@@ -372,7 +472,7 @@ def snipper_storcli ():
   
   while True:
 
-      sys.stdout.write("\r                                 ")
+      sys.stdout.write("\r                                                                   ")
       sys.stdout.flush()  
       sys.stdout.write("\rStorcli reset")
       sys.stdout.flush()
@@ -505,7 +605,7 @@ def snipper_storage ():
       
       time.sleep(0.25)
           
-      sys.stdout.write("\r                                 ")
+      sys.stdout.write("\r                                                                   ")
       sys.stdout.flush()
       sys.stdout.write("\rStorage reset ")
       cmd=""
@@ -516,7 +616,7 @@ def snipper_storage ():
 	
       sys.stdout.flush()
       os.system(cmd)
-
+      time.sleep(1)
 
 
   
@@ -561,7 +661,7 @@ def snipper (target):
   try:
     ret = getattr(sys.modules[__name__],func)()         
   except:
-    print "Failed snipper %s"%(func)
+    report("Failed snipper %s"%(func))
     ret = 1
   return ret  
 
@@ -654,8 +754,7 @@ def read_parallel ():
 #___________________________________________________
 def crc32_reread():
   ret = os.system("./IT2/test_crc32.exe -action REREAD -mount %s -file crc32"%(exepath))
-  if ret != 0:
-    print "Reread error"
+  if ret != 0: report("Reread error")
   return ret    
 #___________________________________________________
 def crc32():
@@ -665,7 +764,7 @@ def crc32():
   reset_storcli_counter()
   # Check CRC errors 
   if check_storcli_crc():
-    print "CRC errors after counter reset"
+    console("CRC errors after counter reset")
     return 1 
     
   # Create CRC32 errors  
@@ -676,7 +775,7 @@ def crc32():
   
   # Check CRC errors 
   if check_storcli_crc() == False: 
-    print "No CRC errors after test"  
+    console( "No CRC errors after test" )
     return 0
   
   return storageFailed('crc32_reread')
@@ -747,7 +846,7 @@ def bigFName():
     data = f.read(1000) 
     f.close()   
     if data != FNAME:
-      syslog.syslog("%s\nbad content %s\n"%(FNAME,data))
+      report("%s\nbad content %s\n"%(FNAME,data))
       return -1
   return 0
 	  
@@ -819,10 +918,9 @@ def check_one_criteria(attr,f1,f2):
     one=int(one)
     two=int(two)
   except: pass  
-  #print "%s %s %s"%(attr,one,two)
   if one != two:
-    print "%s %s for %s"%(one,attr,f1)
-    print "%s %s for %s"%(two,attr,f2)
+    report("%s %s for %s"%(one,attr,f1))
+    report("%s %s for %s"%(two,attr,f2))
     return False 
   return True
 
@@ -837,11 +935,11 @@ def check_rsync(src,dst):
     d2 = "%s/rsync_dest/%s"%(exepath,dirpath[len(src):]) 
 
     if os.path.exists(d1) == False:
-      print "source directory %s does not exist"%(d1)
+      report( "source directory %s does not exist"%(d1))
       return False
 
     if os.path.exists(d2) == False:
-      print "destination directory %s does not exist"%(d2)
+      report("destination directory %s does not exist"%(d2))
       return False
 
     for criteria in criterias:
@@ -854,11 +952,11 @@ def check_rsync(src,dst):
       f2 = "%s/rsync_dest/%s/%s"%(exepath,dirpath[len(src):], fileName) 
 
       if os.path.exists(f1) == False:
-        print "source file %s does not exist"%(f1)
+        report("source file %s does not exist"%(f1))
 	return False
 	
       if os.path.exists(f2) == False:
-        print "destination file %s does not exist"%(f2)
+        report("destination file %s does not exist"%(f2))
 	return False
  
       for criteria in criterias:
@@ -866,7 +964,7 @@ def check_rsync(src,dst):
 	  return False
 
       if filecmp.cmp(f1,f2) == False:
-	print "%s and %s differ"
+	report("%s and %s differ"%(f1,f2))
 	return False
   return True
 #___________________________________________________
@@ -884,7 +982,7 @@ def internal_rsync(src,count,delete=False):
       bytes=line.split(':')[1].split()[0]  
 
   if int(bytes) != int(count):
-    print "%s bytes transfered while expecting %d!!!"%(bytes,count)
+    report("%s bytes transfered while expecting %d!!!"%(bytes,count))
     return False
   return check_rsync(src,"%s/rsync_dest"%(exepath))
 #___________________________________________________
@@ -991,10 +1089,13 @@ def is_elf(name):
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   for line in cmd.stdout:
     if "ELF" in line: return True
-  print "%/git/build/%s not generated"%(exepath,name)
+  report("%s not generated as ELF"%(string))
   return False
-     
-def compil():
+
+#___________________________________________________
+# Get rozofs from github, compile it and test rozodiag
+#___________________________________________________     
+def compil():  
   os.system("cd %s; rm -rf git; mkdir git; git clone https://github.com/rozofs/rozofs.git git 1> /dev/null; cd git; mkdir build; cd build; cmake -G \"Unix Makefiles\" ../ 1> /dev/null; make -j16 1> /dev/null"%(exepath))
   if is_elf("src/rozodiag/rozodiag") == False: return 1
   if is_elf("src/exportd/exportd") == False: return 1
@@ -1002,7 +1103,16 @@ def compil():
   if is_elf("src/storcli/storcli") == False: return 1
   if is_elf("src/storaged/storaged") == False: return 1
   if is_elf("src/storaged/storio") == False: return 1
-  return 0     
+  
+  # Check wether automount is configured
+  string="%s/git/build/src/rozodiag/rozodiag -T mount:%s -c up "%(exepath,instance)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  for line in cmd.stdout:
+    # No automount 
+    if "uptime" in line: return 0
+  report("Bad response to %s"%(string))
+  return 1
  
 #___________________________________________________
 def gruyere_one_reread():
@@ -1010,9 +1120,8 @@ def gruyere_one_reread():
 # their content
 #___________________________________________________ 
   clean_cache()
-  syslog.syslog("re-read %d files"%(int(nbGruyere)))
   res=cmd_returncode("./IT2/test_rebuild.exe -action check -nbfiles %d -mount %s"%(int(nbGruyere),exepath))
-  syslog.syslog("re-read result %s"%(res))
+  if res != 0: report("re-read result %s"%(res))
   return res
   
 #___________________________________________________
@@ -1141,7 +1250,7 @@ def relocate_1dev() :
     
     # Create a spare device in automount mode
     if automount == True:
-      syslog.syslog("automount %s and selHealing %s : Wait rebuild on spare"%(automount,selfHealing))	          
+      log("automount %s and selHealing %s : Wait rebuild on spare"%(automount,selfHealing))	          
       os.system("./setup.py spare")
       waitRebuild = True
       	      
@@ -1149,7 +1258,7 @@ def relocate_1dev() :
 
       # No automount and spare only          
       if selfHealing == "spareOnly":
-        syslog.syslog("automount %s and selHealing %s : call relocate"%(automount,selfHealing))	          
+        log("automount %s and selHealing %s : call relocate"%(automount,selfHealing))	          
         ret = cmd_returncode("./setup.py sid %s %s rebuild -fg -d 0 -R -o reloc_cid%s_sid%s_dev0 "%(cid,sid,cid,sid))
         if ret != 0: return ret
         waitRebuild = False
@@ -1157,7 +1266,7 @@ def relocate_1dev() :
         
       # No automount but relocate enabled	      
       if selfHealing == "relocate":
-        syslog.syslog("automount %s and selHealing %s : Wait relocate"%(automount,selfHealing))	          
+        log("automount %s and selHealing %s : Wait relocate"%(automount,selfHealing))	          
         waitRebuild = True
 	
     # Wait for selhealing	
@@ -1173,11 +1282,11 @@ def relocate_1dev() :
       while count != int(0):
 
 	if "OOS" == status:
-	  syslog.syslog("count %d device is %s"%(count,status))
+	  log("count %d device is %s"%(count,status))
 	  break    
 	      
 	if "IS" == status:
-	  syslog.syslog("count %d device is %s"%(count,status))
+	  log("count %d device is %s"%(count,status))
 	  break        
 
         count=count-1
@@ -1209,7 +1318,7 @@ def relocate_1dev() :
 	    pass    
 	    
       if count == int(0):
-        print "Relocate failed host %s cluster %s sid %s device 0 status %s"%(hid,cid,sid,status)
+        report("Relocate failed host %s cluster %s sid %s device 0 status %s"%(hid,cid,sid,status))
 	return 1
 	
     if rebuildCheck == True:		      
@@ -1407,7 +1516,7 @@ def rebuild_fid() :
       ret = cmd_returncode(string)
 
       if ret != 0:
-        print "%s failed"%(string)
+        report("%s failed"%(string))
 	return 1 	       
 
   if rebuildCheck == True:      
@@ -1471,7 +1580,7 @@ def do_run_list(list):
 
     tst_num=tst_num+1
     
-    syslog.syslog("%10s ........ %s"%("START TEST",tst))
+    log("%10s ........ %s"%("START TEST",tst))
     
     sys.stdout.write( "\r___%4d/%d : %-40s \n"%(tst_num,total_tst,tst))
 
@@ -1514,15 +1623,15 @@ def do_run_list(list):
     dis.set_column(4,'%s'%(my_duration(delay)))
     
     if ret == 0:
-      syslog.syslog("%10s %8s %s"%("SUCCESS",my_duration(delay),tst))    
+      log("%10s %8s %s"%("SUCCESS",my_duration(delay),tst))    
       dis.set_column(3,'OK')
       success=success+1
     elif ret == 2:
-      syslog.syslog("%10s %8s %s"%("NOT FOUND",my_duration(delay),tst))        
+      log("%10s %8s %s"%("NOT FOUND",my_duration(delay),tst))        
       dis.set_column(3,'NOT FOUND')
       failed=failed+1    
     else:
-      syslog.syslog("%10s %8s %s"%("FAILURE",my_duration(delay),tst))        
+      log("%10s %8s %s"%("FAILURE",my_duration(delay),tst))        
       dis.set_column(3,'FAILED')
       failed=failed+1
       
@@ -1637,7 +1746,7 @@ def resolve_sid(cid,sid):
           
   try:int(site0)
   except:
-    print "No such cid/sid %s/%s"%(cid,sid)
+    report( "No such cid/sid %s/%s"%(cid,sid))
     return -1,"" 
   return site0,path0
        
@@ -1681,16 +1790,16 @@ def resolve_mnt(inst):
           
   try:int(vid)
   except:
-    print "No such RozoFS mount instance %s"%(instance)
+    report( "No such RozoFS mount instance %s"%(instance))
     exit(1)    
     
   if pid == None:
-    print "RozoFS instance %s is not running"%(instance)
+    report( "RozoFS instance %s is not running"%(instance))
     exit(1)      
 #___________________________________________  
 def cmd_returncode (string):
   global verbose
-  if verbose: print string
+  if verbose: console(string)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   cmd.wait()
@@ -1698,38 +1807,38 @@ def cmd_returncode (string):
 #___________________________________________  
 def cmd_system (string):
   global verbose
-  if verbose: print string
+  if verbose: console(string)
   os.system(string)
         
 #___________________________________________________
 def usage():
 #___________________________________________________
 
-  print "\n./IT2/IT.py -l"
-  print "  Display the whole list of tests."
-  print "\n./IT2/IT.py [options] [extra] <test name/group> [<test name/group>...]"      
-  print "  Runs a test list."
-  print "    options:"
-  print "      [--mount <mount1,mount2,..>]  A comma separated list of mount point instances. (default 1)"   
-  print "      [--speed]          The run 4 times faster tests."
-  print "      [--fast]           The run 2 times faster tests."
-  print "      [--long]           The run 2 times longer tests."
-  print "      [--repeat <nb>]    The number of times the test list must be repeated."   
-  print "      [--cont]           To continue tests on failure." 
-  print "      [--fusetrace]      To enable fuse trace on test. When set, --stop is automaticaly set."
-  print "    extra:"
-  print "      [--process <nb>]   The number of processes that will run the test in paralell. (default %d)"%(process)
-  print "      [--count <nb>]     The number of loop that each process will do. (default %s)"%(loop) 
-  print "      [--fileSize <nb>]  The size in MB of the file for the test. (default %d)"%(fileSize)   
-  print "      [--rebuildCheck]   To check strictly after each rebuild that the files are secured."
-  print "    Test group and names can be displayed thanks to ./IT2/IT.py -l"
-  print "       - all              designate all the tests."
-  print "       - rw               designate the read/write test list."
-  print "       - storageFailed    designate the read/write test list run when a storage is failed."
-  print "       - storageReset     designate the read/write test list run while a storage is reset."
-  print "       - storcliReset     designate the read/write test list run while the storcli is reset."
-  print "       - basic            designate the non read/write test list."
-  print "       - rebuild          designate the rebuild test list."
+  console("\n./IT2/IT.py -l")
+  console("  Display the whole list of tests.")
+  console("\n./IT2/IT.py [options] [extra] <test name/group> [<test name/group>...]" )     
+  console("  Runs a test list.")
+  console("    options:")
+  console("      [--mount <mount1,mount2,..>]  A comma separated list of mount point instances. (default 1)"  ) 
+  console("      [--speed]          The run 4 times faster tests.")
+  console("      [--fast]           The run 2 times faster tests.")
+  console("      [--long]           The run 2 times longer tests.")
+  console("      [--repeat <nb>]    The number of times the test list must be repeated." )  
+  console("      [--cont]           To continue tests on failure." )
+  console("      [--fusetrace]      To enable fuse trace on test. When set, --stop is automaticaly set.")
+  console("    extra:")
+  console("      [--process <nb>]   The number of processes that will run the test in paralell. (default %d)"%(process))
+  console("      [--count <nb>]     The number of loop that each process will do. (default %s)"%(loop) )
+  console("      [--fileSize <nb>]  The size in MB of the file for the test. (default %d)"%(fileSize)  ) 
+  console("      [--rebuildCheck]   To check strictly after each rebuild that the files are secured.")
+  console("    Test group and names can be displayed thanks to ./IT2/IT.py -l")
+  console("       - all              designate all the tests.")
+  console("       - rw               designate the read/write test list.")
+  console("       - storageFailed    designate the read/write test list run when a storage is failed.")
+  console("       - storageReset     designate the read/write test list run while a storage is reset.")
+  console("       - storcliReset     designate the read/write test list run while the storcli is reset.")
+  console("       - basic            designate the non read/write test list.")
+  console("       - rebuild          designate the rebuild test list.")
   exit(0)
 
 
