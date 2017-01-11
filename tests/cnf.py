@@ -124,7 +124,7 @@ rozofs.set_self_healing(1)
 #rozofs.set_threads(16)
 
 # Use fixed size file mounted through losetup for devices
-#rozofs.set_ext4(100)
+rozofs.set_ext4(256)
 #rozofs.set_xfs(1000,None)
 #rozofs.set_xfs(1000,"4096")
 #rozofs.set_xfs(1000,"64K")
@@ -141,7 +141,7 @@ rozofs.set_self_healing(1)
 # Modify mojette threads threshold
 # rozofs.set_mojette_threads_threshold(32*1024)
 
-# Dual STORCLI
+# NB STORCLI
 rozofs.set_nb_storcli(4)
 
 # Disable POSIX lock
@@ -155,12 +155,12 @@ rozofs.set_nb_storcli(4)
 #rozofs.set_client_fast_reconnect()
 
 #-------------- NB devices per sid
-devices    = 3
-mapper     = 3
+devices    = 2
+mapper     = 2
 redundancy = 2
 
 # Nb cluster per volume
-nbclusters = 2
+nbclusters = 1
 
 # default is to have one mount point per site and export
 clients_nb = 1
@@ -173,7 +173,7 @@ vol = setVolumeHosts(8)
 # Create an export on this volume with layout 1
 addExport(vol,1)
 # Add an other export on this volume with layout 1
-addExport(vol,1)
+#addExport(vol,1)
 
 
 # An other volume on the same hosts
