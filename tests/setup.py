@@ -114,7 +114,7 @@ class host_class:
   def start(self):
     if self.admin == False: return
     self.add_if() 
-    os.system("rozolauncher start /var/run/launcher_storaged_%s.pid storaged -c %s -H %s &"%(self.number,self.get_config_name(),self.addr))
+    os.system("rozolauncher deamon /var/run/launcher_storaged_%s.pid storaged -c %s -H %s &"%(self.number,self.get_config_name(),self.addr))
 
   def stop(self):
     os.system("rozolauncher stop /var/run/launcher_storaged_%s.pid storaged"%(self.number))
@@ -464,7 +464,10 @@ class mount_point_class:
     self.site= site    
     self.layout = layout
     self.nfs_path="/mnt/nfs-%s"%(self.instance) 
+    self.spare_tmr_ms=6000
     mount_points.append(self)
+
+  def set_spare_tmr_ms(self,tmr): self.spare_tmr_ms=tmr
 
   def info(self):
     print "instance = %s"%(self.instance)
@@ -537,15 +540,10 @@ class mount_point_class:
                
   def start(self):
     global rozofs
-    options="-o rozofsexporttimeout=60"
-    options += " -o rozofsstoragetimeout=25"
-    options += " -o rozofsstorclitimeout=35" 
+    options=""
     options += " -o rozofsnbstorcli=%s"%(rozofs.nb_storcli)
-    options += " -o rozofsbufsize=256" 
-    options += " -o rozofsrotate=3"
-    options += " -o rozofsattrtimeout=1,rozofsentrytimeout=1"
+    options += " -o rozofssparestoragems=%s"%(self.spare_tmr_ms)
     options += " -o auto_unmount"
-#    options += "-o noReadFaultTolerant"
   
     options += " -o site=%s"%(self.site)
     if self.instance != 0: options += " -o instance=%s"%(self.instance)
@@ -1240,6 +1238,7 @@ class rozofs_class:
     if self.deletion_delay != None :
       display_config_int("deletion_delay",self.deletion_delay)
     if self.client_fast_reconnect == True: display_config_bool("client_fast_reconnect",True)
+    display_config_int("storio_buf_cnt",64)
     
   def create_common_config(self):
     try: os.remove('/usr/local/etc/rozofs/rozofs.conf');
@@ -1334,8 +1333,8 @@ class rozofs_class:
     for m in mount_points: m.stop()
     for h in hosts: h.stop()
     exportd.stop() 
-    time.sleep(1)
-    os.system("killall rozolauncher 2>/dev/null")
+#    time.sleep(1)
+#    os.system("killall rozolauncher 2>/dev/null")
 #    self.delete_config()
 
   def stop(self):
