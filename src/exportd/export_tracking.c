@@ -6829,6 +6829,11 @@ ssize_t export_getxattr_raw(export_t *e, fid_t fid, const char *name, void *valu
         goto out;
     }
     
+    /*
+    ** save the current tracking context needed for allocation
+    */
+    xattr_set_tracking_context_direct(e->trk_tb_p);
+
     ret = ext4_xattr_ibody_get_raw(lv2,
                                    ret_p->status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_val,
 				   &ret_p->status_gw.ep_getxattr_raw_ret_t_u.raw.inode_xattr.inode_xattr_len);
