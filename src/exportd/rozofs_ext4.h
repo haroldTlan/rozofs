@@ -155,7 +155,10 @@ static inline void xattr_set_tracking_context(struct dentry *entry)
 {
     xattr_trk_p = entry->trk_tb_p;
 }
-
+static inline void xattr_set_tracking_context_direct(export_tracking_table_t *trk_tb_p)
+{
+    xattr_trk_p = trk_tb_p;
+}
 /*
 **__________________________________________________________________
 */
