@@ -1113,6 +1113,89 @@ def compil():
     if "uptime" in line: return 0
   report("Bad response to %s"%(string))
   return 1
+  
+#___________________________________________________
+# Kill a process
+#___________________________________________________   
+def crash_process(process,main):
+
+  string="./build/src/rozodiag/rozodiag %s -c ps"%(process)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  pid="?"
+  for line in cmd.stdout:
+    if main in line:
+      pid=line.split()[1]
+      break
+  try:
+    int(pid)
+  except:
+    report("Can not find PID of \"%s\""%(process))
+    return False  
+
+  os.system("kill -6 %s"%(pid))
+  return True
+#___________________________________________________
+# Check a core file exist for a process
+#___________________________________________________   
+def check_core_process(process,cores):
+
+  string="./build/src/rozodiag/rozodiag %s -c core"%(process)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  nb=0
+  for line in cmd.stdout:
+    if "/var/run/rozofs/core" in line: nb=nb+1
+  if nb != cores:
+    report("%s core file generated for %s"%(nb,process))
+    return False
+    
+  return True 
+   
+#___________________________________________________
+# Test that core file are generated on signals
+#___________________________________________________     
+def cores():  
+  os.system("./setup.py core remove all")  
+
+  # Storaged
+  process="-i localhost1 -T storaged"
+  if crash_process(process,"Main") != True: return 1
+  time.sleep(3)
+  if check_core_process(process,1) != True: return 1
+  os.system("./setup.py core remove all")  
+
+  # Storio
+  process="-i localhost2 -T storio:1"
+  if crash_process(process,"Main") != True: return 1
+  time.sleep(3)
+  if check_core_process(process,1) != True: return 1
+  os.system("./setup.py core remove all")  
+
+  # Stspare
+  process="-i localhost2 -T stspare"
+  if crash_process(process,"Main") != True: return 1
+  time.sleep(3)
+  if check_core_process(process,1) != True: return 1
+  os.system("./setup.py core remove all")  
+  
+  # export slave
+  process="-T export:1"
+  if crash_process(process,"Blocking") != True: return 1
+  time.sleep(3)
+  if check_core_process(process,1) != True: return 1
+  os.system("./setup.py core remove all")  
+
+  # export master
+  process="-T exportd"
+  if crash_process(process,"Blocking") != True: return 1
+  time.sleep(4)
+  os.system("./setup.py exportd start")
+  time.sleep(4)
+  if check_core_process(process,1) != True: return 1
+  os.system("./setup.py core remove all")  
+
+  return 0
  
 #___________________________________________________
 def gruyere_one_reread():
@@ -1867,8 +1950,8 @@ parser.add_option("-n","--nfs", action="store_true",dest="nfs", default=False, h
 # Read/write test list
 TST_RW=['read_parallel','write_parallel','rw2','wr_rd_total','wr_rd_partial','wr_rd_random','wr_rd_total_close','wr_rd_partial_close','wr_rd_random_close','wr_close_rd_total','wr_close_rd_partial','wr_close_rd_random','wr_close_rd_total_close','wr_close_rd_partial_close','wr_close_rd_random_close']
 # Basic test list
-TST_BASIC=['readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','compil']
-TST_BASIC_NFS=['readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','compil']
+TST_BASIC=['cores','readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','compil']
+TST_BASIC_NFS=['cores','readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','compil']
 # Rebuild test list
 TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','gruyere_reread']
 # File locking

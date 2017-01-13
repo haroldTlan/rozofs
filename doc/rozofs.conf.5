@@ -53,11 +53,13 @@ Maximum number of files that the remove bins thread of a slave export can remove
 Minimum delay in seconds between the FID unlink in the export and the actual projections removal on the storage nodes.
 .SS statfs_period 
 caching delay in second of the data reported by a statfs(). The default value is 10 seconds. When the delay is 0, there is no caching.
+
 .SS core_file_directory
 The directory under which the RozoFS modules store their core files in case a crash occurs. 
 
 .SS nb_core_file
-Maximum number of core file to keep on this node per RozoFS module type. The older core files are kept while the newest ones are removed. 
+Maximum number of RozoFS core file to keep on this node whatever the RozoFS executable. The older core files are kept while the newest ones are removed. 
+
 
 .SS nb_disk_thread
 Specifies the number of threads within the STORIO process that can operate the disk read/write.

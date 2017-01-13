@@ -182,11 +182,6 @@ static void on_stop() {
         svc_destroy(storaged_monitoring_svc);
         storaged_monitoring_svc = NULL;
     }
-
-    /*
-    ** now kill every sub process
-    */
-    rozofs_session_leader_killer(300000);
 }
 /*
 **____________________________________________________

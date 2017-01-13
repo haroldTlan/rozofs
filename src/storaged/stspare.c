@@ -1510,7 +1510,7 @@ int main(int argc, char *argv[]) {
   /*
   ** Start without deamonizing
   */
-  no_daemon_start("st_spare_restorer", common_config.nb_core_file, 
+  no_daemon_start("stspare", common_config.nb_core_file, 
                    pid_name, on_start, on_stop, NULL);
 
   closelog();

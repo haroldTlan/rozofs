@@ -26,7 +26,7 @@ BS16K=2
 BS32K=3
 REBUILD_LOOP=2
     
-COREDIR="/var/run/rozofs_core"
+COREDIR="/var/run/rozofs/core"
 LOCAL_SIMU="${WORKING_DIR}/simulation"
 # $1 is the site number
 create_site() {

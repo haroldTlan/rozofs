@@ -1121,8 +1121,6 @@ pid_t read_pid() {
 static void on_crash(int sig) {
     // Remove pid file
     forget_pid();
-    // Kill all sub-processes
-    rozofs_session_leader_killer(1000000);    
     closelog();
 }    
 /*
@@ -3567,7 +3565,7 @@ static void on_stop() {
     closelog();
     // Kill all sub-processes
     if (sigusr_received) {
-      rozofs_session_leader_killer(1000000);
+      kill(-getpid(),SIGTERM);  
     }  
 }
   

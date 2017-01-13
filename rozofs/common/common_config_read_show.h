@@ -53,7 +53,7 @@ char * show_module_global(char * pChar) {
   pChar += rozofs_string_append(pChar,"// Older core files are kept while newest are removed.	\n");
   COMMON_CONFIG_SHOW_INT_OPT(nb_core_file,1,"0:8");
   pChar += rozofs_string_append(pChar,"// Directory where the core files are stored.\n");
-  COMMON_CONFIG_SHOW_STRING(core_file_directory,"/var/run/rozofs_core");
+  COMMON_CONFIG_SHOW_STRING(core_file_directory,"");
   pChar += rozofs_string_append(pChar,"// Enables to take into account the NUMA architecture of the board in \n");
   pChar += rozofs_string_append(pChar,"// order to collocate some RozoFS modules on the same node for memory\n");
   pChar += rozofs_string_append(pChar,"// access efficiency.\n");
@@ -312,7 +312,7 @@ static inline void common_config_generated_read(char * fname) {
   // Older core files are kept while newest are removed.	 
   COMMON_CONFIG_READ_INT_MINMAX(nb_core_file,1,0,8);
   // Directory where the core files are stored. 
-  COMMON_CONFIG_READ_STRING(core_file_directory,"/var/run/rozofs_core");
+  COMMON_CONFIG_READ_STRING(core_file_directory,"");
   // Enables to take into account the NUMA architecture of the board in  
   // order to collocate some RozoFS modules on the same node for memory 
   // access efficiency. 

@@ -21,7 +21,7 @@
 // Older core files are kept while newest are removed.	
 INT 	global 	nb_core_file		        1 0:8
 // Directory where the core files are stored.
-STRING 	global 	core_file_directory		"/var/run/rozofs_core"
+STRING 	global 	core_file_directory		""
 // Enables to take into account the NUMA architecture of the board in 
 // order to collocate some RozoFS modules on the same node for memory
 // access efficiency.

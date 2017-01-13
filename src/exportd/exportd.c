@@ -1566,6 +1566,7 @@ static void on_stop() {
     DEBUG_FUNCTION;
     if ( expgwc_non_blocking_conf.slave == 0)
     {
+    
       svc_exit();
 
       svc_unregister(EXPORT_PROGRAM, EXPORT_VERSION);
@@ -1588,12 +1589,7 @@ static void on_stop() {
     if ( expgwc_non_blocking_conf.slave == 0)
     {
       
-      remove_pid_file(0);
-      
-      /*
-      ** now kill every sub process
-      */
-      rozofs_session_leader_killer(100000);
+      remove_pid_file(0);      
     }    
 }
 /*

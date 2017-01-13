@@ -55,7 +55,6 @@ class host_class:
     for h in hosts:
       if h.number == val: return h
     return None
-   
   def get_sid(self,val):
     for s in self.sid:
       if s.sid == val: return s
@@ -1021,7 +1020,7 @@ class rozofs_class:
 
   def __init__(self):
     self.threads = 0
-    self.nb_core_file = 2
+    self.nb_core_file = 8
     self.crc32 = True
     self.device_selfhealing_mode  = "relocate"
     self.device_selfhealing_delay = 1
@@ -1093,7 +1092,7 @@ class rozofs_class:
     if not os.path.exists(path): os.makedirs(path)
     return path
     
-  def core_dir(self)        : return "/var/run/rozofs_core"  
+  def core_dir(self)        : return "/var/run/rozofs/core"  
   def layout_2_3_4(self)    : return 0
   def layout_4_6_8(self)    : return 1
   def layout_8_12_16(self)  : return 2
@@ -1318,6 +1317,7 @@ class rozofs_class:
     exportd.start()
     for m in mount_points: m.start() 
     geomgr.start()
+    self.core(None)
 
   def configure(self):
     self.create_path()
@@ -1333,6 +1333,8 @@ class rozofs_class:
     for m in mount_points: m.stop()
     for h in hosts: h.stop()
     exportd.stop() 
+    self.core(None)
+    
 #    time.sleep(1)
 #    os.system("killall rozolauncher 2>/dev/null")
 #    self.delete_config()
@@ -1407,6 +1409,7 @@ class rozofs_class:
 
   def exe_from_core_dir(self,dir):
     if dir == "storio": return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)
+    if dir == "stspare": return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)
     if dir == "export_slave": return "%s/build/src/%s/%s"%(os.getcwd(),"exportd","exportd")
     if dir == "geomgr" : return "%s/build/src/%s/%s"%(os.getcwd(),"geocli",dir)    
     return "%s/build/src/%s/%s"%(os.getcwd(),dir,dir)
@@ -1428,16 +1431,20 @@ class rozofs_class:
     os.system("./monitor.py 5 -c monitor.cfg")
 
   def core(self,argv):
-    if len(argv) == 2:
+    if argv == None or len(argv) == 2:
+      nocore=True
       for d in os.listdir(self.core_dir()):
         if os.path.isdir(os.path.join(self.core_dir(), d)):
           exe=self.exe_from_core_dir(d)
 	  for f in os.listdir(os.path.join(self.core_dir(), d)):
 	    name=os.path.join(self.core_dir(), d, f)
+            if nocore == True:
+              nocore = False
+              print "Some core files exist:"
             if os.path.getmtime(name) < os.path.getmtime(exe):
-	      print "(OLD) %s/%s"%(d,f)
+	      print "  (OLD) %s/%s"%(d,f)
 	    else:
-	      print "(NEW) %s/%s"%(d,f)  
+	      print "  (NEW) %s/%s"%(d,f)  
       return  
     if argv[2] == "remove":
       if len(argv) == 3: return

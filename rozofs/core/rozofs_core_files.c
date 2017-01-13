@@ -31,8 +31,8 @@
 #include <dirent.h>
 #include <signal.h>
 #include <errno.h>
-#include <syslog.h>
 #include <sys/resource.h>
+#include <rozofs/rozofs.h>
 #include <rozofs/core/rozofs_core_files.h>
 #include <rozofs/core/uma_dbg_api.h>
 #include <rozofs/common/common_config.h>
@@ -94,6 +94,16 @@ void rozofs_attach_hgup_cbk(rozofs_attach_crash_cbk_t entryPoint) {
   rozofs_hgup_cbk_nb++;
 }
 /*__________________________________________________________________________
+  Just ignore the given signal 
+  ==========================================================================
+  PARAMETERS: 
+  - sig : the signal number to be ignored
+  RETURN: none
+  ==========================================================================*/
+void rozofs_signal_ignore(int sig){
+  signal(sig, rozofs_signal_ignore);
+}
+/*__________________________________________________________________________
   This function translate a LINUX signal into a readable string
   ==========================================================================
   PARAMETERS: 
@@ -138,30 +148,7 @@ char * rozofs_signal(int sig) {
     rozofs_i32_append(sig_num,sig);
     return sig_num;      
   }
-}
-/*__________________________________________________________________________
-  Create a directory when it does not exist
-  ==========================================================================
-  PARAMETERS: none
-  RETURN: none
-  ==========================================================================*/
-int rozofs_mkdir(char * path) {
-
-  /* No core files */
-  if (path == NULL) return -1;
-
-  /* Create directory when it does not exist */
-  if (access(path, F_OK) == 0) return 0;
-  
-  if (errno != ENOENT) {
-    severe("rozofs_mkdir(%s) %s", path, strerror(errno))
-    return -1;
-  }
-  
-  mkdir(path, S_IRUSR | S_IWUSR | S_IXUSR);
-  if (access(path, F_OK) == 0) return 0;
-  return -1;
-}     
+}  
 /*__________________________________________________________________________
   Only keep the last core dumps
   ==========================================================================
@@ -177,77 +164,95 @@ typedef struct rozofs_my_file_s {
 static ROZOFS_MY_FILE_S directories[ROZOFS_MAX_CORE];
 static char buff [1024];
 
-void rozofs_clean_core(void) {
+void rozofs_clean_core(char * coredir) {
   struct dirent * dirItem;
+  struct dirent * subdirItem;
   struct stat     traceStat;
   DIR           * dir;
+  DIR           * subdir;
   uint32_t        nb,idx;
   uint32_t        younger;
 
-  if (rozofs_mkdir(common_config.core_file_directory) < 0) return;
-
-  /* No core files */
-  if (rozofs_core_file_path[0] == 0) return;
-
-  if (rozofs_mkdir(rozofs_core_file_path) < 0) return;
+  if (rozofs_mkpath(coredir,0744) < 0) return;
    
-  /* Open core file directory */ 
-  dir=opendir(rozofs_core_file_path);
+  /* 
+  ** Open core file directory 
+  */ 
+  dir=opendir(coredir);
   if (dir==NULL) return;
 
   nb = 0;
 
   while ((dirItem=readdir(dir))!= NULL) {
     
-    /* Skip . and .. */ 
+    /* 
+    ** Skip . and .. 
+    */ 
     if (dirItem->d_name[0] == '.') continue;
 
-    sprintf(buff,"%s/%s", rozofs_core_file_path, dirItem->d_name); 
+    sprintf(buff,"%s/%s/", coredir, dirItem->d_name); 
     
-    /*
-    ** No core file
-    */
-    if (rozofs_max_core_files == 0) {
-      unlink(buff);	 
-      continue;
-    }     
-
-    /* Get file date */ 
-    if (stat(buff,&traceStat) < 0) {   
-      severe("rozofs_clean_core : stat(%s) %s",buff,strerror(errno));
-      unlink(buff);	           
-    }
-      
-    /* Maximum number of file not yet reached. Just register this one */
-    if (nb < rozofs_max_core_files) {
-      directories[nb].ctime = traceStat.st_ctime;
-      snprintf(directories[nb].name, 256, "%s", buff);
-      nb ++;
-      continue;
-    }
-
-    /* Maximum number of file is reached. Remove the older */     
-
-    /* Find younger in already registered list */ 
-    younger = 0;
-    for (idx=1; idx < rozofs_max_core_files; idx ++) {
-      if (directories[idx].ctime > directories[younger].ctime) younger = idx;
-    }
-
     /* 
-    ** If younger in list is younger than the last one read, 
-    ** the last one read replaces the younger in the array and the older is removed
-    */
-    if (directories[younger].ctime > (uint32_t)traceStat.st_ctime) {
-      unlink(directories[younger].name);	
-      directories[younger].ctime = traceStat.st_ctime;
-      strcpy(directories[younger].name, buff);
-      continue;
+    ** Open core sub-directory 
+    */ 
+    subdir=opendir(buff);
+    if (subdir==NULL) continue;
+
+    while ((subdirItem=readdir(subdir))!= NULL) {
+
+      /* 
+      ** Skip . and .. 
+      */ 
+      if (subdirItem->d_name[0] == '.') continue;
+
+      sprintf(buff,"%s/%s/%s", coredir, dirItem->d_name, subdirItem->d_name); 
+    
+      /*
+      ** No core file
+      */
+      if (rozofs_max_core_files == 0) {
+        unlink(buff);	 
+        continue;
+      }     
+
+      /* Get file date */ 
+      if (stat(buff,&traceStat) < 0) {   
+        severe("rozofs_clean_core : stat(%s) %s",buff,strerror(errno));
+        unlink(buff);	           
+      }
+      
+      /* Maximum number of file not yet reached. Just register this one */
+      if (nb < rozofs_max_core_files) {
+        directories[nb].ctime = traceStat.st_ctime;
+        snprintf(directories[nb].name, 256, "%s", buff);
+        nb ++;
+        continue;
+      }
+
+      /* Maximum number of file is reached. Remove the older */     
+
+      /* Find younger in already registered list */ 
+      younger = 0;
+      for (idx=1; idx < rozofs_max_core_files; idx ++) {
+        if (directories[idx].ctime > directories[younger].ctime) younger = idx;
+      }
+
+      /* 
+      ** If younger in list is younger than the last one read, 
+      ** the last one read replaces the younger in the array and the older is removed
+      */
+      if (directories[younger].ctime > (uint32_t)traceStat.st_ctime) {
+        unlink(directories[younger].name);	
+        directories[younger].ctime = traceStat.st_ctime;
+        strcpy(directories[younger].name, buff);
+        continue;
+      }
+      /*
+      ** Else the last read is removed 
+      */
+      unlink(buff);
     }
-    /*
-    ** Else the last read is removed 
-    */
-    unlink(buff);
+    closedir(subdir);  
   }
   closedir(dir);
 }
@@ -260,33 +265,59 @@ void rozofs_clean_core(void) {
   RETURN: none
   ==========================================================================*/
 void rozofs_catch_error(int sig){
-  int idx;
-  int ret = -1;
+  int   idx;
+  int   ret = -1;
+  pid_t pid = getpid();
 
-  if  (rozofs_fatal_error_processing != 0) raise (sig);
-  rozofs_fatal_error_processing++;
+  /*
+  ** Just ignore SIGTERM from now
+  */
+  rozofs_signal_ignore(SIGTERM);
 
-  signal (SIGTERM, SIG_IGN);
-
-  /* Write the information in the trace file */
+  /* Log SIGTERM */
   if (sig == SIGTERM) {
     syslog(LOG_INFO, "%s", "SIGTERM"); 
   }
-  
-  /* Call the crash call back */
-  for (idx = 0; idx <rozofs_crash_cbk_nb; idx++) {
-    rozofs_crash_cbk[idx](sig);
+
+  /*
+  ** Session leaders must kill the whole session
+  */
+  if (pid == getsid(0)) {  
+    /*
+    ** Request termination to every sub process
+    */
+    kill(-pid,SIGTERM);  
   }
-  
-  /* Set current directory on the core directory */
-  if (rozofs_core_file_path[0]) {
-    ret = chdir(rozofs_core_file_path);
-    if (ret == -1){
-//        severe("chdir to %s failed: %s", rozofs_core_file_path,
-//                strerror(errno));
+    
+  /*
+  ** Not alreay inside handler 
+  ** => let's call the registered crash callbacks
+  */
+  if  (rozofs_fatal_error_processing == 0) { 
+   
+    /*
+    ** Save received signal
+    */
+    rozofs_fatal_error_processing = sig;
+
+    /* 
+    ** Call the registered crash call backs 
+    */
+    for (idx = 0; idx <rozofs_crash_cbk_nb; idx++) {
+      rozofs_crash_cbk[idx](sig);
     }
   }
-  /* Adios */
+    
+  /* 
+  ** Set current directory to the core directory 
+  */
+  if (rozofs_core_file_path[0]) {
+    if (chdir(rozofs_core_file_path) == -1){}
+  }
+
+  /* 
+  ** Adios crual world !
+  */
   signal (sig,SIG_DFL);
   raise (sig);
 }
@@ -311,28 +342,6 @@ void rozofs_catch_hangup(int sig){
   signal (sig, rozofs_catch_hangup);
 }
 /*__________________________________________________________________________
-  handle the SIGPIPE signal to receive a broken pipe error 
-  code instead of exiting the program 
-  ==========================================================================
-  PARAMETERS: 
-  - sig : the signal number
-  RETURN: none
-  ==========================================================================*/
-void rozofs_catch_sigpipe(int s){
-  signal(SIGPIPE,rozofs_catch_sigpipe);
-}
-/*__________________________________________________________________________
-  handle the SIGCHOLD signal to be able to call wait() or waitpid()
-  and get child exit status
-  ==========================================================================
-  PARAMETERS: 
-  - sig : the signal number
-  RETURN: none
-  ==========================================================================*/
-void rozofs_cath_child(int sig){
-  signal(SIGCHLD, rozofs_cath_child);
-}
-/*__________________________________________________________________________
   Declare a list of signals and the handler to process them
   ==========================================================================
   @param application       the application name. This will be the directory
@@ -341,14 +350,26 @@ void rozofs_cath_child(int sig){
                            directory
   ==========================================================================*/
 void rozofs_signals_declare(char * application, int max_core_files) {
+  char * pChar;
   
   if (max_core_files > ROZOFS_MAX_CORE) rozofs_max_core_files = ROZOFS_MAX_CORE;
   else                                  rozofs_max_core_files = max_core_files;
   
   rozofs_core_file_path[0] = 0;
   if (application == NULL) return;
-  sprintf(rozofs_core_file_path,"%s/%s",common_config.core_file_directory,application);
-  
+ 
+  pChar = rozofs_core_file_path;
+  if (common_config.core_file_directory[0]==0) {
+    pChar += sprintf(pChar,"%s",ROZOFS_RUNDIR_CORE);
+  }
+  else {
+    pChar += sprintf(pChar,"%s",common_config.core_file_directory);
+  }  
+  rozofs_clean_core(rozofs_core_file_path);
+
+  pChar += sprintf(pChar,"/%s",application);
+  rozofs_mkpath(rozofs_core_file_path,0744);  
+
   uma_dbg_declare_core_dir(rozofs_core_file_path);
   
   /*
@@ -389,41 +410,10 @@ void rozofs_signals_declare(char * application, int max_core_files) {
    * redirect SIGPIPE signal to avoid the end of the 
    * process when a TCP connexion is down
    */   
-  signal (SIGPIPE,rozofs_catch_sigpipe);
+  rozofs_signal_ignore(SIGPIPE);
   
   /*
   ** SIG child
   */
-  signal(SIGCHLD, rozofs_cath_child);
-  rozofs_clean_core();
-}
-/*__________________________________________________________________________
-  Kill every process within the session when the calling process is
-  the session leader
-  ==========================================================================
-  @param usec          the maximmum delay to politly wait for the sub-processes 
-                       to obey to the SIGTERM before sending a SIGKILL
-  ==========================================================================*/
-void rozofs_session_leader_killer(int usec) {
-  pid_t pid = getpid();
-
-  /*
-  ** Check this guy is the session leader
-  */
-  if (pid != getsid(0)) return;
-    
-  /*
-  ** Request termination to every sub process
-  */
-  kill(-pid,SIGTERM);
-
-  /*
-  ** Sleep a some micro seconds
-  */
-  usleep(usec);
-
-  /*
-  ** Abort every sub process
-  */
-  kill(-pid,SIGKILL);
+  rozofs_signal_ignore(SIGCHLD);
 }
