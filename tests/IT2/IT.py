@@ -1114,6 +1114,58 @@ def compil():
   report("Bad response to %s"%(string))
   return 1
   
+#___________________________________________________  
+def read_size(filename):
+#___________________________________________________  
+  string="attr -g rozofs %s"%(filename)
+  parsed = shlex.split(string)
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+  # loop on the bins file constituting this file, and ask
+  for line in cmd.stdout:  
+    words=line.split();
+    if len(words) >= 2:
+      if words[0] == "SIZE":
+          #print line
+          try:  
+	    return int(words[2])
+	  except:
+	    return int(-1);  
+	  
+  return int(-1) 
+  
+#___________________________________________________  
+def resize(): 
+#___________________________________________________
+
+  # Create a 1M file
+  os.system("dd if=/dev/zero of=%s/resize bs=1M count=1 > /dev/null 2>&1"%(exepath))  
+  size = read_size("%s/resize"%(exepath))
+  if size != int(1024*1024):
+    print "%s/resize size is %s instead of %d after dd "%(exepath,size,int(1024*1024))
+    return 1
+    
+    
+  for loop in range(0,100):
+
+    sz = loop*10
+    
+    # Patch size to 10bytes    
+    os.system("attr -s rozofs -V \" size = %d\" %s/resize 1> /dev/null"%(sz,exepath))
+    size = read_size("%s/resize"%(exepath))
+    if size != sz:
+      print "%s/resize size is %s instead of %s after attr -s "%(exepath,size,sz)
+      return 1
+
+    # Request for resizing  
+    os.system("%s/IT2/test_resize.exe %s/resize"%(os.getcwd(),exepath))
+    
+    size = read_size("%s/resize"%(exepath))
+    if size != int(1024*1024):
+      print "%s/resize size is %s instead of %d after resize "%(exepath,size,int(1024*1024))
+      return 1
+
+  return 0  
 #___________________________________________________
 # Kill a process
 #___________________________________________________   
@@ -1950,8 +2002,8 @@ parser.add_option("-n","--nfs", action="store_true",dest="nfs", default=False, h
 # Read/write test list
 TST_RW=['read_parallel','write_parallel','rw2','wr_rd_total','wr_rd_partial','wr_rd_random','wr_rd_total_close','wr_rd_partial_close','wr_rd_random_close','wr_close_rd_total','wr_close_rd_partial','wr_close_rd_random','wr_close_rd_total_close','wr_close_rd_partial_close','wr_close_rd_random_close']
 # Basic test list
-TST_BASIC=['cores','readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','compil']
-TST_BASIC_NFS=['cores','readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','compil']
+TST_BASIC=['cores','readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','compil','resize']
+TST_BASIC_NFS=['cores','readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','compil','resize']
 # Rebuild test list
 TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','gruyere_reread']
 # File locking

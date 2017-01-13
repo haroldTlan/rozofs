@@ -665,7 +665,8 @@ void rozofs_resize_cbk(void *this,void *param)
     
   //info("New size %llu old size %llu",(long long unsigned int)new_size,(long long unsigned int)old_size);
   
-  if (old_size < new_size) {
+  if (old_size <= new_size) {
+    //info("New size %d old size %d",old_size,new_size);
     ie->attrs.size = new_size;
     /*
     ** Update exportd
