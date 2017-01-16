@@ -1091,11 +1091,36 @@ def is_elf(name):
     if "ELF" in line: return True
   report("%s not generated as ELF"%(string))
   return False
+#___________________________________________________     
 
+def compil_openmpi(): 
+#___________________________________________________
+  os.system("rm -rf %s/tst_openmpi; cp -f ./IT2/tst_openmpi.tgz %s; cd %s; tar zxf tst_openmpi.tgz; rm -f tst_openmpi.tgz; cd tst_openmpi; ./compil_openmpi.sh;"%(exepath,exepath,exepath))
+  
+  string="cat %s/tst_openmpi/hello.res"%(exepath)
+  parsed = shlex.split(string)  
+  cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+     
+  found = [ False,  False,  False,  False,  False,  False ]
+  
+  for line in cmd.stdout:
+    if line.split()[0] != "hello": continue
+    if line.split()[1] != "6": continue
+    found[int(line.split()[2])] = True     
+  
+  for val in found: 
+   if val == False:
+     print found
+     report("Mising lines in hello.res"%(i))
+     os.system("cat %s/tst_openmpi/hello.res"%(exepath))
+     return 1
+  return 0   
+  
+   
 #___________________________________________________
 # Get rozofs from github, compile it and test rozodiag
 #___________________________________________________     
-def compil():  
+def compil_rozofs():  
   os.system("cd %s; rm -rf git; mkdir git; git clone https://github.com/rozofs/rozofs.git git 1> /dev/null; cd git; mkdir build; cd build; cmake -G \"Unix Makefiles\" ../ 1> /dev/null; make -j16 1> /dev/null"%(exepath))
   if is_elf("src/rozodiag/rozodiag") == False: return 1
   if is_elf("src/exportd/exportd") == False: return 1
@@ -1192,6 +1217,8 @@ def crash_process(process,main):
 #___________________________________________________   
 def check_core_process(process,cores):
 
+  time.sleep(8)
+  
   string="./build/src/rozodiag/rozodiag %s -c core"%(process)
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -1213,35 +1240,30 @@ def cores():
   # Storaged
   process="-i localhost1 -T storaged"
   if crash_process(process,"Main") != True: return 1
-  time.sleep(3)
   if check_core_process(process,1) != True: return 1
   os.system("./setup.py core remove all")  
 
   # Storio
   process="-i localhost2 -T storio:1"
   if crash_process(process,"Main") != True: return 1
-  time.sleep(3)
   if check_core_process(process,1) != True: return 1
   os.system("./setup.py core remove all")  
 
   # Stspare
   process="-i localhost2 -T stspare"
   if crash_process(process,"Main") != True: return 1
-  time.sleep(3)
   if check_core_process(process,1) != True: return 1
   os.system("./setup.py core remove all")  
   
   # export slave
   process="-T export:1"
   if crash_process(process,"Blocking") != True: return 1
-  time.sleep(3)
   if check_core_process(process,1) != True: return 1
   os.system("./setup.py core remove all")  
 
   # export master
   process="-T exportd"
   if crash_process(process,"Blocking") != True: return 1
-  time.sleep(4)
   os.system("./setup.py exportd start")
   time.sleep(4)
   if check_core_process(process,1) != True: return 1
@@ -1866,6 +1888,15 @@ def do_list():
     dis.set_column(2,"%s/%s"%('storcliReset',tst))
     dis.set_column(3,'storcliReset')  
 
+  dis.end_separator()         
+  for tst in TST_COMPIL:
+    num=num+1
+    dis.new_line()  
+    dis.set_column(1,"%s"%num)
+    dis.set_column(2,"%s"%(tst))
+    dis.set_column(3,'compil')  
+
+
   dis.display()    
 #____________________________________
 def resolve_sid(cid,sid):
@@ -2002,12 +2033,13 @@ parser.add_option("-n","--nfs", action="store_true",dest="nfs", default=False, h
 # Read/write test list
 TST_RW=['read_parallel','write_parallel','rw2','wr_rd_total','wr_rd_partial','wr_rd_random','wr_rd_total_close','wr_rd_partial_close','wr_rd_random_close','wr_close_rd_total','wr_close_rd_partial','wr_close_rd_random','wr_close_rd_total_close','wr_close_rd_partial_close','wr_close_rd_random_close']
 # Basic test list
-TST_BASIC=['cores','readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','compil','resize']
-TST_BASIC_NFS=['cores','readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','compil','resize']
+TST_BASIC=['cores','readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','resize']
+TST_BASIC_NFS=['cores','readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','resize']
 # Rebuild test list
 TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','gruyere_reread']
 # File locking
 TST_FLOCK=['lock_posix_passing','lock_posix_blocking','lock_bsd_passing','lock_bsd_blocking','lock_race']
+TST_COMPIL=['compil_rozofs','compil_openmpi']
 
 ifnumber=get_if_nb()
 
@@ -2090,6 +2122,7 @@ for arg in args:
     list.extend(TST_RW)
     append_circumstance_test_list(list,TST_RW,'storageFailed')
     append_circumstance_test_list(list,TST_RW,'storageReset') 
+    list.extend(TST_COMPIL)
     if int(ifnumber) > int(1):
       append_circumstance_test_list(list,TST_RW,'ifUpDown')
        
@@ -2110,6 +2143,8 @@ for arg in args:
     list.extend(TST_REBUILD) 
   elif arg == "flock":
     list.extend(TST_FLOCK)  
+  elif arg == "compil":
+    list.extend(TST_COMPIL)  
   else:
     list.append(arg)              
 # No list of test. Print usage

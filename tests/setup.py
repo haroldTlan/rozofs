@@ -1092,7 +1092,12 @@ class rozofs_class:
     if not os.path.exists(path): os.makedirs(path)
     return path
     
-  def core_dir(self)        : return "/var/run/rozofs/core"  
+  def core_dir(self)        :
+    if not os.path.exists("/var/run/rozofs"): 
+      os.mkdir("/var/run/rozofs") 
+    if not os.path.exists("/var/run/rozofs/core"):  
+      os.mkdir("/var/run/rozofs/core") 
+    return "/var/run/rozofs/core"  
   def layout_2_3_4(self)    : return 0
   def layout_4_6_8(self)    : return 1
   def layout_8_12_16(self)  : return 2
@@ -1237,7 +1242,9 @@ class rozofs_class:
     if self.deletion_delay != None :
       display_config_int("deletion_delay",self.deletion_delay)
     if self.client_fast_reconnect == True: display_config_bool("client_fast_reconnect",True)
-    display_config_int("storio_buf_cnt",64)
+    display_config_int("storio_buf_cnt",32)
+    display_config_int("export_buf_cnt",32)
+    
     
   def create_common_config(self):
     try: os.remove('/usr/local/etc/rozofs/rozofs.conf');
