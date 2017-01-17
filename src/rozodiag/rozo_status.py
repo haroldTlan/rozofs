@@ -662,7 +662,7 @@ class storio(rozofs_module):
       val=line.split(':')[1].split('/')[0]
       if int(val) != int(0):
 	self.WARNING("%s disk errors occured"%(val),"log")
-	return False
+	return True
     return True  
 
   def check_fid(self):
