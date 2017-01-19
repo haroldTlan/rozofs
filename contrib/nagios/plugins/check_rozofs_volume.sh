@@ -218,6 +218,46 @@ then
    display_output $STATE_UNKNOWN "-H option is mandatory"
 fi  
 
+if [ ${host} = "ROZO_EXPORT_HA" ]
+then
+  # In this case we will compute the current master IP for exportd service
+  # thanks cluster tools
+
+  # Check if corosync and pacemaker are installed
+  CLUSTER_TOOLS="crm corosync-cfgtool crm_resource crm_node pgrep sudo"
+  for exe in ${CLUSTER_TOOLS}; do
+    test=`which ${exe}`
+    if [ "$?" -eq 1 ] ; then
+      display_output $STATE_UNKNOWN "${exe} binary is required for getting rozofs-exportd IP"
+    fi
+  done
+
+  # check if corosync is running
+  test=` pgrep corosync > /dev/null 2>&1`
+  if [ "$?" -eq 1 ] ; then
+      display_output $STATE_CRITICAL "corosync is not running"
+  fi
+
+  # check if pacemaker is running
+  test=`sudo crm node status 2>&1`
+  if [ "$?" -eq 1 ] ; then
+      display_output $STATE_CRITICAL "pacemaker is not running"
+  fi
+
+  # Check if resource exportd-rozofs is running
+  EXPORTD_STATUS=`sudo crm resource status exportd-rozofs 2>&1 | grep -q 'is running'`
+   if [ "$?" -eq 1 ] ; then
+       display_output $STATE_CRITICAL "resource exportd-rozofs is not running"
+  fi
+
+  # get master node name
+  NODE_NAME=`sudo crm_resource --resource exportd-rozofs --locate -Q`
+  NODE_ID=`sudo crm_node -l | grep ${NODE_NAME} | awk '{print $1;}'`
+  IP_LIST=`sudo corosync-cfgtool -a ${NODE_ID}`
+  HOST_PARAM=`echo ${IP_LIST/' '/\/}`
+  host=${HOST_PARAM}
+fi  
+
 if [ -z "$thresh_warn" ];
 then
   if [ -z "$thresh_warn_percent" ];

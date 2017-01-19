@@ -224,7 +224,7 @@ while [ "$1" ]; do
            shift 2
         };;
 	-H | --hostname)  scan_value $1 $2;         host=$value;       shift 2;;	
-	-instance)          scan_numeric_value $1 $2; instance=$value;     shift 2;;	
+	-instance)          scan_value $1 $2; instance=$value;     shift 2;;	
 	-t | --time)      scan_numeric_value $1 $2; time=$value;       shift 2;;
 	-p)               scan_numeric_value $1 $2; port=$value;       shift 2;;
        *) display_output $STATE_UNKNOWN "Unexpected parameter or option $1"
@@ -256,51 +256,61 @@ fi
 
 if [ ! -z "$instance" ];
 then
-  DBGTARGET="mount:$instance"
-fi
-
-# Find rozodiag utility and prepare command line parameters
-
-resolve_rozodiag
-
-
-# Run vfstat_stor debug command on export to check storage status
-
-$ROZDBG -c lbg_entries >  $TMPFILE
-res=`grep "LBG Name" $TMPFILE`
-case $res in
-  "") {
-    display_output $STATE_CRITICAL "$host do not respond to rozodiag"
-  };;  
-esac
-
-exp_up=`awk 'BEGIN {nb=0;} {if (($1=="EXPORTD") && ($9=="UP")) nb++;} END {printf("%d\n",nb);}' $TMPFILE`
-if [ $exp_up -lt 1 ]
-then
-  display_output $STATE_CRITICAL "No exportd connectivity"
-fi
-
-# Get the number of storcli 
-$ROZDBG -c stclbg >  $TMPFILE3
-NBSTORCLI=`awk -F':' '{if ($1=="number of configured storcli") { print $2 }}' $TMPFILE3`
-storcli_up=`awk 'BEGIN {nb=0;} {if (($1=="STORCLI") && ($9=="UP")) nb++;} END {printf("%d\n",nb);}' $TMPFILE`
-if [ $storcli_up -ne $NBSTORCLI ]
-then
-  display_output $STATE_CRITICAL "No internal I/O connectivity ($storcli_up/$NBSTORCLI)"
-fi
-
-for i in $(seq $NBSTORCLI)
-do
-  if [ ! -z "$port" ];
+  if [ ${instance} = "ALL" ]
   then
-    port=`expr $port + 1 `
-  else
-    DBGTARGET="mount:$instance:$i"   
-  fi    
-  resolve_rozodiag
+    instance_list=` grep -o 'instance=.*' /etc/fstab | cut -f1 -d, | cut -f2 -d= | tr '\n' ' '`
+  else  
+    instance_list=${instance}
+  fi
+fi
+
+for ins in ${instance_list}; do
   
-  test_storcli $i
-done  
+  # check if instance is a number
+  scan_numeric_value "instance" $ins;
+
+  DBGTARGET="mount:$ins"
+
+  # Find rozodiag utility and prepare command line parameters
+  resolve_rozodiag
+
+  $ROZDBG -c lbg_entries >  $TMPFILE
+  res=`grep "LBG Name" $TMPFILE`
+  case $res in
+    "") {
+      display_output $STATE_CRITICAL "$host:mount:$ins do not respond to rozodiag"
+    };;  
+  esac
+
+  exp_up=`awk 'BEGIN {nb=0;} {if (($1=="EXPORTD") && ($9=="UP")) nb++;} END {printf("%d\n",nb);}' $TMPFILE`
+  if [ $exp_up -lt 1 ]
+  then
+    display_output $STATE_CRITICAL "No exportd connectivity"
+  fi
+
+  # Get the number of storcli 
+  $ROZDBG -c stclbg >  $TMPFILE3
+  NBSTORCLI=`awk -F':' '{if ($1=="number of configured storcli") { print $2 }}' $TMPFILE3`
+  storcli_up=`awk 'BEGIN {nb=0;} {if (($1=="STORCLI") && ($9=="UP")) nb++;} END {printf("%d\n",nb);}' $TMPFILE`
+  if [ $storcli_up -ne $NBSTORCLI ]
+  then
+    display_output $STATE_CRITICAL "No internal I/O connectivity ($storcli_up/$NBSTORCLI)"
+  fi
+
+  for i in $(seq $NBSTORCLI)
+  do
+    if [ ! -z "$port" ];
+    then
+      port=`expr $port + 1 `
+    else
+      DBGTARGET="mount:$ins:$i"   
+    fi    
+    resolve_rozodiag
+    
+    test_storcli $i
+  done
+
+done
 
 # Hurra !!!
 display_output $STATE_OK 
