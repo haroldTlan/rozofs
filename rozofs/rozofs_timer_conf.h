@@ -77,7 +77,7 @@ typedef enum
   /*
   ** timer related to projection read/write
   */
-  TMR_PRJ_READ_SPARE,            /**< guard timer started upon receiving the first projection (read) default 100 ms */
+  TMR_PRJ_READ_SPARE,            /**< guard timer started upon receiving the first projection (read) default 15000 ms */
   TMR_WR_BLOCK,                  /**< guard timer associated to the write block (default 1000 ms )*/
   TMR_LINK_CACHE,                /**< target of symbolic link cache timeout in rozofsmount default 1000 ms )*/
   TMR_MAX_ENTRY
