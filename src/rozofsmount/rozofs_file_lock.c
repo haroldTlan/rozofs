@@ -51,6 +51,7 @@ typedef struct _LOCK_STATISTICS_T {
   uint64_t      ebadf;
   uint64_t      enomem;  
   uint64_t      einval;
+  uint64_t      mandatory;
   uint64_t      flush_error;
   uint64_t      buf_flush;
   uint64_t      write_block_error;
@@ -92,6 +93,7 @@ char * display_lock_stat(char * p) {
   DISPLAY_LOCK_STAT(ebadf);
   DISPLAY_LOCK_STAT(enomem);
   DISPLAY_LOCK_STAT(einval);
+  DISPLAY_LOCK_STAT(mandatory);
   DISPLAY_LOCK_STAT(flush_error);
   DISPLAY_LOCK_STAT(buf_flush);
   DISPLAY_LOCK_STAT(write_block_error);
@@ -848,6 +850,12 @@ void rozofs_ll_setlk_nb(fuse_req_t req,
     if (f == NULL) {
         errno = EBADF;
 	lock_stat.ebadf++;
+        goto error;
+    }
+    
+    if (flock->l_type & LOCK_MAND) {
+        errno = EOPNOTSUPP;
+	lock_stat.mandatory++;
         goto error;
     }
     
