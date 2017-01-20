@@ -448,7 +448,7 @@ void man_rwerror(char * pChar) {
   pChar += rozofs_string_append(pChar," size  : the size in block of the request.\n");
   pChar += rozofs_string_append(pChar," lbg   : the status of the LBG toward the file distribution;\n");
   pChar += rozofs_string_append(pChar,"         One character per sid giving the LBG status.\n");
-  pChar += rozofs_string_append(pChar,"         'U'=Up 'D'=Down 'S'=Shutting down '-'=Dependandcy\n");
+  pChar += rozofs_string_append(pChar,"         'S'=Selectable 'u'=Up 'D'=Down 'x'=Shutting down '-'=Dependandcy\n");
   pChar += rozofs_string_append(pChar," prj   : the projection context. Each projection is displayed on 2 characters.\n");
   pChar += rozofs_string_append(pChar,"         1rst: storage index in the lbg status field.\n");
   pChar += rozofs_string_append(pChar,"         2nd : 'D'=Done 'N'=No file 'P'=in progress 'E'=Error 'I'=Idle.\n");

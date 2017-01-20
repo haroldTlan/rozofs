@@ -1656,9 +1656,16 @@ static inline void storcli_trace_lbg_status(char * pChar, uint8_t rozofs_safe,ro
   for (projection_id = 0; projection_id <rozofs_safe; projection_id++) {
     switch (working_ctx_p->lbg_assoc_tb[projection_id].state) {
       case NORTH_LBG_DEPENDENCY:      *pChar++ = '-'; break;
-      case NORTH_LBG_UP:              *pChar++ = 'U'; break;
+      case NORTH_LBG_UP:  
+        if (storcli_lbg_cnx_sup_is_selectable(working_ctx_p->lbg_assoc_tb[projection_id].lbg_id)) {
+          *pChar++ = 'S'; 
+        }
+        else {             
+          *pChar++ = 'u'; 
+        }  
+        break;
       case NORTH_LBG_DOWN:            *pChar++ = 'D'; break;
-      case NORTH_LBG_SHUTTING_DOWN:   *pChar++ = 'S'; break;
+      case NORTH_LBG_SHUTTING_DOWN:   *pChar++ = 'x'; break;
       default: pChar += rozofs_i32_append(pChar, working_ctx_p->lbg_assoc_tb[projection_id].state);break;
     }
   }       
