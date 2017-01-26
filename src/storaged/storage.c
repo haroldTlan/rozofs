@@ -699,38 +699,44 @@ out:
   @retval  STORAGE_READ_HDR_OTHER_RECYCLING_COUNTER         when header file has been read
   
 */
+typedef struct _rozofs_storage_dev_info_t {
+  uint64_t     time;
+  int          absoluteIdx;
+  int          result;
+} rozofs_storage_dev_info_t;
+
 STORAGE_READ_HDR_RESULT_E storage_read_header_file(storage_t                   * st, 
                                                    fid_t                         fid, 
 						   uint8_t                       spare, 
 						   rozofs_stor_bins_file_hdr_t * hdr, 
 						   int                           update_recycle) {
-  int  dev;
-  int  hdrDevice;
+  int  fidRelativeIdx;
+  int  absoluteIdx;
   char path[FILENAME_MAX];
   int  storage_slice;
   int  fd;
   int  nb_read;
-  int       device_result[STORAGE_MAX_DEVICE_NB];
-  uint64_t  device_time[STORAGE_MAX_DEVICE_NB];
-  uint64_t  device_id[STORAGE_MAX_DEVICE_NB];
-  uint64_t  swap_time;
-  int       swap_device;
   int       nb_devices=0;
   struct stat buf;
   int       idx;
   int       ret;
-  uint64_t  crc32_error=0;
+  uint64_t  to_repair=0;
   char     *pChar;
+  int                       nbMapper=0;
+  int                       orderedIdx[STORAGE_MAX_DEVICE_NB];
+  rozofs_storage_dev_info_t devinfo[STORAGE_MAX_DEVICE_NB];
+  rozofs_storage_dev_info_t * pdevinfo;
   
-  memset(device_time,0,sizeof(device_time));
-  memset(device_id,0,sizeof(device_id));
-  memset(device_result,0,sizeof(device_result));
-  
+  memset(orderedIdx,0,sizeof(orderedIdx));
+  memset(devinfo,0,sizeof(devinfo));
+
   /*
   ** Compute storage slice from FID
   */
   storage_slice = rozofs_storage_fid_slice(fid);    
  
+  nbMapper = st->mapper_redundancy;
+   
   /*
   ** Search for the last updated file.
   ** It may occur that a file can not be written any more although 
@@ -739,19 +745,28 @@ STORAGE_READ_HDR_RESULT_E storage_read_header_file(storage_t                   *
   ** So let's list all the redundant header files in the modification 
   ** date order.
   */
-  for (dev=0; dev < st->mapper_redundancy ; dev++) {
+  pdevinfo = devinfo;
+  for (fidRelativeIdx=0; fidRelativeIdx < nbMapper ; fidRelativeIdx++,pdevinfo++) {
 
     /*
     ** Header file path
     */
-    hdrDevice = storage_mapper_device(fid,dev,st->mapper_modulo);
-    pChar = storage_build_hdr_path(path, st->root, hdrDevice, spare, storage_slice);
+    absoluteIdx           = storage_mapper_device(fid,fidRelativeIdx,st->mapper_modulo);
+    pdevinfo->absoluteIdx = absoluteIdx;
+    pChar = storage_build_hdr_path(path, st->root, absoluteIdx, spare, storage_slice);
 	            
-    // Check that this directory already exists, otherwise it will be create
+    /*
+    ** Check that this directory already exists, otherwise it will be create
+    */
     if (storage_create_dir(path) < 0) {
-      storio_hdr_error(fid, hdrDevice,"create dir");   
-      device_result[dev] = errno;		    
-      storage_error_on_device(st,hdrDevice);
+      /*
+      ** Log error in memory log
+      */
+      storio_hdr_error(fid, absoluteIdx,"create dir");   
+      /*
+      ** Consider the device is in fault
+      */
+      storage_error_on_device(st,absoluteIdx);
       continue;
     }   
         
@@ -765,100 +780,192 @@ STORAGE_READ_HDR_RESULT_E storage_read_header_file(storage_t                   *
     */
     ret = stat(path,&buf);
     if (ret < 0) {
-      device_result[dev] = errno;
+      /*
+      ** File is missing. 
+      ** Should be rewritten
+      */
+      if (errno == ENOENT) {
+        to_repair |= (1ULL<<fidRelativeIdx);
+      }
+      pdevinfo->result = errno;
       continue;
     }
     
     /*
-    ** Insert in the table in the time order
+    ** File is not completly written. 
+    ** Should be rewritten
     */
-    for (idx=0; idx < nb_devices; idx++) {
-      if (device_time[idx] > buf.st_mtime) continue;
-      break;
+    if (buf.st_size < sizeof(hdr->v0)) {
+      to_repair |= (1ULL<<fidRelativeIdx);
+      pdevinfo->result = ENODATA;
+      continue;
     }
+        
+    /*
+    ** One more correct device
+    */
+    pdevinfo->time = buf.st_mtime;
     nb_devices++;
-    for (; idx < nb_devices; idx++) {  
-     
-      swap_time   = device_time[idx];
-      swap_device = device_id[idx];
-
-      device_time[idx] = buf.st_mtime;
-      device_id[idx]   = hdrDevice;
-
-      buf.st_mtime = swap_time;
-      hdrDevice    = swap_device;  
-    } 
   }
   
   /*
   ** Header files do not exist
   */
   if (nb_devices == 0) {
-    for (dev=0; dev < st->mapper_redundancy ; dev++) {
-      if (device_result[dev] == ENOENT) return STORAGE_READ_HDR_NOT_FOUND;  
+    pdevinfo = devinfo;
+    for (fidRelativeIdx=0; fidRelativeIdx < nbMapper ; fidRelativeIdx++,pdevinfo++) {
+      if ((pdevinfo->result == ENOENT) || (pdevinfo->result == ENODATA)) {
+        return STORAGE_READ_HDR_NOT_FOUND;  
+      } 
     } 
     /*
     ** All devices have problems
     */
     return STORAGE_READ_HDR_ERRORS; 
   }
-  
+ 
+
   /*
   ** Some header file is missing but not all
   */
-  if (nb_devices != st->mapper_redundancy) {
-    for (dev=0; dev < st->mapper_redundancy ; dev++) {
-      if (device_result[dev] != 0) {
-        hdrDevice = storage_mapper_device(fid,dev,st->mapper_modulo); 
-	errno = device_result[dev];
-        storio_hdr_error(fid, hdrDevice,"stat hdr");   
-        storage_error_on_device(st,hdrDevice);        
+  if (nb_devices != nbMapper) {
+    pdevinfo = devinfo;
+    for (fidRelativeIdx=0; fidRelativeIdx < nbMapper ; fidRelativeIdx++,pdevinfo++) {
+      errno = pdevinfo->result;
+      if (errno != 0) {
+
+        absoluteIdx = pdevinfo->absoluteIdx; 
+
+        /*
+        ** Log error in memory log
+        */
+        storio_hdr_error(fid, absoluteIdx,"stat hdr"); 
+        /*
+        ** Consider the device is in fault
+        */
+        if ((errno!=ENODATA)&&(errno!=ENOENT)) {
+          storage_error_on_device(st,absoluteIdx);        
+        }  
       }
     }
   }
   
+  /*
+  ** Sort the devices in the modification date order
+  */
+  nb_devices = 0;
+  pdevinfo = devinfo;
+  for (fidRelativeIdx=0; fidRelativeIdx < nbMapper ; fidRelativeIdx++,pdevinfo++) {
+    int new;
+    int old;
+    
+    if (pdevinfo->time == 0) continue; 
+    
+    for (idx=0; idx<nb_devices; idx++) {
+      if (devinfo[orderedIdx[idx]].time > pdevinfo->time) continue;
+      break;
+    }
+    nb_devices++;
+
+    new = fidRelativeIdx;
+    for (; idx < nb_devices; idx++) {    
+      old = orderedIdx[idx];
+      orderedIdx[idx] = new;
+      new = old; 
+    } 
+  }    
 
   /*
-  ** Look for the mapping information in one of the redundant mapping devices
-  ** which numbers are derived from the fid
+  ** Loop on reading the mapper files in the modification date order
+  ** until reading a correct one.
   */
-  for (dev=0; dev < nb_devices ; dev++) {
+  for (idx=0; idx < nb_devices ; idx++) {
 
     /*
     ** Header file name
     */
-    storage_build_hdr_file_path(path, st->root, device_id[dev], spare, storage_slice, fid);
+    fidRelativeIdx = orderedIdx[idx];
+    absoluteIdx    = devinfo[fidRelativeIdx].absoluteIdx;
+    storage_build_hdr_file_path(path, st->root, absoluteIdx, spare, storage_slice, fid);
 
-    // Open hdr file
+    /*
+    ** Open hdr file
+    */
     fd = open(path, ROZOFS_ST_NO_CREATE_FILE_FLAG, ROZOFS_ST_BINS_FILE_MODE);
     if (fd < 0) {
-      storio_hdr_error(fid, dev,"open hdr read");       
-      device_result[dev] = errno;	
+      /*
+      ** Log error in memory log
+      */
+      storio_hdr_error(fid, absoluteIdx,"open hdr read");       
+      /*
+      ** Consider the device is in fault
+      */	
+      storage_error_on_device(st,absoluteIdx);
       continue;
     }
     
-    nb_read = pread(fd, hdr, sizeof (*hdr), 0);
+    nb_read = pread(fd, hdr, sizeof (*hdr), 0);    
+    if (nb_read < 0) {
+      /*
+      ** Should be rewritten
+      */      
+      to_repair |= (1ULL<<fidRelativeIdx);
+      /*
+      ** Log error in memory log
+      */
+      storio_hdr_error(fid, absoluteIdx, "read hdr");       
+      /*
+      ** Consider the device is in fault
+      */	
+      storage_error_on_device(st,absoluteIdx);
+      
+      close(fd);
+      continue;
+    }
+
     close(fd);
     
-    if (nb_read < 0) {
-      storio_hdr_error(fid, dev, "read hdr");       
-      device_result[dev] = EINVAL;	
-      storage_error_on_device(st,device_id[dev]);
+    /*
+    ** File can not be read completly 
+    */
+    if (nb_read < sizeof(hdr->v0)) {
+      /*
+      ** Should be rewritten
+      */      
+      to_repair |= (1ULL<<fidRelativeIdx);
+      /*
+      ** Log error in memory log
+      */
+      errno = ENODATA;
+      storio_hdr_error(fid, absoluteIdx, "read hdr");       
+      /*
+      ** Consider the device is in fault
+      */	
+      storage_error_on_device(st,absoluteIdx);
       continue;
     }
-    
+        
     /*
     ** check CRC32
     */
     uint32_t crc32 = fid2crc32((uint32_t *)fid);
-
     if (storio_check_header_crc32(hdr,&st->crc_error, crc32) != 0) {
-      crc32_error |= (1ULL<<dev);
-      device_result[dev] = EIO;	
-      storio_hdr_error(fid, dev,"crc32 hdr");             
-      storage_error_on_device(st,device_id[dev]);   
+      /*
+      ** Should be rewritten
+      */      
+      to_repair |= (1ULL<<fidRelativeIdx);
+      /*
+      ** Log error in memory log
+      */
+      errno = 0;
+      storio_hdr_error(fid, absoluteIdx,"crc32 hdr");  
+      /*
+      ** Consider the device is in fault
+      */	                 
+      storage_error_on_device(st,absoluteIdx);   
       continue;      
-    }  
+    } 
+     
     /*
     ** check the recycle case : not the same recycling value
     */
@@ -879,6 +986,7 @@ STORAGE_READ_HDR_RESULT_E storage_read_header_file(storage_t                   *
         return STORAGE_READ_HDR_OTHER_RECYCLING_COUNTER;
       }	    
     }
+    
     /*
     ** Check whether header file is in version 1
     */
@@ -889,23 +997,26 @@ STORAGE_READ_HDR_RESULT_E storage_read_header_file(storage_t                   *
     
     /*
     ** Header file has been read successfully. 
-    ** Check whether some header file has had 
-    ** a CRC32 error detected that should be fixed
+    ** Check whether some header files need to be repaired
     */
-    if (crc32_error!=0) {
-      int idx;
-      for (idx=0; idx < dev; idx++) {
-        if (crc32_error &(1ULL<<idx)) {
+    if (to_repair!=0) {
+      for (fidRelativeIdx=0; fidRelativeIdx < nbMapper; fidRelativeIdx++) {
+        if (to_repair & (1ULL<<fidRelativeIdx)) {
 	  /*
 	  ** Rewrite corrupted header file
 	  */
-	  storage_build_hdr_path(path, st->root, device_id[idx], spare, storage_slice);
-	  storage_write_header_file(st,device_id[idx], path, hdr);
+          absoluteIdx = devinfo[fidRelativeIdx].absoluteIdx;
+	  storage_build_hdr_path(path, st->root, absoluteIdx, spare, storage_slice);
+	  if (storage_write_header_file(st,absoluteIdx, path, hdr)==0) {
+            /*
+            ** Log reparation in memory log
+            */
+            errno = 0;
+            storio_hdr_error(fid, absoluteIdx,"hdr repaired");            
+          }
 	}
       }
     }
-
-
 
     return STORAGE_READ_HDR_OK;	
   }  
