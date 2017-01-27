@@ -266,7 +266,6 @@ void rozofs_clean_core(char * coredir) {
   ==========================================================================*/
 void rozofs_catch_error(int sig){
   int   idx;
-  int   ret = -1;
   pid_t pid = getpid();
 
   /*
@@ -359,7 +358,7 @@ void rozofs_signals_declare(char * application, int max_core_files) {
   if (application == NULL) return;
  
   pChar = rozofs_core_file_path;
-  if (common_config.core_file_directory[0]==0) {
+  if ((common_config.core_file_directory==NULL) || (common_config.core_file_directory[0]==0)) {
     pChar += sprintf(pChar,"%s",ROZOFS_RUNDIR_CORE);
   }
   else {
