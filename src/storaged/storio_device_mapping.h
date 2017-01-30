@@ -61,7 +61,7 @@ extern "C" {
 * Attributes cache constants
 */
 #define STORIO_DEVICE_MAPPING_LVL0_SZ_POWER_OF_2  12
-#define STORIO_DEVICE_MAPPING_MAX_ENTRIES  (128*1024)
+extern int STORIO_DEVICE_MAPPING_MAX_ENTRIES;
 
 #define STORIO_DEVICE_MAPPING_LVL0_SZ  (1 << STORIO_DEVICE_MAPPING_LVL0_SZ_POWER_OF_2) 
 #define STORIO_DEVICE_MAPPING_LVL0_MASK  (STORIO_DEVICE_MAPPING_LVL0_SZ-1)
@@ -410,10 +410,12 @@ static inline storio_device_mapping_t * storio_device_mapping_ctx_retrieve(int i
  retval 0 on success
  retval < 0 on error
 */
-static inline void storio_device_mapping_ctx_distributor_init() {
-  int                       nbCtx = STORIO_DEVICE_MAPPING_MAX_ENTRIES;
+static inline void storio_device_mapping_ctx_distributor_init(int nbCtx) {
   storio_device_mapping_t * p;
   int                       idx;
+
+
+  STORIO_DEVICE_MAPPING_MAX_ENTRIES = nbCtx * 1024;
 
   /*
   ** Init list heads
@@ -425,12 +427,12 @@ static inline void storio_device_mapping_ctx_distributor_init() {
   ** Reset stattistics 
   */
   memset(&storio_device_mapping_stat, 0, sizeof(storio_device_mapping_stat));
-  storio_device_mapping_stat.free = nbCtx;
+  storio_device_mapping_stat.free = STORIO_DEVICE_MAPPING_MAX_ENTRIES;
   
   /*
   ** Allocate memory
   */
-  storio_device_mapping_ctx_free_list = (storio_device_mapping_t*) ruc_listCreate(nbCtx,sizeof(storio_device_mapping_t));
+  storio_device_mapping_ctx_free_list = (storio_device_mapping_t*) ruc_listCreate(STORIO_DEVICE_MAPPING_MAX_ENTRIES,sizeof(storio_device_mapping_t));
   if (storio_device_mapping_ctx_free_list == NULL) {
     /*
     ** error on distributor creation
@@ -439,7 +441,7 @@ static inline void storio_device_mapping_ctx_distributor_init() {
   }
   
   
-  for (idx=0; idx<nbCtx; idx++) {
+  for (idx=0; idx<STORIO_DEVICE_MAPPING_MAX_ENTRIES; idx++) {
     p = storio_device_mapping_ctx_retrieve(idx);
     p->index  = idx;
     p->status = STORIO_FID_FREE;

@@ -48,6 +48,8 @@
 
 extern sconfig_t storaged_config;
 
+int STORIO_DEVICE_MAPPING_MAX_ENTRIES = 0;
+
 char * storio_device_monitor_show(char * pChar);
 
 storio_device_mapping_stat_t storio_device_mapping_stat = { };
@@ -656,7 +658,7 @@ uint32_t storio_device_mapping_init()
   ** Initialize dev mapping distributor
   */
 //  storio_device_mapping_stat.consistency = 1;   
-  storio_device_mapping_ctx_distributor_init();
+  storio_device_mapping_ctx_distributor_init(common_config.storio_fidctx_ctx);
 
   /*
   ** Start device monitor thread

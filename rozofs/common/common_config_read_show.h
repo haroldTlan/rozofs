@@ -225,6 +225,8 @@ char * show_module_storage(char * pChar) {
   pChar += rozofs_string_append(pChar,"// Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s\n");
   pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
   COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,5);
+  pChar += rozofs_string_append(pChar,"// Storio number of FID context in 1K unit\n");
+  COMMON_CONFIG_SHOW_INT(storio_fidctx_ctx,128);
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -457,6 +459,8 @@ static inline void common_config_generated_read(char * fname) {
   // Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s 
   // 0 means no limit 
   COMMON_CONFIG_READ_INT(spare_restore_read_throughput,5);
+  // Storio number of FID context in 1K unit 
+  COMMON_CONFIG_READ_INT(storio_fidctx_ctx,128);
  
   config_destroy(&cfg);
 }

@@ -1244,7 +1244,7 @@ class rozofs_class:
     if self.client_fast_reconnect == True: display_config_bool("client_fast_reconnect",True)
     display_config_int("storio_buf_cnt",32)
     display_config_int("export_buf_cnt",32)
-    
+    display_config_int("storio_fidctx_ctx",16)   
     
   def create_common_config(self):
     try: os.remove('/usr/local/etc/rozofs/rozofs.conf');
