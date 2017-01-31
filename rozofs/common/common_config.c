@@ -154,4 +154,9 @@ void show_common_config(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 void common_config_read(char * fname) {
   common_config_generated_read(fname);
+
+  /*
+  ** Add some consistency checks
+  */
+  common_config_extra_checks();
 }

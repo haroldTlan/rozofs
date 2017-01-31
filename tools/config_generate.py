@@ -366,7 +366,7 @@ def go_build_cfile(struct_name):
   print "  %s_generated_read(fname);"%(struct_name)
   
   # Look for extra checks added when reading the conf
-  if os.path.exists("%s_extra_check.c"%(struct_name)):
+  if os.path.exists("%s_extra_checks.c"%(struct_name)):
     print ""
     print "  /*"
     print "  ** Add some consistency checks"
