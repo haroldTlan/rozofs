@@ -30,14 +30,14 @@
 #include <sys/types.h>
 /*____________________________________________________________________________________________
 **
-** common config man function
+** common_config man function
 **
 */
 void man_common_config(char * pChar) {
-  pChar += rozofs_string_append(pChar,"cconf is related to the common configuration in rozofs.conf file.\n");
-  pChar += rozofs_string_append(pChar,"cconf            displays the whole rozofs.conf configuration.\n");
-  pChar += rozofs_string_append(pChar,"cconf <scope>    displays only the rozofs.conf <scope> configuration part.\n");
-  pChar += rozofs_string_append(pChar,"cconf reload     reloads and then displays the rozofs.conf configuration.\n");
+  pChar += rozofs_string_append(pChar,"cconf is related to the common_config configuration.\n");
+  pChar += rozofs_string_append(pChar,"cconf            displays the whole configuration.\n");
+  pChar += rozofs_string_append(pChar,"cconf <scope>    displays only the <scope> configuration part.\n");
+  pChar += rozofs_string_append(pChar,"cconf reload     reloads and then displays the configuration.\n");
 }
 /*____________________________________________________________________________________________
 **
@@ -231,7 +231,7 @@ char * show_module_storage(char * pChar) {
 }
 /*____________________________________________________________________________________________
 **
-** common config diagnostic function
+** common_config diagnostic function
 **
 */
 void common_config_generated_show(char * argv[], uint32_t tcpRef, void *bufRef) {
@@ -262,10 +262,10 @@ char *pChar = uma_dbg_get_buffer();
     }
   }
  
-  if (config_file_is_read==0) {
+  if (common_config_file_is_read==0) {
     pChar += rozofs_string_append(pChar,"Can not read configuration file ");
   }
-  pChar += rozofs_string_append(pChar,config_file_name);
+  pChar += rozofs_string_append(pChar,common_config_file_name);
   pChar += rozofs_eol(pChar);
   pChar += rozofs_eol(pChar);
   pChar = show_module_global(pChar);
@@ -283,28 +283,26 @@ char *pChar = uma_dbg_get_buffer();
 static inline void common_config_generated_read(char * fname) {
   config_t          cfg; 
 
-  if (config_file_is_read == 0) {
+  if (common_config_file_is_read == 0) {
     uma_dbg_addTopicAndMan("cconf",show_common_config, man_common_config, 0);
     if (fname == NULL) {
-      strcpy(config_file_name,ROZOFS_DEFAULT_CONFIG);
+      strcpy(common_config_file_name,ROZOFS_CONFIG_DIR"/rozofs.conf");
     }
     else {
-      strcpy(config_file_name,fname); 
+      strcpy(common_config_file_name,fname); 
     } 
   }
 
   config_init(&cfg);
-  config_file_is_read = 1;
-  if (config_read_file(&cfg, config_file_name) == CONFIG_FALSE) {
+  common_config_file_is_read = 1;
+  if (config_read_file(&cfg, common_config_file_name) == CONFIG_FALSE) {
     if (errno == ENOENT) {
-      info("cant read %s: %s (line %d).", config_file_name, config_error_text(&cfg),
-      config_error_line(&cfg));
+      info("cant read %s: %s (line %d).", common_config_file_name, config_error_text(&cfg),config_error_line(&cfg));
     }
     else {
-      severe("cant read %s: %s (line %d).", config_file_name, config_error_text(&cfg),
-               config_error_line(&cfg));
+      severe("cant read %s: %s (line %d).", common_config_file_name, config_error_text(&cfg),config_error_line(&cfg));
     }
-    config_file_is_read = 0;
+    common_config_file_is_read = 0;
   }
 
   /*

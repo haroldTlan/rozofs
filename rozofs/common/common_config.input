@@ -1,6 +1,6 @@
 #_______________________________________________________________________________________
 # 
-# Call ../../tools/common_config.py to generate common_config.h as well as common_config_read_show.h
+# Call ../../tools/common_config.py to generate common_config.h as well as common_config.c
 #
 #_______________________________________________________________________________________
 # Syntax is 
