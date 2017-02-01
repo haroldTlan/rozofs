@@ -48,7 +48,7 @@ stspare_fid_cache_stat_t       stspare_fid_cache_stat = {0};
 ruc_obj_desc_t                 stspare_fid_cache_running_list;
 stspare_fid_cache_t          * stspare_fid_cache_free_list;
 
-#define STSPARE_FID_CACHE_MAX_ENTRIES  (128*1024)
+uint32_t STSPARE_FID_CACHE_MAX_ENTRIES = 0;
 
 /*
 **____________________________________________________
@@ -191,10 +191,11 @@ uint32_t stspare_fid_cache_delete_req(uint32_t index) {
 ** @param index    The coontext index
 **____________________________________________________
 */
-static inline void stspare_fid_cache_distributor_init() {
-  int                            nbCtx = STSPARE_FID_CACHE_MAX_ENTRIES;
+static inline void stspare_fid_cache_distributor_init(uint32_t nbCtx) {
   stspare_fid_cache_t          * p;
   int                            idx;
+
+  STSPARE_FID_CACHE_MAX_ENTRIES = nbCtx*1024;
 
   /*
   ** Init list heads
@@ -205,12 +206,12 @@ static inline void stspare_fid_cache_distributor_init() {
   ** Reset stattistics 
   */
   memset(&stspare_fid_cache_stat, 0, sizeof(stspare_fid_cache_stat));
-  stspare_fid_cache_stat.free = nbCtx;
+  stspare_fid_cache_stat.free = STSPARE_FID_CACHE_MAX_ENTRIES;
   
   /*
   ** Allocate memory
   */
-  stspare_fid_cache_free_list = (stspare_fid_cache_t*) ruc_listCreate(nbCtx,sizeof(stspare_fid_cache_t));
+  stspare_fid_cache_free_list = (stspare_fid_cache_t*) ruc_listCreate(STSPARE_FID_CACHE_MAX_ENTRIES,sizeof(stspare_fid_cache_t));
   if (stspare_fid_cache_free_list == NULL) {
     /*
     ** error on distributor creation
@@ -219,7 +220,7 @@ static inline void stspare_fid_cache_distributor_init() {
   }
   
   
-  for (idx=0; idx<nbCtx; idx++) {
+  for (idx=0; idx<STSPARE_FID_CACHE_MAX_ENTRIES; idx++) {
     p = stspare_fid_cache_retrieve(idx);
     p->index  = idx;
     p->status = STSPARE_FID_CACHE_FREE;
@@ -234,7 +235,7 @@ static inline void stspare_fid_cache_distributor_init() {
 ** That API is intented to be called during the initialization of the module
 **____________________________________________________
 */
-uint32_t stspare_fid_cache_init() {
+uint32_t stspare_fid_cache_init(uint32_t nbCtx) {
 
   
   /*
@@ -245,7 +246,7 @@ uint32_t stspare_fid_cache_init() {
   /*
   ** Initialize context distributor
   */
-  stspare_fid_cache_distributor_init();
+  stspare_fid_cache_distributor_init(nbCtx);
     
   /*
   ** Add a debug topic

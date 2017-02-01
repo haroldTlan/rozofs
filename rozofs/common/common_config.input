@@ -159,3 +159,5 @@ BOOL 	client 	client_xattr_cache	            False
 BOOL 	client 	async_setattr	            False
 // statfs period in seconds. minimum is 0.
 INT     client statfs_period 	10 
+// Spare file restoring : Number of spare file context in 1K unit
+INT     storage spare_restore_spare_ctx 16

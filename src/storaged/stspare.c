@@ -1136,7 +1136,7 @@ void *stspare_thread_launch() {
   /*
   ** Initialize FID cache
   */
-  stspare_fid_cache_init();
+  stspare_fid_cache_init(common_config.spare_restore_spare_ctx);
   
   err = pthread_attr_init(&attr);
   if (err != 0) {

@@ -50,7 +50,7 @@ extern "C" {
 * Attributes cache constants
 */
 #define STSPARE_FID_CACHE_LVL0_SZ_POWER_OF_2  12
-#define STSPARE_FID_CACHE_MAX_ENTRIES  (128*1024)
+extern uint32_t STSPARE_FID_CACHE_MAX_ENTRIES;
 
 #define STSPARE_FID_CACHE_LVL0_SZ  (1 << STSPARE_FID_CACHE_LVL0_SZ_POWER_OF_2) 
 #define STSPARE_FID_CACHE_LVL0_MASK  (STSPARE_FID_CACHE_LVL0_SZ-1)
@@ -361,7 +361,7 @@ static inline stspare_fid_cache_t * stspare_fid_cache_search(uint8_t cid, uint8_
 ** That API is intented to be called during the initialization of the module
 **____________________________________________________
 */
-uint32_t stspare_fid_cache_init();
+uint32_t stspare_fid_cache_init(uint32_t nbCtx);
 
 
 #ifdef __cplusplus

@@ -193,6 +193,8 @@ typedef struct _common_config_t {
   uint32_t    spare_restore_read_throughput;
   // Storio number of FID context in 1K unit
   uint32_t    storio_fidctx_ctx;
+  // Spare file restoring : Number of spare file context in 1K unit
+  uint32_t    spare_restore_spare_ctx;
 } common_config_t;
 
 extern common_config_t common_config;

@@ -52,6 +52,14 @@ def console(string): print string
 def report(string): 
   console(string)
   log(string)
+def addline(string):
+  sys.stdout.write(string)
+  sys.stdout.flush()   
+def backline(string):
+  addline("\r                                                                                  ")
+  addline("\r%s"%(string))   
+
+    
   
 #___________________________________________________
 def clean_cache(val=1): os.system("echo %s > /proc/sys/vm/drop_caches"%val)
@@ -218,13 +226,12 @@ def export_all_sid_available (total):
 def wait_until_export_all_sid_available (total,retries):
 #___________________________________________________
 
-  sys.stdout.write("E")
+  addline("E")
   count = int(retries)
   
   while True:
 
-    sys.stdout.write(".")
-    sys.stdout.flush()     
+    addline(".")
      
     if export_all_sid_available(total) == True: return True    
 
@@ -262,22 +269,21 @@ def storcli_all_sid_available (total):
     for line in cmd.stdout:
       words=line.split('|')
       if len(words) >= 11:
-        if 'YES' in words[6] and 'UP' in words[4]:
-          match=match+1               
+        if 'YES' in words[6] and 'UP' in words[4]: match=match+1               
     if match != total: return False
     
+  time.sleep(1)  
   return True
 #___________________________________________________
 def wait_until_storcli_all_sid_available (total,retries):
 #___________________________________________________
   
-  sys.stdout.write("S")
+  addline("S")
   count = int(retries)
 
   while True:
 
-    sys.stdout.write(".")
-    sys.stdout.flush()     
+    addline(".")
      
     if storcli_all_sid_available(total) == True: return True    
 
@@ -322,8 +328,7 @@ def loop_wait_until (success,retries,function):
       report("Maximum retries reached. %s is %s\n"%(function,up))     
       return False
       
-    sys.stdout.write(".")
-    sys.stdout.flush()     
+    addline(".")
      
     up=getattr(sys.modules[__name__],function)()
     time.sleep(1)
@@ -344,8 +349,7 @@ def loop_wait_until_less (success,retries,function):
       report( "Maximum retries reached. %s is %s\n"%(function,up))      
       return False
       
-    sys.stdout.write(".")
-    sys.stdout.flush()     
+    addline(".")
      
     up=getattr(sys.modules[__name__],function)()
     time.sleep(1)
@@ -366,6 +370,7 @@ def start_all_sid () :
 def wait_until_all_sid_up (retries=DEFAULT_RETRIES) :
 # Wait for all sid up seen by storcli as well as export
 #___________________________________________________
+  time.sleep(3)
   wait_until_storcli_all_sid_available(STORCLI_SID_NB,retries)
   wait_until_export_all_sid_available(EXPORT_SID_NB,retries)
   return True  
@@ -390,12 +395,10 @@ def wait_until_x_sid_down (x,retries=DEFAULT_RETRIES) :
 #___________________________________________________
 def storageStart (hid,count=int(1)) :
 
-  sys.stdout.write("\r                                                                   ")
-  sys.stdout.write("\rStorage start ")
+  backline("Storage start ")
 
   for idx in range(int(count)): 
-    sys.stdout.write("%s "%(int(hid)+idx)) 
-    sys.stdout.flush()
+    addline("%s "%(int(hid)+idx)) 
     os.system("./setup.py storage %s start"%(int(hid)+idx))
         
 #___________________________________________________
@@ -410,12 +413,10 @@ def storageStartAndWait (hid,count=int(1)) :
 #___________________________________________________
 def storageStop (hid,count=int(1)) :
 
-  sys.stdout.write("\r                                                                   ")
-  sys.stdout.write("\rStorage stop ")
+  backline("Storage stop ")
 
   for idx in range(int(count)): 
-    sys.stdout.write("%s "%(int(hid)+idx)) 
-    sys.stdout.flush()
+    addline("%s "%(int(hid)+idx)) 
     os.system("./setup.py storage %s stop"%(int(hid)+idx))
   
 #___________________________________________________
@@ -472,10 +473,7 @@ def snipper_storcli ():
   
   while True:
 
-      sys.stdout.write("\r                                                                   ")
-      sys.stdout.flush()  
-      sys.stdout.write("\rStorcli reset")
-      sys.stdout.flush()
+      backline("Storcli reset")
 
       p = subprocess.Popen(["ps","-ef"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
       for proc in p.stdout:
@@ -491,8 +489,7 @@ def snipper_storcli ():
 	    
 
       for i in range(9):
-        sys.stdout.write(".")
-        sys.stdout.flush()
+        addline(".")
         time.sleep(1)
 
 #___________________________________________________
@@ -540,19 +537,12 @@ def snipper_if ():
 
       for hid in hosts:     
 	  
-	sys.stdout.write("\r                                 ")
-	sys.stdout.flush()
-	sys.stdout.write("\rhost %s if %s down "%(hid,itf))
-        sys.stdout.flush()
+	backline("host %s if %s down "%(hid,itf))
 	
 	os.system("./setup.py storage %s ifdown %s"%(hid,itf))
 	time.sleep(1)
-	
-          
-	sys.stdout.write("\r                                 ")
-	sys.stdout.flush()
-	sys.stdout.write("\rhost %s if %s up   "%(hid,itf))
-        sys.stdout.flush()
+	          
+	backline("host %s if %s up   "%(hid,itf))
 	
 	os.system("./setup.py storage %s ifup %s"%(hid,itf))
 	time.sleep(0.2)  
@@ -603,15 +593,13 @@ def snipper_storage ():
       # Wait all sid up before starting the test     
       if wait_until_all_sid_up() == False: return 1
       
-      time.sleep(0.25)
+      time.sleep(1)
           
-      sys.stdout.write("\r                                                                   ")
-      sys.stdout.flush()
-      sys.stdout.write("\rStorage reset ")
+      backline("Storage reset ")
       cmd=""
       for idx in range(int(nb_failures)):
         val=int(hid)+int(idx)
-        sys.stdout.write("%s "%(val))
+        addline("%s "%(val))
 	cmd+="./setup.py storage %s reset;"%(val)
 	
       sys.stdout.flush()
@@ -1095,7 +1083,7 @@ def is_elf(name):
 
 def compil_openmpi(): 
 #___________________________________________________
-  os.system("rm -rf %s/tst_openmpi; cp -f ./IT2/tst_openmpi.tgz %s; cd %s; tar zxf tst_openmpi.tgz; rm -f tst_openmpi.tgz; cd tst_openmpi; ./compil_openmpi.sh;"%(exepath,exepath,exepath))
+  os.system("rm -rf %s/tst_openmpi; cp -f ./IT2/tst_openmpi.tgz %s; cd %s; tar zxf tst_openmpi.tgz  > /dev/null 2>&1; rm -f tst_openmpi.tgz; cd tst_openmpi; ./compil_openmpi.sh  > /dev/null 2>&1;"%(exepath,exepath,exepath))
   
   string="cat %s/tst_openmpi/hello.res"%(exepath)
   parsed = shlex.split(string)  
@@ -1121,7 +1109,7 @@ def compil_openmpi():
 # Get rozofs from github, compile it and test rozodiag
 #___________________________________________________     
 def compil_rozofs():  
-  os.system("cd %s; rm -rf git; mkdir git; git clone https://github.com/rozofs/rozofs.git git 1> /dev/null; cd git; mkdir build; cd build; cmake -G \"Unix Makefiles\" ../ 1> /dev/null; make -j16 1> /dev/null"%(exepath))
+  os.system("cd %s; rm -rf git; mkdir git; git clone https://github.com/rozofs/rozofs.git git  > /dev/null 2>&1; cd git; mkdir build; cd build; cmake -G \"Unix Makefiles\" ../ 1> /dev/null; make -j16  > /dev/null 2>&1"%(exepath))
   if is_elf("src/rozodiag/rozodiag") == False: return 1
   if is_elf("src/exportd/exportd") == False: return 1
   if is_elf("src/rozofsmount/rozofsmount") == False: return 1
@@ -2119,6 +2107,7 @@ for arg in args:
     list.extend(TST_BASIC)
     list.extend(TST_FLOCK)
     list.extend(TST_REBUILD)
+    list.extend(TST_COMPIL)    
     list.extend(TST_RW)
     append_circumstance_test_list(list,TST_RW,'storageFailed')
     append_circumstance_test_list(list,TST_RW,'storageReset') 
