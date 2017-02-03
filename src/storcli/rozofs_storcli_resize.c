@@ -407,7 +407,8 @@ void rozofs_storcli_resize_req_processing(rozofs_storcli_ctx_t *working_ctx_p)
      sp_read_arg_t read_prj_args;
      sp_read_arg_t *request;    
       
-     xmit_buf = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+     xmit_buf = rozofs_storcli_any_south_buffer_allocate();      
+     //xmit_buf = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
      if (xmit_buf == NULL)
      {
        /*
@@ -668,7 +669,8 @@ int rozofs_storcli_resize_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,u
     void  *xmit_buf;  
     int ret;  
 
-    xmit_buf = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+    xmit_buf = rozofs_storcli_any_south_buffer_allocate();
+    //xmit_buf = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
     if (xmit_buf == NULL)
     {
       /*
