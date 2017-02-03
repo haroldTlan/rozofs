@@ -163,7 +163,7 @@ def reset_storcli_counter():
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
 
-  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -c counter reset"%(instance)       
+  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c counter reset"%(instance,instance,instance,instance)         
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 #___________________________________________________
@@ -171,7 +171,7 @@ def check_storcli_crc():
 # Use debug interface to get the number of sid from exportd
 #___________________________________________________
 
-  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -c profiler"%(instance)       
+  string="./build/src/rozodiag/rozodiag -T mount:%s:1 -T mount:%s:2 -T mount:%s:3 -T mount:%s:4 -c profiler"%(instance,instance,instance,instance)       
   parsed = shlex.split(string)
   cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -602,7 +602,6 @@ def snipper_storage ():
         addline("%s "%(val))
 	cmd+="./setup.py storage %s reset;"%(val)
 	
-      sys.stdout.flush()
       os.system(cmd)
       time.sleep(1)
 
@@ -739,34 +738,108 @@ def read_parallel ():
   prepare_file_to_read(zefile,fileSize) 
   ret=os.system("./IT2/read_parallel.exe -process %s -loop %s -file %s"%(process,loop,zefile)) 
   return ret 
-#___________________________________________________
-def crc32_reread():
-  ret = os.system("./IT2/test_crc32.exe -action REREAD -mount %s -file crc32"%(exepath))
-  if ret != 0: report("Reread error")
-  return ret    
+  
 #___________________________________________________
 def crc32():
 #___________________________________________________
-
+  
   # Clear error counter
   reset_storcli_counter()
   # Check CRC errors 
   if check_storcli_crc():
-    console("CRC errors after counter reset")
+    report("CRC errors after counter reset")
     return 1 
+
+  # Create a file
+  os.system("dd if=/dev/zero of=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))  
     
-  # Create CRC32 errors  
-  os.system("./IT2/test_crc32.exe -action CREATE -mount %s -file crc32"%(exepath))
-  os.system("./IT2/test_crc32.exe -action CORRUPT -mount %s -file crc32"%(exepath))
-  ret = crc32_reread()
-  if ret != 0: return ret
+  # Get its localization  
+  os.system("./setup.py cou %s/crc32 > /tmp/crc32loc"%(exepath))
+     
+  # Find the 1rst mapper file
+  mapper = None
+  with open("/tmp/crc32loc","r") as f: 
+    for line in f.readlines():
+      if "/hdr_0/" in line:
+        mapper = line.split()[3]
+        break;
+  if mapper == None:
+    report("Fail to find mapper file name in /tmp/crc32loc")
+    return -1
+    
+  # Truncate mapper file  
+  with open(mapper,"w") as f: f.truncate(0)
+  # Check file has been truncated
+  statinfo = os.stat(mapper)
+  if statinfo.st_size != 0:
+    report("%s has not been truncated"%(mapper))
+    return -1
+
+  # Reset storages
+  os.system("./setup.py storage all reset")
+  time.sleep(12)
+    
+  # Reread the file
+  os.system("dd of=/dev/null if=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))  
+           
+  # Check mapper file has been repaired
+  statinfo = os.stat(mapper)
+  if statinfo.st_size == 0:
+    report("%s has not been repaired"%(mapper))
+    return -1             
+
+  # Corrupt mapper file 
+  f = open(mapper, "w+")     
+  f.truncate(0)        
+  size = statinfo.st_size     
+  while size != 0:
+    f.write('a')
+    size=size-1
+  f.close()
+      
+  # Reset storage
+  os.system("./setup.py storage all reset")
+  time.sleep(12)
+     
+  # Reread the file
+  os.system("dd of=/dev/null if=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))           
+
+  # Check file has been re written
+  f = open(mapper, "rb")      
+  char = f.read(1)     
+  if char == 'a':
+    report("%s has not been rewritten"%(mapper))
+    return -1      
+
+  # Find the 1rst bins file
+  bins = None
+  with open("/tmp/crc32loc","r") as f: 
+    for line in f.readlines():
+      if "/bins_0/" in line:
+        bins = line.split()[3]
+        break;
+  if bins == None:
+    report("Fail to find bins file name in /tmp/crc32loc")
+    return -1
+
+  # Truncate the bins file
+  f = open(bins, 'r+b')     
+  f.seek(876) 
+  f.write('D')    
+  f.close()
+ 
+  # Clear error counter
+  reset_storcli_counter()
   
-  # Check CRC errors 
-  if check_storcli_crc() == False: 
-    console( "No CRC errors after test" )
+  # Reread the file
+  os.system("dd of=/dev/null if=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))           
+ 
+  # Checl for CRC32 errors
+  if check_storcli_crc():
     return 0
-  
-  return storageFailed('crc32_reread')
+    
+  report("No CRC errors after file reread")
+  return 1 
  
 #___________________________________________________
 def xattr():
@@ -1083,7 +1156,7 @@ def is_elf(name):
 
 def compil_openmpi(): 
 #___________________________________________________
-  os.system("rm -rf %s/tst_openmpi; cp -f ./IT2/tst_openmpi.tgz %s; cd %s; tar zxf tst_openmpi.tgz  > /dev/null 2>&1; rm -f tst_openmpi.tgz; cd tst_openmpi; ./compil_openmpi.sh  > /dev/null 2>&1;"%(exepath,exepath,exepath))
+  os.system("rm -rf %s/tst_openmpi; cp -f ./IT2/tst_openmpi.tgz %s; cd %s; tar zxf tst_openmpi.tgz  > %s/compil_openmpi 2>&1; rm -f tst_openmpi.tgz; cd tst_openmpi; ./compil_openmpi.sh  >> %s/compil_openmpi 2>&1;"%(exepath,exepath,exepath,exepath,exepath))
   
   string="cat %s/tst_openmpi/hello.res"%(exepath)
   parsed = shlex.split(string)  
@@ -1109,7 +1182,7 @@ def compil_openmpi():
 # Get rozofs from github, compile it and test rozodiag
 #___________________________________________________     
 def compil_rozofs():  
-  os.system("cd %s; rm -rf git; mkdir git; git clone https://github.com/rozofs/rozofs.git git  > /dev/null 2>&1; cd git; mkdir build; cd build; cmake -G \"Unix Makefiles\" ../ 1> /dev/null; make -j16  > /dev/null 2>&1"%(exepath))
+  os.system("cd %s; rm -rf git; mkdir git; git clone https://github.com/rozofs/rozofs.git git  > %s/compil_rozofs 2>&1; cd git; mkdir build; cd build; cmake -G \"Unix Makefiles\" ../ 1>> %s/compil_rozofs; make -j16  >> %s/compil_rozofs 2>&1"%(exepath,exepath,exepath,exepath))
   if is_elf("src/rozodiag/rozodiag") == False: return 1
   if is_elf("src/exportd/exportd") == False: return 1
   if is_elf("src/rozofsmount/rozofsmount") == False: return 1
@@ -2111,7 +2184,6 @@ for arg in args:
     list.extend(TST_RW)
     append_circumstance_test_list(list,TST_RW,'storageFailed')
     append_circumstance_test_list(list,TST_RW,'storageReset') 
-    list.extend(TST_COMPIL)
     if int(ifnumber) > int(1):
       append_circumstance_test_list(list,TST_RW,'ifUpDown')
        
