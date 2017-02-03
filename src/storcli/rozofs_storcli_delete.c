@@ -284,7 +284,7 @@ void rozofs_storcli_delete_req_init(uint32_t  socket_ctx_idx, void *recv_buf,roz
    for (i = 0; i < rozofs_safe; i++)
    {
      working_ctx_p->prj_ctx[i].prj_state = ROZOFS_PRJ_READ_IDLE;
-     working_ctx_p->prj_ctx[i].prj_buf   = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+     working_ctx_p->prj_ctx[i].prj_buf   = rozofs_storcli_any_south_buffer_allocate();
      if (working_ctx_p->prj_ctx[i].prj_buf == NULL)
      {
        /*

@@ -233,7 +233,8 @@ void storcli_lbg_cnx_polling(af_unix_ctx_generic_t  *sock_p)
   /*
   ** attempt to poll
   */
-   xmit_buf = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+//   xmit_buf = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+   xmit_buf = rozofs_storcli_any_south_buffer_allocate();
    if (xmit_buf == NULL)
    {
       return ; 

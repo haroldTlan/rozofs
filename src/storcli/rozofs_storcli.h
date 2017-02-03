@@ -89,8 +89,6 @@ extern uint64_t rozofs_storcli_ctx_wrap_count_err;
 #define STORCLI_NORTH_MOD_XMIT_BUF_CNT   (STORCLI_CTX_CNT)  /**< rozofs_storcli_north_large_buf_count  */
 #define STORCLI_NORTH_MOD_XMIT_BUF_SZ    (1024*8)             /**< rozofs_storcli_north_large_buf_sz  */
 
-#define STORCLI_SOUTH_TX_XMIT_BUF_CNT   (STORCLI_CTX_CNT*ROZOFS_MAX_LAYOUT)  /**< rozofs_storcli_south_large_buf_count  */
-#define STORCLI_SOUTH_TX_XMIT_BUF_SZ    (1024*160)                           /**< rozofs_storcli_south_large_buf_sz  */
 #define STORCLI_SOUTH_TX_XMIT_SMALL_BUF_SZ    (1024*4)                           /**< rozofs_storcli_south_small_buf_sz  */
 
 /**
@@ -100,8 +98,6 @@ extern uint64_t rozofs_storcli_ctx_wrap_count_err;
 */
 
 #define STORCLI_SOUTH_TX_CNT   (STORCLI_CTX_CNT*ROZOFS_MAX_LAYOUT)  /**< number of transactions towards storaged  */
-#define STORCLI_SOUTH_TX_RECV_BUF_CNT   STORCLI_SOUTH_TX_CNT  /**< number of recption buffers  */
-#define STORCLI_SOUTH_TX_RECV_BUF_SZ    STORCLI_SOUTH_TX_XMIT_BUF_SZ  /**< buffer size  */
 
 #define STORCLI_NORTH_TX_BUF_CNT   0  /**< not needed for the case of storcli  */
 #define STORCLI_NORTH_TX_BUF_SZ    0  /**< buffer size  */
@@ -1739,5 +1735,27 @@ static inline void storcli_trace_error(int line, int error, rozofs_storcli_ctx_t
   storcli_trace_lbg_status(&rec->lbg[0], rozofs_safe, working_ctx_p);
   storcli_trace_prj_status(&rec->prj[0], rozofs_safe, working_ctx_p);
 }
+/*_________________________________________________________________
+** Allocate a south buffer first in the small pool when possible
+** then in the large pool depending on the availability
+** 
+*/ 
+static void * rozofs_storcli_any_south_buffer_allocate() {
+  void *buf=NULL;
+  
+  /*
+  ** check if a small buffer can be allocated
+  */
+  buf = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_SMALL_POOL);
+  if (buf != NULL) return buf;
 
+  /*
+  ** Try a large one
+  */
+  buf = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+  if (buf != NULL) return buf;      
+  
+  severe("Out of south buffer");
+  return NULL;
+}  
 #endif

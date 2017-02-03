@@ -869,7 +869,7 @@ uint32_t rozofs_storcli_module_init()
     rozofs_storcli_north_large_buf_count  = STORCLI_NORTH_MOD_XMIT_BUF_CNT ;
     rozofs_storcli_north_large_buf_sz     = STORCLI_NORTH_MOD_XMIT_BUF_SZ    ;
     
-    rozofs_storcli_south_small_buf_count  = count ;
+    rozofs_storcli_south_small_buf_count  = count * 2;
     rozofs_storcli_south_small_buf_sz     = STORCLI_SOUTH_TX_XMIT_SMALL_BUF_SZ  ;
     rozofs_storcli_south_large_buf_count  = count   ;
     rozofs_storcli_south_large_buf_sz     = bufsize  ;  

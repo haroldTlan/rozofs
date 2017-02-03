@@ -942,7 +942,8 @@ int storcli_poll_lbg_with_null_proc(storcli_lbg_cnx_supervision_t *p,int lbg_id)
   */
     p->poll_counter++;
 
-    xmit_buf = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+    //xmit_buf = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+    xmit_buf = rozofs_storcli_any_south_buffer_allocate();
     if (xmit_buf == NULL)
     {
        p->poll_state = STORCLI_POLL_ERR;
