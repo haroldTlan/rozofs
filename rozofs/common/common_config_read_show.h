@@ -83,7 +83,7 @@ char * show_module_export(char * pChar) {
   pChar += rozofs_string_append(pChar,"#\n\n");
   pChar += rozofs_string_append(pChar,"// Max number of file that the exportd can remove from storages in a run.\n");
   pChar += rozofs_string_append(pChar,"// A new run occurs every 2 seconds.\n");
-  COMMON_CONFIG_SHOW_INT_OPT(trashed_file_per_run,7,"0:5000");
+  COMMON_CONFIG_SHOW_INT(trashed_file_per_run,1000);
   pChar += rozofs_string_append(pChar,"// High trash water mark when FID recycling is activated.\n");
   pChar += rozofs_string_append(pChar,"// When the trash has already this number of files, files are no more\n");
   pChar += rozofs_string_append(pChar,"// deleted but recycled.\n");
@@ -335,7 +335,7 @@ static inline void common_config_generated_read(char * fname) {
   */
   // Max number of file that the exportd can remove from storages in a run. 
   // A new run occurs every 2 seconds. 
-  COMMON_CONFIG_READ_INT_MINMAX(trashed_file_per_run,7,0,5000);
+  COMMON_CONFIG_READ_INT(trashed_file_per_run,1000);
   // High trash water mark when FID recycling is activated. 
   // When the trash has already this number of files, files are no more 
   // deleted but recycled. 

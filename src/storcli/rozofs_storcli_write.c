@@ -834,6 +834,21 @@ void rozofs_storcli_write_req_init(uint32_t  socket_ctx_idx, void *recv_buf,rozo
    ** allocate a sequence number for the working context (same aas for read)
    */
    working_ctx_p->read_seqnum = rozofs_storcli_allocate_read_seqnum();
+
+   /*
+   ** OK, now split the input buffer to figure out if we need either to read the first and/or last block
+   ** That situation occurs when the data to write does not start on a ROZOFS_BSIZE boundary (first) or
+   ** does not end of a ROZOFS_BSIZE boundary (last)
+   */
+   nb_internal_read = rozofs_storcli_prepare2write(working_ctx_p, 
+                        			   storcli_write_rq_p->bsize,
+                        			   storcli_write_rq_p->off , 
+                        			   storcli_write_rq_p->len,
+                        			   &working_ctx_p->wr_bid,
+                        			   &working_ctx_p->wr_nb_blocks,
+						   storcli_write_rq_p->flags
+                        			   );				
+
    /*
    ** set now the working variable specific for handling the write
    ** We need one large buffer per projection that will be written on storage
@@ -842,7 +857,12 @@ void rozofs_storcli_write_req_init(uint32_t  socket_ctx_idx, void *recv_buf,rozo
    for (i = 0; i < forward_projection; i++)
    {
      working_ctx_p->prj_ctx[i].prj_state = ROZOFS_PRJ_READ_IDLE;
-     working_ctx_p->prj_ctx[i].prj_buf   = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+     if (working_ctx_p->wr_nb_blocks<=1) {
+       working_ctx_p->prj_ctx[i].prj_buf   =  rozofs_storcli_any_south_buffer_allocate();     
+     }
+     else {
+       working_ctx_p->prj_ctx[i].prj_buf   = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+     }  
      if (working_ctx_p->prj_ctx[i].prj_buf == NULL)
      {
        /*
@@ -866,19 +886,6 @@ void rozofs_storcli_write_req_init(uint32_t  socket_ctx_idx, void *recv_buf,rozo
 
      working_ctx_p->prj_ctx[i].bins       = (bin_t*)(pbuf+position); 
    }
-   /*
-   ** OK, now split the input buffer to figure out if we need either to read the first and/or last block
-   ** That situation occurs when the data to write does not start on a ROZOFS_BSIZE boundary (first) or
-   ** does not end of a ROZOFS_BSIZE boundary (last)
-   */
-   nb_internal_read = rozofs_storcli_prepare2write(working_ctx_p, 
-                        			   storcli_write_rq_p->bsize,
-                        			   storcli_write_rq_p->off , 
-                        			   storcli_write_rq_p->len,
-                        			   &working_ctx_p->wr_bid,
-                        			   &working_ctx_p->wr_nb_blocks,
-						   storcli_write_rq_p->flags
-                        			   );				
 
    rozofs_storcli_rsvd_context_alloc(working_ctx_p,nb_internal_read);
    /*
@@ -1275,8 +1282,13 @@ void rozofs_storcli_write_projection_retry(rozofs_storcli_ctx_t *working_ctx_p,u
 	   ** one
 	   */
 	   ruc_buf_inuse_decrement(prj_cxt_p[projection_id].prj_buf);
-           int position  = rozofs_storcli_get_position_of_first_byte2write();
-           prj_cxt_p[projection_id].prj_buf = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+                 int position  = rozofs_storcli_get_position_of_first_byte2write();
+           if (working_ctx_p->wr_nb_blocks<=1) {
+             prj_cxt_p[projection_id].prj_buf   =  rozofs_storcli_any_south_buffer_allocate();     
+           }
+           else {
+             prj_cxt_p[projection_id].prj_buf   = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+           }             
            if (prj_cxt_p[projection_id].prj_buf == NULL)
            {
 	     /*
@@ -2285,7 +2297,12 @@ void rozofs_storcli_write_timeout(rozofs_storcli_ctx_t *working_ctx_p)
       /*
       ** allocate a buffer for the missing projection
       */
-      working_ctx_p->prj_ctx[projection_id_tab[i]].prj_buf_missing   = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+      if (working_ctx_p->wr_nb_blocks<=1) {
+        working_ctx_p->prj_ctx[projection_id_tab[i]].prj_buf_missing   =  rozofs_storcli_any_south_buffer_allocate();     
+      }
+      else {
+        working_ctx_p->prj_ctx[projection_id_tab[i]].prj_buf_missing   = ruc_buf_getBuffer(ROZOFS_STORCLI_SOUTH_LARGE_POOL);
+      }       
       if (working_ctx_p->prj_ctx[projection_id_tab[i]].prj_buf_missing == NULL)
       {
 	/*

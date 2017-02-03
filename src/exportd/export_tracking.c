@@ -5987,7 +5987,10 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   {
     DISPLAY_ATTR_TXT("NAME",bufall);
   }
-  
+  DISPLAY_ATTR_TITLE( "PARENT"); 
+  rozofs_uuid_unparse(lv2->attributes.s.pfid,p);
+  p += 36;
+  *p++ = '\n';    
   DISPLAY_ATTR_TITLE( "FID"); 
   rozofs_uuid_unparse(lv2->attributes.s.attrs.fid,p);
   p += 36;
