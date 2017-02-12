@@ -139,6 +139,19 @@ char *export_get_config_file_path()
  *_______________________________________________________________________
  */
 /**
+*   export slave launcher pid file
+
+   @param slaveid: slave identifier 
+  
+   @retval none
+*/
+static inline export_slave_launcher_pid_file(char * pidfile, int slaveid) {
+  sprintf(pidfile,ROZOFS_RUNDIR_PID"launcher_exportd_slave_%d.pid",slaveid);
+}
+/*
+ *_______________________________________________________________________
+ */
+/**
 *   kill of a slave exportd process
 
   @param instance: instance id of the exportd process
@@ -149,7 +162,7 @@ void export_kill_one_export_slave(int instance) {
     int ret = -1;
     char pidfile[128];
     
-    sprintf(pidfile,"/var/run/launcher_exportd_slave_%d.pid",instance);
+    export_slave_launcher_pid_file(pidfile,instance);
     	  
     // Launch exportd slave
     ret = rozo_launcher_stop(pidfile);
@@ -185,7 +198,7 @@ void export_start_one_export_slave(int instance) {
 
     cmd_p += sprintf(cmd_p, "-d %d ",debug_port_value );
           
-    sprintf(pidfile,"/var/run/launcher_exportd_slave_%d.pid",instance);
+    export_slave_launcher_pid_file(pidfile,instance);
 
     // Launch exportd slave
     ret = rozo_launcher_start(pidfile, cmd);
@@ -199,7 +212,117 @@ void export_start_one_export_slave(int instance) {
             instance,  exportd_config_file,
             debug_port_value);
 }
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   rebalancer launcher pid file
 
+   @param vid: volume identifier of the rebalancer
+  
+   @retval none
+*/
+static inline export_rebalancer_pid_file(char * pidfile, int vid) {
+  sprintf(pidfile,ROZOFS_RUNDIR_PID"launcher_rebalance_vol%d.pid",vid);
+}
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   stop a rebalancer
+
+   @param vid: volume identifier of the rebalancer
+   @param cfg: rebalancer configuration file name
+  
+   @retval none
+*/
+void export_stop_one_rebalancer(int vid) {
+  char   pidfile[256];
+  int    ret = -1;
+
+  export_rebalancer_pid_file(pidfile,vid);
+
+  // Launch exportd slave
+  ret = rozo_launcher_stop(pidfile);
+  if (ret !=0) {
+    severe("rozo_launcher_stop(%s,%s) %s",pidfile, strerror(errno));
+    return;
+  }
+}
+
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   start a rebalancer
+
+   @param vid: volume identifier of the rebalancer
+   @param cfg: rebalancer configuration file name
+  
+   @retval none
+*/
+void export_start_one_rebalancer(int vid, char * cfg) {
+  char cmd[1024];
+  char pidfile[256];
+  int  ret = -1;
+
+  char *cmd_p = &cmd[0];
+  cmd_p += sprintf(cmd_p, "%s ", "rozo_rebalance --cont");
+  cmd_p += sprintf(cmd_p, "--volume %d ", vid);
+  cmd_p += sprintf(cmd_p, "--cfg %s ", cfg);
+  cmd_p += sprintf(cmd_p, "--config %s ", exportd_config_file);
+
+  export_rebalancer_pid_file(pidfile,vid);
+
+  // Launch exportd slave
+  ret = rozo_launcher_start(pidfile, cmd);
+  if (ret !=0) {
+    severe("rozo_launcher_start(%s,%s) %s",pidfile, cmd, strerror(errno));
+    return;
+  }
+
+  info("start vid %d rebalancer (%s)", vid, cfg);
+}
+/*
+ *_______________________________________________________________________
+ */
+/**
+*   start every rebalancer for volumes configured in automatic mode
+  
+   @retval none
+*/
+void export_rebalancer(int start) {
+  volume_entry_t  * pvol;
+  struct timespec ts = {3, 0};
+
+  for (;;) {
+    list_t *p;
+
+    if ((errno = pthread_rwlock_tryrdlock(&volumes_lock)) != 0) {
+     warning("can lock volumes, balance_volume_thread deferred.");
+     nanosleep(&ts, NULL);
+     continue;
+    }
+
+    list_for_each_forward(p, &volumes) {
+      pvol = (volume_entry_t * ) list_entry(p, volume_entry_t, list);
+      if (pvol->volume.rebalanceCfg) {
+        if (start) {
+          export_start_one_rebalancer(pvol->volume.vid,pvol->volume.rebalanceCfg);
+        }
+        else {
+          export_stop_one_rebalancer(pvol->volume.vid);
+        }  
+      }
+    }
+
+    if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
+      severe("can unlock volumes, potential dead lock.");
+    }
+    
+    break;
+  }
+}
 /*
  *_______________________________________________________________________
  */
@@ -1128,7 +1251,7 @@ static int load_volumes_conf() {
         ventry = (volume_entry_t *) xmalloc(sizeof (volume_entry_t));
 
         // Initialize the volume
-        volume_initialize(&ventry->volume, vconfig->vid, vconfig->layout,vconfig->georep,vconfig->multi_site);
+        volume_initialize(&ventry->volume, vconfig->vid, vconfig->layout,vconfig->georep,vconfig->multi_site, vconfig->rebalance_cfg);
 
         // For each cluster of this volume
 
@@ -1542,6 +1665,11 @@ static void on_start() {
       */
       info("starting slave exportd");
       export_start_export_slave();
+      
+      /*
+      ** Start rebalancer when in automatic mode
+      */
+      export_rebalancer(1);
 
       info("running.");
       svc_run();
@@ -1792,6 +1920,10 @@ static void on_hup() {
 
     econfig_release(&new);
 
+    /*
+    ** Stop every rebalancer
+    */
+    export_rebalancer(0);
     
     /*
     ** the configuration is valid, so we reload the new configuration
@@ -1840,6 +1972,11 @@ static void on_hup() {
       ** reload the slave exportd
       */
       export_reload_all_export_slave();
+      
+      /*
+      ** Start every rebalancer
+      */
+      export_rebalancer(1);
     }
 
     info("reloaded.");
@@ -1889,6 +2026,8 @@ int main(int argc, char *argv[]) {
     ** Change local directory to "/"
     */
     if (chdir("/")!=0) {}
+    
+    rozofs_mkpath(ROZOFS_RUNDIR_PID,0755);
 
     /* Try to get debug port from /etc/services */
     expgwc_non_blocking_conf.debug_port = rozofs_get_service_port_export_master_diag();

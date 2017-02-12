@@ -9,6 +9,7 @@ import re
 import shlex
 import filecmp
 from adaptative_tbl import *
+
 import syslog
 import string
 import random
@@ -51,12 +52,18 @@ def log(string): syslog.syslog(string)
 def console(string): print string
 def report(string): 
   console(string)
-  log(string)
+  log(string)  
 def addline(string):
+  sys.stdout.write(bold+yellow)
   sys.stdout.write(string)
+  sys.stdout.write(endeffect)
   sys.stdout.flush()   
+def clearline():
+  sys.stdout.write(endeffect)
+  sys.stdout.write("\r                                                                                  ")
+  sys.stdout.flush() 
 def backline(string):
-  addline("\r                                                                                  ")
+  clearline()
   addline("\r%s"%(string))   
 
     
@@ -1783,12 +1790,12 @@ def do_run_list(list):
   failed=int(0)
   success=int(0)
   
-  dis = adaptative_tbl(4,"TEST RESULTS")
+  dis = adaptative_tbl(4,"TEST RESULTS",blue)
   dis.new_center_line()
-  dis.set_column(1,'#')
-  dis.set_column(2,'Name')
-  dis.set_column(3,'Result')
-  dis.set_column(4,'Duration')
+  dis.set_column(1,'#',blue)
+  dis.set_column(2,'Name',blue)
+  dis.set_column(3,'Result',blue)
+  dis.set_column(4,'Duration',blue)
   dis.end_separator()  
 
   time_start=time.time()
@@ -1842,15 +1849,15 @@ def do_run_list(list):
     
     if ret == 0:
       log("%10s %8s %s"%("SUCCESS",my_duration(delay),tst))    
-      dis.set_column(3,'OK')
+      dis.set_column(3,'OK',green)
       success=success+1
     elif ret == 2:
       log("%10s %8s %s"%("NOT FOUND",my_duration(delay),tst))        
-      dis.set_column(3,'NOT FOUND')
+      dis.set_column(3,'NOT FOUND',red)
       failed=failed+1    
     else:
       log("%10s %8s %s"%("FAILURE",my_duration(delay),tst))        
-      dis.set_column(3,'FAILED')
+      dis.set_column(3,'FAILED',red)
       failed=failed+1
       
     if failed != 0 and stopOnFailure == True:
@@ -1862,9 +1869,9 @@ def do_run_list(list):
   dis.set_column(1,'%s'%(success+failed))
   dis.set_column(2,exepath)
   if failed == 0:
-    dis.set_column(3,'OK')
+    dis.set_column(3,'OK',green)
   else:
-    dis.set_column(3,'%d FAILED'%(failed))
+    dis.set_column(3,'%d FAILED'%(failed),red)
     
   delay=time.time()-time_start    
   dis.set_column(4,'%s'%(my_duration(delay)))
@@ -1879,11 +1886,11 @@ def do_list():
 #___________________________________________________
 
   num=int(0)
-  dis = adaptative_tbl(4,"TEST LIST")
+  dis = adaptative_tbl(4,"TEST LIST",blue)
   dis.new_center_line()  
-  dis.set_column(1,'Number')
-  dis.set_column(2,'Test name')
-  dis.set_column(3,'Test group')
+  dis.set_column(1,'Number',blue)
+  dis.set_column(2,'Test name',blue)
+  dis.set_column(3,'Test group',blue)
   
   dis.end_separator()  
   for tst in TST_BASIC:

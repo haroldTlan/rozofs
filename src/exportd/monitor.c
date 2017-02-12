@@ -166,7 +166,7 @@ int monitor_volume(volume_t *volume) {
     }
 
 
-    volume_initialize(&clone, 0, 0, 0, 0);
+    volume_initialize(&clone, 0, 0, 0, 0, NULL);
     if (volume_safe_copy(&clone, volume) != 0) {
         severe("can't clone volume: %d", volume->vid);
         goto out;
@@ -380,7 +380,7 @@ int monitor_volume_slave(volume_t *volume) {
     uint32_t nb_storages = 0;
     int local_site = export_get_local_site_number();
 
-    volume_initialize(&clone, 0, 0,0,0);
+    volume_initialize(&clone, 0, 0,0,0,NULL);
     if (volume_safe_copy(&clone, volume) != 0) {
         severe("can't clone volume: %d", volume->vid);
         goto out;

@@ -52,6 +52,7 @@
 #define EGEOREP     "georep"
 #define ESITE0     "site0"
 #define ESITE1     "site1"
+#define EREBALANCE "rebalance"
 
 #define EFILTERS    "filters"
 #define EFILTER     "filter"
@@ -134,6 +135,7 @@ int volume_config_initialize(volume_config_t *v, vid_t vid, uint8_t layout,uint8
     v->vid = vid;
     v->layout = layout;
     v->georep = georep;
+    v->rebalance_cfg = NULL;
     list_init(&v->clusters);
     list_init(&v->list);
     return 0;
@@ -146,6 +148,8 @@ void volume_config_release(volume_config_t *v) {
     list_for_each_forward_safe(p, q, &v->clusters) {
         cluster_config_t *entry = list_entry(p, cluster_config_t, list);
         cluster_config_release(entry);
+        if (v->rebalance_cfg) xfree(v->rebalance_cfg);
+        v->rebalance_cfg = NULL;
         list_remove(p);
         free(entry);
     }
@@ -339,7 +343,8 @@ static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout
     int status = -1, v, c, s;
     struct config_setting_t *volumes_set = NULL;
     int    multi_site = -1;
-
+    const char *rebalance_cfg;
+    
     DEBUG_FUNCTION;
 
     // Get settings for volumes (list of volumes)
@@ -379,7 +384,16 @@ static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout
             severe("can't lookup vid setting for volume idx: %d.", v);
             goto out;
         }
-
+        
+        /*
+        ** Looking for a rebalane configuration file 
+        ** for automatic rebalance launching
+        */
+        rebalance_cfg = NULL;
+        if (config_setting_lookup_string(vol_set, EREBALANCE, &rebalance_cfg) == CONFIG_FALSE) {
+          rebalance_cfg = NULL;
+        }
+        
         // Check whether a layout is specified for this volume in the configuration file
 	// or take the layout from the export default value
         if (config_setting_lookup_int(vol_set, ELAYOUT, &vlayout) == CONFIG_FALSE) {
@@ -417,6 +431,10 @@ static int load_volumes_conf(econfig_t *ec, struct config_t *config, int elayout
 
         vconfig->multi_site = 0;
         multi_site = -1; // To determine whether multi site or not
+        
+        if (rebalance_cfg!=NULL) {
+          vconfig->rebalance_cfg = xstrdup(rebalance_cfg);
+        } 
 
         // Get settings for clusters for this volume
         if ((clu_list_set = config_setting_get_member(vol_set, ECIDS)) == NULL) {

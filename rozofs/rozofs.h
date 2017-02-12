@@ -39,6 +39,7 @@
 #define ROZOFS_RUNDIR_RBS_SPARE      ROZOFS_RUNDIR_RBS"spare/"
 #define ROZOFS_RUNDIR_RBS_REBUILD    ROZOFS_RUNDIR_RBS"rebuild/"
 #define ROZOFS_RUNDIR_CORE           ROZOFS_RUNDIR"core/"
+#define ROZOFS_RUNDIR_PID            ROZOFS_RUNDIR"pid/"
 
 #define ROZOFS_KPI_ROOT_PATH "/var/run/rozofs_kpi"
 //#include <rozofs/common/log.h>

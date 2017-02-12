@@ -41,13 +41,13 @@ void man_common_config(char * pChar) {
 }
 /*____________________________________________________________________________________________
 **
-** global scope configuration elements
+** global scope configuration parameters
 **
 */
-char * show_module_global(char * pChar) {
+char * show_common_config_module_global(char * pChar) {
 
   pChar += rozofs_string_append(pChar,"#\n");
-  pChar += rozofs_string_append(pChar,"# global scope configuration elements\n");
+  pChar += rozofs_string_append(pChar,"# global scope configuration parameters\n");
   pChar += rozofs_string_append(pChar,"#\n\n");
   pChar += rozofs_string_append(pChar,"// Number of core files that each module is allowed to keep.\n");
   pChar += rozofs_string_append(pChar,"// Older core files are kept while newest are removed.	\n");
@@ -73,13 +73,13 @@ char * show_module_global(char * pChar) {
 }
 /*____________________________________________________________________________________________
 **
-** export scope configuration elements
+** export scope configuration parameters
 **
 */
-char * show_module_export(char * pChar) {
+char * show_common_config_module_export(char * pChar) {
 
   pChar += rozofs_string_append(pChar,"#\n");
-  pChar += rozofs_string_append(pChar,"# export scope configuration elements\n");
+  pChar += rozofs_string_append(pChar,"# export scope configuration parameters\n");
   pChar += rozofs_string_append(pChar,"#\n\n");
   pChar += rozofs_string_append(pChar,"// Max number of file that the exportd can remove from storages in a run.\n");
   pChar += rozofs_string_append(pChar,"// A new run occurs every 2 seconds.\n");
@@ -119,13 +119,13 @@ char * show_module_export(char * pChar) {
 }
 /*____________________________________________________________________________________________
 **
-** client scope configuration elements
+** client scope configuration parameters
 **
 */
-char * show_module_client(char * pChar) {
+char * show_common_config_module_client(char * pChar) {
 
   pChar += rozofs_string_append(pChar,"#\n");
-  pChar += rozofs_string_append(pChar,"# client scope configuration elements\n");
+  pChar += rozofs_string_append(pChar,"# client scope configuration parameters\n");
   pChar += rozofs_string_append(pChar,"#\n\n");
   pChar += rozofs_string_append(pChar,"// Whether STORCLI acknowleges write request on inverse or forward STORIO responses.\n");
   COMMON_CONFIG_SHOW_BOOL(wr_ack_on_inverse,False);
@@ -149,13 +149,13 @@ char * show_module_client(char * pChar) {
 }
 /*____________________________________________________________________________________________
 **
-** storage scope configuration elements
+** storage scope configuration parameters
 **
 */
-char * show_module_storage(char * pChar) {
+char * show_common_config_module_storage(char * pChar) {
 
   pChar += rozofs_string_append(pChar,"#\n");
-  pChar += rozofs_string_append(pChar,"# storage scope configuration elements\n");
+  pChar += rozofs_string_append(pChar,"# storage scope configuration parameters\n");
   pChar += rozofs_string_append(pChar,"#\n\n");
   pChar += rozofs_string_append(pChar,"// Number of disk threads in the STORIO.\n");
   COMMON_CONFIG_SHOW_INT_OPT(nb_disk_thread,4,"2:64");
@@ -245,16 +245,16 @@ char *pChar = uma_dbg_get_buffer();
     }
     else {
       if (strcmp("global",argv[1])==0) {
-        pChar = show_module_global(pChar);
+        pChar = show_common_config_module_global(pChar);
       }
       else if (strcmp("export",argv[1])==0) {
-        pChar = show_module_export(pChar);
+        pChar = show_common_config_module_export(pChar);
       }
       else if (strcmp("client",argv[1])==0) {
-        pChar = show_module_client(pChar);
+        pChar = show_common_config_module_client(pChar);
       }
       else if (strcmp("storage",argv[1])==0) {
-        pChar = show_module_storage(pChar);
+        pChar = show_common_config_module_storage(pChar);
       }
       else {
         pChar += rozofs_string_append(pChar, "Unexpected configuration scope\n");
@@ -270,10 +270,10 @@ char *pChar = uma_dbg_get_buffer();
   pChar += rozofs_string_append(pChar,common_config_file_name);
   pChar += rozofs_eol(pChar);
   pChar += rozofs_eol(pChar);
-  pChar = show_module_global(pChar);
-  pChar = show_module_export(pChar);
-  pChar = show_module_client(pChar);
-  pChar = show_module_storage(pChar);
+  pChar = show_common_config_module_global(pChar);
+  pChar = show_common_config_module_export(pChar);
+  pChar = show_common_config_module_client(pChar);
+  pChar = show_common_config_module_storage(pChar);
 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
   return;
@@ -295,11 +295,15 @@ static inline void common_config_generated_read(char * fname) {
     } 
   }
 
+  if (access(common_config_file_name,R_OK)!=0) {
+    fatal("cant access %s: %s.", common_config_file_name, strerror(errno));
+  }
+
   config_init(&cfg);
   common_config_file_is_read = 1;
   if (config_read_file(&cfg, common_config_file_name) == CONFIG_FALSE) {
     if (errno == ENOENT) {
-      info("cant read %s: %s (line %d).", common_config_file_name, config_error_text(&cfg),config_error_line(&cfg));
+      info("Missing file %s.", common_config_file_name);
     }
     else {
       severe("cant read %s: %s (line %d).", common_config_file_name, config_error_text(&cfg),config_error_line(&cfg));
@@ -308,7 +312,7 @@ static inline void common_config_generated_read(char * fname) {
   }
 
   /*
-  ** global scope configuration elements
+  ** global scope configuration parameters
   */
   // Number of core files that each module is allowed to keep. 
   // Older core files are kept while newest are removed.	 
@@ -331,7 +335,7 @@ static inline void common_config_generated_read(char * fname) {
   // DSCP for exchanges from/to the EXPORTD. 
   COMMON_CONFIG_READ_INT_MINMAX(export_dscp,34,0,34);
   /*
-  ** export scope configuration elements
+  ** export scope configuration parameters
   */
   // Max number of file that the exportd can remove from storages in a run. 
   // A new run occurs every 2 seconds. 
@@ -368,7 +372,7 @@ static inline void common_config_generated_read(char * fname) {
   // Minimum delay between the deletion request and the effective projections deletion 
   COMMON_CONFIG_READ_INT(deletion_delay,0);
   /*
-  ** client scope configuration elements
+  ** client scope configuration parameters
   */
   // Whether STORCLI acknowleges write request on inverse or forward STORIO responses. 
   COMMON_CONFIG_READ_BOOL(wr_ack_on_inverse,False);
@@ -389,7 +393,7 @@ static inline void common_config_generated_read(char * fname) {
   // statfs period in seconds. minimum is 0. 
   COMMON_CONFIG_READ_INT(statfs_period,10);
   /*
-  ** storage scope configuration elements
+  ** storage scope configuration parameters
   */
   // Number of disk threads in the STORIO. 
   COMMON_CONFIG_READ_INT_MINMAX(nb_disk_thread,4,2,64);

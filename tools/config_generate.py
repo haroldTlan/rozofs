@@ -49,8 +49,10 @@ class conf_obj:
      
     if self.genre == "STRING":
       print "  char *      %s;"%(self.name) 
+    elif self.genre == "LONG":
+      print "  int64_t     %s;"%(self.name)
     else:
-      print "  uint32_t    %s;"%(self.name)
+      print "  int32_t     %s;"%(self.name)
 
   def write_in_show(self,struct_name):  
     for comment in self.comment: print "  pChar += rozofs_string_append(pChar,\"%s\\n\");"%(comment)
@@ -75,6 +77,16 @@ class conf_int(conf_obj):
       print "INT %s has not an integer default value \"%s\""%(name,default)
       raise ValueError()
     conf_obj.__init__(self,name,module,"INT",default,comment,minmax)
+
+#_______________________________________________
+class conf_long(conf_obj):
+
+  def __init__(self,name,module,default,comment,minmax=None):
+    try: int(default)
+    except:
+      print "LONG %s has not an integer default value \"%s\""%(name,default)
+      raise ValueError()
+    conf_obj.__init__(self,name,module,"LONG",default,comment,minmax)
 
 #_______________________________________________
 class conf_string(conf_obj):
@@ -178,10 +190,19 @@ def go_read_file(struct_name):
 	  obj = conf_int(name,module,default,comment,line.split()[4])
 	else:
 	  obj = conf_int(name,module,default,comment)  
+          
+      elif genre == "LONG":
+        if len(line.split()) == 5:
+	  obj = conf_long(name,module,default,comment,line.split()[4])
+	else:
+	  obj = conf_long(name,module,default,comment)  
+                  
       elif genre == "BOOL":
         obj = conf_bool(name,module,default,comment)
+        
       elif genre == "STRING": 
         obj = conf_string(name,module,default,comment)
+        
       else:
         print "Unknown type %s for %s"%(genre,name)	
       comment =  []	
@@ -257,6 +278,24 @@ def go_build_macros(struct_name):
   print "  %s_SHOW_END_OPT(opt)\\"%(struct_name.upper())
   print "}"  
   print ""  
+    
+  print "#define %s_SHOW_LONG(val,def)  {\\"%(struct_name.upper())
+  print "  if (%s.val == def)\\"%(struct_name)
+  print "  %s_SHOW_DEF\\"%(struct_name.upper())
+  print "  %s_SHOW_NAME(val)\\"%(struct_name.upper())
+  print "  pChar += rozofs_i64_append(pChar, %s.val);\\"%(struct_name)
+  print "  %s_SHOW_END\\"%(struct_name.upper())
+  print "}"  
+  print "" 
+
+  print "#define %s_SHOW_LONG_OPT(val,def,opt)  {\\"%(struct_name.upper())
+  print "  if (%s.val == def) \\"%(struct_name)
+  print "  %s_SHOW_DEF\\"%(struct_name.upper())
+  print "  %s_SHOW_NAME(val)\\"%(struct_name.upper())
+  print "  pChar += rozofs_i64_append(pChar, %s.val);\\"%(struct_name)
+  print "  %s_SHOW_END_OPT(opt)\\"%(struct_name.upper())
+  print "}"  
+  print ""  
 
   print "static int  boolval;"  
   print "#define %s_READ_BOOL(val,def)  {\\"%(struct_name.upper())
@@ -276,6 +315,7 @@ def go_build_macros(struct_name):
   print "#else"
   print "static long int          intval;"
   print "#endif"
+  print "static long long         longval;"
   print ""  
   print "#define %s_READ_INT_MINMAX(val,def,mini,maxi)  {\\"%(struct_name.upper())
   print "  %s.val = def;\\"%(struct_name)
@@ -299,6 +339,30 @@ def go_build_macros(struct_name):
   print "    %s.val = intval;\\"%(struct_name)
   print "  }\\"
   print "}" 
+  print ""  
+     
+  print "#define %s_READ_LONG(val,def) {\\"%(struct_name.upper())
+  print "  %s.val = def;\\"%(struct_name)
+  print "  if (config_lookup_int64(&cfg, #val, &longval)) { \\"
+  print "    %s.val = longval;\\"%(struct_name)
+  print "  }\\"
+  print "}" 
+  print ""  
+  print ""  
+  print "#define %s_READ_LONG_MINMAX(val,def,mini,maxi)  {\\"%(struct_name.upper())
+  print "  %s.val = def;\\"%(struct_name)
+  print "  if (config_lookup_int64(&cfg, #val, &longval)) { \\"
+  print "    if (longval<mini) {\\"
+  print "      %s.val = mini;\\"%(struct_name)
+  print "    }\\"
+  print "    else if (longval>maxi) { \\"
+  print "      %s.val = maxi;\\"%(struct_name)
+  print "    }\\"
+  print "    else {\\"
+  print "      %s.val = longval;\\"%(struct_name)
+  print "    }\\"
+  print "  }\\"
+  print "}"
   print ""  
 
   print "static const char * charval;"
@@ -388,7 +452,7 @@ def go_build_struct(struct_name):
   for module in modules:
     print ""  
     print "  /*"
-    print "  ** %s scope configuration elements"%(module)
+    print "  ** %s scope configuration parameters"%(module)
     print "  */"
     print ""
     for obj in objects:
@@ -418,13 +482,13 @@ def go_build_man(struct_name,command):
 def build_show_module(module,struct_name): 
   print "/*____________________________________________________________________________________________"
   print "**"
-  print "** %s scope configuration elements"%(module)
+  print "** %s scope configuration parameters"%(module)
   print "**"
   print "*/"
-  print "char * show_module_%s(char * pChar) {"%(module)
+  print "char * show_%s_module_%s(char * pChar) {"%(struct_name,module)
   print ""
   print "  pChar += rozofs_string_append(pChar,\"#\\n\");"    
-  print "  pChar += rozofs_string_append(pChar,\"# %s scope configuration elements\\n\");"%(module)   
+  print "  pChar += rozofs_string_append(pChar,\"# %s scope configuration parameters\\n\");"%(module)   
   print "  pChar += rozofs_string_append(pChar,\"#\\n\\n\");"    
   for obj in objects:
     if obj.module == module:     
@@ -457,7 +521,7 @@ def go_build_show(struct_name):
       first=False
     else:
       print "      else if (strcmp(\"%s\",argv[1])==0) {"%(module)
-    print "        pChar = show_module_%s(pChar);"%(module)
+    print "        pChar = show_%s_module_%s(pChar);"%(struct_name,module)
     print "      }"
   print "      else {"
   print "        pChar += rozofs_string_append(pChar, \"Unexpected configuration scope\\n\");"
@@ -475,7 +539,7 @@ def go_build_show(struct_name):
   print "  pChar += rozofs_eol(pChar);"
 
   for module in modules:
-    print "  pChar = show_module_%s(pChar);"%(module)
+    print "  pChar = show_%s_module_%s(pChar);"%(struct_name,module)
 	   
   print "" 
   print "  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());"
@@ -501,11 +565,15 @@ def go_build_read(file_name,struct_name,command):
   print "    } "
   print "  }"
   print ""
+  print "  if (access(%s_file_name,R_OK)!=0) {"%(struct_name)
+  print "    fatal(\"cant access %%s: %%s.\", %s_file_name, strerror(errno));"%(struct_name)
+  print "  }"
+  print ""     
   print "  config_init(&cfg);"
   print "  %s_file_is_read = 1;"%(struct_name)
   print "  if (config_read_file(&cfg, %s_file_name) == CONFIG_FALSE) {"%(struct_name)
   print "    if (errno == ENOENT) {"
-  print "      info(\"cant read %%s: %%s (line %%d).\", %s_file_name, config_error_text(&cfg),config_error_line(&cfg));"%(struct_name)
+  print "      info(\"Missing file %%s.\", %s_file_name);"%(struct_name)
   print "    }"
   print "    else {"
   print "      severe(\"cant read %%s: %%s (line %%d).\", %s_file_name, config_error_text(&cfg),config_error_line(&cfg));"%(struct_name)
@@ -517,7 +585,7 @@ def go_build_read(file_name,struct_name,command):
 
   for module in modules:
     print "  /*"
-    print "  ** %s scope configuration elements"%(module)
+    print "  ** %s scope configuration parameters"%(module)
     print "  */"
     for obj in objects:
       if obj.module == module:     

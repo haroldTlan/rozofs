@@ -93,6 +93,22 @@ void common_config_read(char * fname) ;
   COMMON_CONFIG_SHOW_END_OPT(opt)\
 }
 
+#define COMMON_CONFIG_SHOW_LONG(val,def)  {\
+  if (common_config.val == def)\
+  COMMON_CONFIG_SHOW_DEF\
+  COMMON_CONFIG_SHOW_NAME(val)\
+  pChar += rozofs_i64_append(pChar, common_config.val);\
+  COMMON_CONFIG_SHOW_END\
+}
+
+#define COMMON_CONFIG_SHOW_LONG_OPT(val,def,opt)  {\
+  if (common_config.val == def) \
+  COMMON_CONFIG_SHOW_DEF\
+  COMMON_CONFIG_SHOW_NAME(val)\
+  pChar += rozofs_i64_append(pChar, common_config.val);\
+  COMMON_CONFIG_SHOW_END_OPT(opt)\
+}
+
 static int  boolval;
 #define COMMON_CONFIG_READ_BOOL(val,def)  {\
   if (strcmp(#def,"True")==0) {\
@@ -111,6 +127,7 @@ static int               intval;
 #else
 static long int          intval;
 #endif
+static long long         longval;
 
 #define COMMON_CONFIG_READ_INT_MINMAX(val,def,mini,maxi)  {\
   common_config.val = def;\
@@ -131,6 +148,29 @@ static long int          intval;
   common_config.val = def;\
   if (config_lookup_int(&cfg, #val, &intval)) { \
     common_config.val = intval;\
+  }\
+}
+
+#define COMMON_CONFIG_READ_LONG(val,def) {\
+  common_config.val = def;\
+  if (config_lookup_int64(&cfg, #val, &longval)) { \
+    common_config.val = longval;\
+  }\
+}
+
+
+#define COMMON_CONFIG_READ_LONG_MINMAX(val,def,mini,maxi)  {\
+  common_config.val = def;\
+  if (config_lookup_int64(&cfg, #val, &longval)) { \
+    if (longval<mini) {\
+      common_config.val = mini;\
+    }\
+    else if (longval>maxi) { \
+      common_config.val = maxi;\
+    }\
+    else {\
+      common_config.val = longval;\
+    }\
   }\
 }
 

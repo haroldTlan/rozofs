@@ -251,6 +251,9 @@ add_executable(rozo_rebalance
     rozofs_ip4_flt.h        
     rozofs_mover.c  
     rozofs_mover.h
+    rebalance_config.c
+    rebalance_config.h
+    rebalance_config_read_show.h
 )
 target_link_libraries(rozo_rebalance rozofs_inode rozofs ${PTHREAD_LIBRARY} ${UUID_LIBRARY} ${CONFIG_LIBRARY})
 

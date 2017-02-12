@@ -761,7 +761,26 @@ class volume_class:
 
   def nb_cid(self): return len(self.cid)
   def nb_eid(self): return len(self.eid)
-     
+
+  def get_rebalance_config_name(self): return "%s/rebalance_vol%d.conf"%(rozofs.get_config_path(),self.vid)
+                              
+  def display_rebalance_config(self):        
+    display_config_int("free_avg_tolerance",5)
+    display_config_int("free_low_threshold",70)
+    display_config_int("frequency",25)
+    display_config_int("movecnt",12)
+    display_config_string("movesz","100M")
+    display_config_long("older",1)
+    display_config_int("throughput",2)
+    
+
+  def create_rebalance_config(self):
+    save_stdout = sys.stdout
+    sys.stdout = open(self.get_rebalance_config_name(),"w")
+    self.display_rebalance_config()
+    sys.stdout.close()
+    sys.stdout = save_stdout      
+
   def display(self):
     d = adaptative_tbl(2,"Volumes") 
     d.new_center_line()
@@ -802,6 +821,7 @@ class exportd_class:
     self.display_config()
     sys.stdout.close()
     sys.stdout = save_stdout
+    for v in volumes: v.create_rebalance_config()
        
   def pid(self):
     string="ps -fC exportd"
@@ -855,6 +875,7 @@ class exportd_class:
       print "    vid = %s;"%(v.vid)
       print "    layout = %s;"%(v.layout)
       print "    georep = %s;"%(v.georep())
+      print "    rebalance = \"%s\";"%(v.get_rebalance_config_name())
       print "    cids = "
       print "    ("
       nextc=" "
@@ -1012,6 +1033,9 @@ def display_config_string(name,val):
     
 def display_config_int(name,val):        
   if val != None: print "%-27s = %d;"%(name,int(val))
+
+def display_config_long(name,val):        
+  if val != None: print "%-27s = %ld;"%(name,long(val))
 
 def display_config_true(name): print "%-27s = True;"%(name)
   
@@ -1336,7 +1360,6 @@ class rozofs_class:
     exportd.start()
     for m in mount_points: m.start() 
     geomgr.start()
-    self.core(None)
 
   def configure(self):
     self.create_path()
@@ -1352,7 +1375,6 @@ class rozofs_class:
     for m in mount_points: m.stop()
     for h in hosts: h.stop()
     exportd.stop() 
-    self.core(None)
     
 #    time.sleep(1)
 #    os.system("killall rozolauncher 2>/dev/null")
@@ -1431,6 +1453,7 @@ class rozofs_class:
     if dir == "stspare": return "%s/build/src/%s/%s"%(os.getcwd(),"storaged",dir)
     if dir == "export_slave": return "%s/build/src/%s/%s"%(os.getcwd(),"exportd","exportd")
     if dir == "geomgr" : return "%s/build/src/%s/%s"%(os.getcwd(),"geocli",dir)    
+    if dir == "rozo_rebalance" : return "%s/build/src/%s/%s"%(os.getcwd(),"exportd",dir)    
     return "%s/build/src/%s/%s"%(os.getcwd(),dir,dir)
 
   def do_monitor_cfg (self): 

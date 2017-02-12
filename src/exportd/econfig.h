@@ -52,6 +52,7 @@ typedef struct volume_config {
     uint8_t georep; 
     uint8_t multi_site;   
     list_t clusters;
+    char  * rebalance_cfg; // Rebalance configuation file if any
     list_t list;
 } volume_config_t;
 
