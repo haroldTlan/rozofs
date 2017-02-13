@@ -190,8 +190,12 @@ int volume_safe_copy(volume_t *to, volume_t *from) {
     to->layout = from->layout;
     to->georep = from->georep;
     to->multi_site = from->multi_site;
-    to->rebalanceCfg = xstrdup(from->rebalanceCfg);
-
+    if (from->rebalanceCfg) {
+      to->rebalanceCfg = xstrdup(from->rebalanceCfg);
+    }
+    else {
+      to->rebalanceCfg = NULL;
+    }
     list_for_each_forward(p, &from->clusters) {
         cluster_t *to_cluster = xmalloc(sizeof (cluster_t));
         cluster_t *from_cluster = list_entry(p, cluster_t, list);
