@@ -749,6 +749,8 @@ def read_parallel ():
 #___________________________________________________
 def crc32():
 #___________________________________________________
+
+  backline("Create file")
   
   # Clear error counter
   reset_storcli_counter()
@@ -759,6 +761,8 @@ def crc32():
 
   # Create a file
   os.system("dd if=/dev/zero of=%s/crc32 bs=1M count=100 > /dev/null 2>&1"%(exepath))  
+
+  backline("Truncate mapper/header file")
     
   # Get its localization  
   os.system("./setup.py cou %s/crc32 > /tmp/crc32loc"%(exepath))
@@ -795,6 +799,8 @@ def crc32():
     report("%s has not been repaired"%(mapper))
     return -1             
 
+  backline("Corrupt mapper/header file")
+
   # Corrupt mapper file 
   f = open(mapper, "w+")     
   f.truncate(0)        
@@ -817,6 +823,8 @@ def crc32():
   if char == 'a':
     report("%s has not been rewritten"%(mapper))
     return -1      
+
+  backline("Corrupt bins file")
 
   # Find the 1rst bins file
   bins = None
@@ -1126,27 +1134,33 @@ def rsync():
   size = size + create_rsync_dir(src+'/subdir1/subdir2/subdir3')
   size = size + create_rsync_dir(src+'/subdir1/subdir2/subdir4')
      
+  backline("1rst rsync")
   if internal_rsync(src,size,True) == False: return 1 
    
   time.sleep(2)
+  backline("2nd rsync")  
   if internal_rsync(src,int(0)) == False: return 1
 
   size = touch_one_file("%s/a"%(src))
   time.sleep(2)
+  backline("rsync after 1 touch")  
   if internal_rsync(src,size) == False: return 1
   
   size = touch_one_file("%s/HB"%(src))
   size = size + touch_one_file("%s/subdir1/a"%(src))
   time.sleep(2)
+  backline("rsync after 2 touch")  
   if internal_rsync(src,size) == False: return 1 
    
   size = touch_one_file("%s/c"%(src))
   size = size + touch_one_file("%s/subdir1/subdir2/subdir3/ha1"%(src))
   size = size + touch_one_file("%s/subdir1/subdir2/B"%(src))
   time.sleep(2)
+  backline("rsync after 3 touch")  
   if internal_rsync(src,size) == False: return 1  
   
   time.sleep(2)
+  backline("rsync again")  
   if internal_rsync(src,int(0)) == False: return 1  
    
   return 0
@@ -1306,30 +1320,35 @@ def cores():
   os.system("./setup.py core remove all")  
 
   # Storaged
+  backline("Crash storaged of localhost1 and check core file")
   process="-i localhost1 -T storaged"
   if crash_process(process,"Main") != True: return 1
   if check_core_process(process,1) != True: return 1
   os.system("./setup.py core remove all")  
 
   # Storio
+  backline("Crash storio:1 of localhost2 and check core file")
   process="-i localhost2 -T storio:1"
   if crash_process(process,"Main") != True: return 1
   if check_core_process(process,1) != True: return 1
   os.system("./setup.py core remove all")  
 
   # Stspare
+  backline("Crash stspare of localhost2 and check core file")  
   process="-i localhost2 -T stspare"
   if crash_process(process,"Main") != True: return 1
   if check_core_process(process,1) != True: return 1
   os.system("./setup.py core remove all")  
   
   # export slave
+  backline("Crash exportd slave 1 and check core file")  
   process="-T export:1"
   if crash_process(process,"Blocking") != True: return 1
   if check_core_process(process,1) != True: return 1
   os.system("./setup.py core remove all")  
 
   # export master
+  backline("Crash exportd and check core file")  
   process="-T exportd"
   if crash_process(process,"Blocking") != True: return 1
   os.system("./setup.py exportd start")

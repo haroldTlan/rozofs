@@ -1869,7 +1869,7 @@ int main(int argc, char *argv[]) {
     /*
     **  set the numa node for rozofsmount and its storcli
     */
-    rozofs_numa_allocate_node(conf.rozofsmount_instance);
+    rozofs_numa_allocate_node(conf.rozofsmount_instance,"instance");
     
 
     rozofs_signals_declare("storcli",common_config.nb_core_file);

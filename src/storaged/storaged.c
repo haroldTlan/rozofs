@@ -562,6 +562,37 @@ int main(int argc, char *argv[]) {
       }
     }
     
+    /*
+    **  set the numa node for storaged
+    */
+    if (storaged_config.numa_node_id != -1) {       
+        /*
+        ** Use the node id of the storage.conf 
+        */
+        rozofs_numa_allocate_node(storaged_config.numa_node_id,"storage.conf");
+    }
+    else {
+      /*
+      ** No node identifier set in storage.conf 
+      */ 
+      if (pHostArray[0] != NULL) {
+         /*
+         ** Use hostname to dispatch the storios on the nodes
+         ** This is a one node configuration
+         */
+         char *name;
+         name = pHostArray[0];
+         int instance;
+         int len = strlen(name);
+         instance = (int)name[len-1];
+         rozofs_numa_allocate_node(instance,"host name");
+      }
+      else {
+        /*
+        ** Let the storaged use whatever node
+        */
+      }
+    }
     
     /*
     ** init of the crc32c

@@ -1256,7 +1256,7 @@ class rozofs_class:
     display_config_bool("crc32c_generate",rozofs.crc32)
     display_config_true("crc32c_hw_forced")
     display_config_int("storio_slice_number",rozofs.storio_slice)
-    display_config_bool("numa_axare",True)
+    display_config_bool("numa_aware",True)
     if self.storio_mode == "multiple": display_config_true("storio_multiple_mode")
     else:                              display_config_false("storio_multiple_mode")
     display_config_bool("allow_disk_spin_down", rozofs.spin_down_allowed)

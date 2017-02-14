@@ -49,6 +49,7 @@
 #define SIOLISTEN   "listen"
 #define SIOADDR     "addr"
 #define SIOPORT     "port"
+#define SNODEID     "nodeid"
 
 #define SSPARE_MARK     "spare-mark"
 #define SDEV_TOTAL      "device-total"
@@ -118,11 +119,10 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
 #if (((LIBCONFIG_VER_MAJOR == 1) && (LIBCONFIG_VER_MINOR >= 4)) \
                || (LIBCONFIG_VER_MAJOR > 1))
     int port;
-    int devices, mapper, redundancy;
-    
+    int devices, mapper, redundancy, nodeid;
 #else
     long int port;
-    long int devices, mapper, redundancy;
+    long int devices, mapper, redundancy, nodeid;
 #endif      
     DEBUG_FUNCTION;
 
@@ -134,6 +134,17 @@ int sconfig_read(sconfig_t *config, const char *fname, int cluster_id) {
                 config_error_line(&cfg));
         goto out;
     }
+    
+    /*
+    ** Check for node identifier for NUMA
+    */
+    if (config_lookup_int(&cfg, SNODEID, &nodeid) == CONFIG_FALSE) {
+        config->numa_node_id = -1;
+    }    
+    else {
+        config->numa_node_id = nodeid;
+    }    
+
 
     /*
     ** Check whether self-healing is configured 

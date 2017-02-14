@@ -2161,7 +2161,7 @@ int main(int argc, char *argv[]) {
     /*
     **  set the numa node for rozofsmount and its storcli
     */
-    rozofs_numa_allocate_node(conf.instance);
+    rozofs_numa_allocate_node(conf.instance,"instance");
     /*
     ** init of the site number for that rozofs client
     */
