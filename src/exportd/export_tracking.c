@@ -1854,12 +1854,13 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
     int status = -1;
     lv2_entry_t *lv2 = 0;
     int bbytes = ROZOFS_BSIZE_BYTES(e->bsize);
-    
+    lv2_entry_t *plv2 = NULL;    
     int quota_uid=-1;
     int quota_gid=-1;
     uint64_t nrb_new = 0;
     uint64_t nrb_old = 0;
     int      sync = 0;
+    uint16_t share = 0;
        
     START_PROFILING(export_setattr);
 
@@ -1896,16 +1897,21 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
             errno = EFBIG;
             goto out;
         }
-
+	/*
+	** Get the parent i-node
+	*/
+	plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, lv2->attributes.s.pfid);        
+	if (plv2!=NULL) share= plv2->attributes.s.attrs.cid;
+	
         nrb_new = ((attrs->size + bbytes - 1) / bbytes);
         nrb_old = ((lv2->attributes.s.attrs.size + bbytes - 1) / bbytes);
 	if (nrb_new > nrb_old)
 	{
-          rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,(nrb_new-nrb_old)*bbytes,ROZOFS_QT_INC); 
+          rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,(nrb_new-nrb_old)*bbytes,ROZOFS_QT_INC,share); 
 	}
 	else
 	{
-          rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,(nrb_old-nrb_new)*bbytes,ROZOFS_QT_DEC); 	
+          rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,(nrb_old-nrb_new)*bbytes,ROZOFS_QT_DEC,share); 	
 	}      		
         if (export_update_blocks(e, nrb_new, nrb_old)!= 0)
             goto out;
@@ -1940,12 +1946,12 @@ int export_setattr(export_t *e, fid_t fid, mattr_t *attrs, int to_set) {
     */
     if ((quota_gid !=-1) || (quota_uid!=-1))
     {
-       rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,1,ROZOFS_QT_DEC);
-       rozofs_qt_inode_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,1,ROZOFS_QT_INC);
+       rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,1,ROZOFS_QT_DEC,0);
+       rozofs_qt_inode_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,1,ROZOFS_QT_INC,0);
        if (S_ISREG(lv2->attributes.s.attrs.mode))
        {
-	 rozofs_qt_block_update(e->eid,quota_uid,quota_gid,lv2->attributes.s.attrs.size,ROZOFS_QT_DEC);
-	 rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,lv2->attributes.s.attrs.size,ROZOFS_QT_INC);       
+	 rozofs_qt_block_update(e->eid,quota_uid,quota_gid,lv2->attributes.s.attrs.size,ROZOFS_QT_DEC,0);
+	 rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,lv2->attributes.s.attrs.size,ROZOFS_QT_INC,0);       
        }       
     }
     status = export_lv2_write_attributes(e->trk_tb_p,lv2,sync);
@@ -2357,7 +2363,7 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
     // update export files
     export_update_files(e, filecount+1);
     
-    rozofs_qt_inode_update(e->eid,uid,gid,filecount+1,ROZOFS_QT_INC);
+    rozofs_qt_inode_update(e->eid,uid,gid,filecount+1,ROZOFS_QT_INC,plv2->attributes.s.attrs.cid);
     status = 0;
     /*
     ** return the parent attributes and the child attributes
@@ -2721,7 +2727,7 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     // update export files
     export_update_files(e, 1);
 
-    rozofs_qt_inode_update(e->eid,uid,gid,1,ROZOFS_QT_INC);
+    rozofs_qt_inode_update(e->eid,uid,gid,1,ROZOFS_QT_INC,plv2->attributes.s.attrs.cid);
     
     status = 0;
     /*
@@ -2902,7 +2908,8 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     memset(&ext_attrs,0x00,sizeof(ext_attrs));    
     memcpy(&ext_attrs.s.pfid,pfid,sizeof(fid_t));
     attrs->cid = 0;
-    ext_attrs.s.attrs.cid =0;
+    ext_attrs.s.attrs.cid =plv2->attributes.s.attrs.cid;
+    
     memset(&ext_attrs.s.attrs.sids, 0, ROZOFS_SAFE_MAX * sizeof (sid_t));
     /*
     ** check if the parent has the backup extended attribute set (take care of the recursive case only)
@@ -3000,7 +3007,7 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
 
     // update export files
     export_update_files(e, 1);
-    rozofs_qt_inode_update(e->eid,uid,gid,1,ROZOFS_QT_INC);
+    rozofs_qt_inode_update(e->eid,uid,gid,1,ROZOFS_QT_INC,plv2->attributes.s.attrs.cid);
 
     /*
     ** write the initial bitmap on disk
@@ -3325,8 +3332,8 @@ int export_unlink_multiple(export_t * e, fid_t parent, char *name, fid_t fid,mat
     ** all the subfile have been deleted so  Update export files
     */
     export_update_files(e, 0-deleted_fid_count);
-    rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,deleted_fid_count,ROZOFS_QT_DEC);
-    rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,quota_size,ROZOFS_QT_DEC);
+    rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,deleted_fid_count,ROZOFS_QT_DEC,plv2->attributes.s.attrs.cid);
+    rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,quota_size,ROZOFS_QT_DEC,plv2->attributes.s.attrs.cid);
 
     // Update parent
     plv2->attributes.s.attrs.mtime = plv2->attributes.s.attrs.ctime = time(NULL);
@@ -3616,8 +3623,8 @@ void export_unlink_duplicate_fid(export_t * e,lv2_entry_t  *plv2,fid_t parent, f
    /*
    ** update the quota: only if file is really deleted
    */
-   rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,1,ROZOFS_QT_DEC);
-   rozofs_qt_block_update(e->eid,quota_uid,quota_gid,quota_size,ROZOFS_QT_DEC);
+   rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,1,ROZOFS_QT_DEC,plv2->attributes.s.attrs.cid);
+   rozofs_qt_block_update(e->eid,quota_uid,quota_gid,quota_size,ROZOFS_QT_DEC,plv2->attributes.s.attrs.cid);
    /*
    ** Update export files
    */
@@ -3895,8 +3902,8 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
 	*/
 	if (rename == 0)
 	{
-           rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,1,ROZOFS_QT_DEC);
-           rozofs_qt_block_update(e->eid,quota_uid,quota_gid,quota_size,ROZOFS_QT_DEC);
+           rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,1,ROZOFS_QT_DEC,plv2->attributes.s.attrs.cid);
+           rozofs_qt_block_update(e->eid,quota_uid,quota_gid,quota_size,ROZOFS_QT_DEC,plv2->attributes.s.attrs.cid);
            // Update export files
           export_update_files(e, -1);
 
@@ -4749,7 +4756,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
       /*
       ** update the quota
       */
-      rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,1,ROZOFS_QT_DEC);
+      rozofs_qt_inode_update(e->eid,quota_uid,quota_gid,1,ROZOFS_QT_DEC,plv2->attributes.s.attrs.cid);
     }
     /*
      ** remove the entry from the parent directory: best effort
@@ -5001,7 +5008,7 @@ int export_symlink(export_t * e, char *link, fid_t pfid, char *name,
     /*
     ** update the inode quota 
     */
-    rozofs_qt_inode_update(e->eid,ext_attrs.s.attrs.uid,ext_attrs.s.attrs.gid,1,ROZOFS_QT_INC);
+    rozofs_qt_inode_update(e->eid,ext_attrs.s.attrs.uid,ext_attrs.s.attrs.gid,1,ROZOFS_QT_INC,plv2->attributes.s.attrs.cid);
     // update export files
     export_update_files(e, 1);
 
@@ -5662,7 +5669,8 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
     int64_t length = -1;
     lv2_entry_t *lv2 = NULL;
     int          sync = 0;
-
+   lv2_entry_t *plv2 = NULL;
+   
     START_PROFILING(export_write_block);
 
     // Get the lv2 entry
@@ -5692,11 +5700,15 @@ int64_t export_write_block(export_t *e, fid_t fid, uint64_t bid, uint32_t n,
         // Don't skip intermediate computation to keep ceil rounded
         uint64_t nbold = (lv2->attributes.s.attrs.size + ROZOFS_BSIZE_BYTES(e->bsize) - 1) / ROZOFS_BSIZE_BYTES(e->bsize);
         uint64_t nbnew = (off + len + ROZOFS_BSIZE_BYTES(e->bsize) - 1) / ROZOFS_BSIZE_BYTES(e->bsize);
-        /*
+	/*
+	** Get the parent i-node
+	*/
+	plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, lv2->attributes.s.pfid);        
+	/*
 	** update user and group quota
 	*/
 	rozofs_qt_block_update(e->eid,lv2->attributes.s.attrs.uid,lv2->attributes.s.attrs.gid,
-	                       (off + len - lv2->attributes.s.attrs.size),ROZOFS_QT_INC);
+	                       (off + len - lv2->attributes.s.attrs.size),ROZOFS_QT_INC,plv2->attributes.s.attrs.cid);
 
         if (export_update_blocks(e, nbnew, nbold) != 0)
             goto out;
@@ -6071,6 +6083,10 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
          DISPLAY_ATTR_TXT("BACKUP", "DIR-RECURSIVE");
 	 break;     
     }  
+//    if (lv2->attributes.s.attrs.cid != 0)
+    {
+       DISPLAY_ATTR_INT("SHARE",lv2->attributes.s.attrs.cid);    
+    }
     DISPLAY_ATTR_INT("CHILDREN",lv2->attributes.s.attrs.children);
     DISPLAY_ATTR_INT("NLINK",lv2->attributes.s.attrs.nlink);
     DISPLAY_ATTR_LONG("SIZE",lv2->attributes.s.attrs.size);
@@ -6401,6 +6417,32 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
   p=value;
   memcpy(buf_xattr,input_buf,length);
   buf_xattr[length]=0;
+  /*
+  ** Is this a backup mode change : 0: no backup/ 1: backup file of this directory only/ 2: backup recursive
+  */  
+  if (sscanf(p," share = %d", &valint) == 1) 
+  {
+    if ((valint < 0) || (valint > ((1024*64)-1)))
+    {
+      errno = ERANGE;
+      return -1;        
+    }
+    if (!S_ISDIR(lv2->attributes.s.attrs.mode)) {
+      errno = ENOTDIR;
+      return -1;
+    }
+    if (lv2->attributes.s.attrs.cid!= 0)
+    {
+      errno = EPERM;
+      return -1;
+    
+    }   
+    /*
+    ** Save new distribution on disk
+    */
+    lv2->attributes.s.attrs.cid=(cid_t)valint;
+    return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
+  }
   /*
   ** Is this a backup mode change : 0: no backup/ 1: backup file of this directory only/ 2: backup recursive
   */  
