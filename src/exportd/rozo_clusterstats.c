@@ -339,6 +339,7 @@ static void usage() {
     printf("Usage: ./rzsave [OPTIONS]\n\n");
     printf("\t-h, --help\tprint this message.\n");
     printf("\t-p,--path <export_root_path>\t\texportd root path \n");
+    printf("\t-v,--verbose                \t\tDisplay some execution statistics\n");
 
 };
 
@@ -350,10 +351,12 @@ int main(int argc, char *argv[]) {
     void *rozofs_export_p;
     int i;
     char *root_path=NULL;
+    int verbose = 0;
     
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
         {"path", required_argument, 0, 'p'},
+        {"verbose", required_argument, 0, 'v'},
         {0, 0, 0, 0}
     };
     
@@ -361,7 +364,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "hlrc:p:", long_options, &option_index);
+      c = getopt_long(argc, argv, "hvlrc:p:", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -375,6 +378,9 @@ int main(int argc, char *argv[]) {
           case 'p':
               root_path = optarg;
               break;
+          case 'v':
+              verbose = 1;
+              break;    
           case '?':
               usage();
               exit(EXIT_SUCCESS);
@@ -412,7 +418,7 @@ int main(int argc, char *argv[]) {
   ** init of the lv2 cache
   */
   lv2_cache_initialize(&cache);
-  rz_set_verbose_mode(0);
+  rz_set_verbose_mode(verbose);
   rz_scan_all_inodes(rozofs_export_p,ROZOFS_REG,1,rozofs_visit,NULL,NULL,NULL);
 
   rozo_display_all_cluster();

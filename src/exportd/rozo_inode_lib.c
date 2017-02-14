@@ -1884,7 +1884,7 @@ int rz_scan_all_inodes_from_context(void *export,int type,int read,check_inode_p
               printf("error while reading metadata header %s\n",strerror(errno));
 	      exit(-1);
 	   }
-	   break;
+	   continue;
 	 }
          /*
 	 ** load the content of the tracking file in memory
