@@ -1495,7 +1495,7 @@ void rozofs_start_one_storcli(int instance) {
     char     debug_port_name[32];
 
     char *cmd_p = &cmd[0];
-    cmd_p += sprintf(cmd_p, "%s ", "storcli");
+    cmd_p += sprintf(cmd_p, "%s ", "storcliBUG");
     cmd_p += sprintf(cmd_p, "-i %d ", instance);
     cmd_p += sprintf(cmd_p, "-H %s ", conf.host);
     cmd_p += sprintf(cmd_p, "-o %s ", "rozofsmount");

@@ -142,7 +142,7 @@ rozofs.set_self_healing(1)
 # rozofs.set_mojette_threads_threshold(32*1024)
 
 # Dual STORCLI
-rozofs.set_nb_storcli(4)
+rozofs.set_nb_storcli(1)
 
 # Disable POSIX lock
 #rozofs.no_posix_lock()
@@ -155,9 +155,9 @@ rozofs.set_nb_storcli(4)
 #rozofs.set_client_fast_reconnect()
 
 #-------------- NB devices per sid
-devices    = 3
-mapper     = 3
-redundancy = 2
+devices    = 1
+mapper     = 1
+redundancy = 1
 
 # Nb cluster per volume
 nbclusters = 2
@@ -169,10 +169,8 @@ clients_nb = 1
 setLayout(1)
 
 # Define volume 1 on some hosts
-vol = setVolumeHosts(8)
+vol = setVolumeHosts(4)
 # Create an export on this volume with layout 1
-addExport(vol,1)
-# Add an other export on this volume with layout 1
 addExport(vol,1)
 
 

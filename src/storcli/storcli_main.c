@@ -990,6 +990,10 @@ int rozofs_storcli_cid_table_insert(cid_t cid, sid_t sid, uint32_t lbg_id) {
         memset(sid_lbg_id_p, -1, sizeof (uint32_t)*(SID_MAX + 1));
         rozofs_storcli_cid_table[cid - 1] = sid_lbg_id_p;
     }
+    
+#warning Trigger MUSE bug by ignoring LBG of SID 1 & 2    
+    if ((sid==1)||(sid==2)) return 0;
+    
     sid_lbg_id_p[sid - 1] = lbg_id;
         /*
     ** clear the tmo supervision structure assocated with the lbg
