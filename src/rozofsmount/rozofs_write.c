@@ -1118,6 +1118,9 @@ void rozofs_ll_write_nb(fuse_req_t req, fuse_ino_t ino, const char *buf,
    */
    ROZOFS_WRITE_STATS_ARRAY(size);
 
+    errno = EPERM;
+    goto error;
+
     /*
     ** allocate a context for saving the fuse parameters
     */

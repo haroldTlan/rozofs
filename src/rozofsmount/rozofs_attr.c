@@ -481,6 +481,9 @@ void rozofs_ll_setattr_nb(fuse_req_t req, fuse_ino_t ino, struct stat *stbuf,
     */
     if (to_set & FUSE_SET_ATTR_SIZE)
     {
+      errno = EPERM;
+      goto error;
+        
       /*
       ** case of the truncate
       ** start by updating the storaged and then updates the exportd

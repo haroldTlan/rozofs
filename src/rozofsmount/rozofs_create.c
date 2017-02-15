@@ -57,6 +57,10 @@ void rozofs_ll_create_nb(fuse_req_t req, fuse_ino_t parent, const char *name,
     int    ret;
     void *buffer_p = NULL;
     int trc_idx = rozofs_trc_req_name_flags(srv_rozofs_ll_create,parent,(char*)name,fi->flags);
+
+    errno = EPERM;
+    goto error;
+
     /*
     ** allocate a context for saving the fuse parameters
     */

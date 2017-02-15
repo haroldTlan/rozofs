@@ -57,6 +57,9 @@ void rozofs_ll_mknod_nb(fuse_req_t req, fuse_ino_t parent, const char *name,
     int    ret;
     int trc_idx = rozofs_trc_req_name(srv_rozofs_ll_mknod,parent,(char*)name);
     void *buffer_p = NULL;
+    
+    errno = EPERM;
+    goto error;
     /*
     ** allocate a context for saving the fuse parameters
     */
