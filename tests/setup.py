@@ -1078,8 +1078,10 @@ class rozofs_class:
     self.client_fast_reconnect = False
     self.deletion_delay = None
     self.trashed_file_per_run = 100
+    self.spare_restore_loop_delay = 15
 
-  def set_site_number(self,number): self.site_number = number      
+  def set_set_spare_restore_loop_delay(self,number): self.spare_restore_loop_delay = number  
+  def set_site_number(self,number): self.site_number    
   def set_device_automount(self): 
     self.device_automount = True
     self.device_selfhealing_mode = "spareOnly"
@@ -1106,8 +1108,9 @@ class rozofs_class:
   def set_nb_storcli(self,nb=1): 
     self.nb_storcli = nb
     # Must have enough share memry size
+    new = int(13107200) * int(nb)
     with open("/proc/sys/kernel/shmmax") as f: val=f.readlines()
-    if int(val[0]) < int(52428800): os.system("echo 52428800 > /proc/sys/kernel/shmmax")  
+    if int(val[0]) < int(new): os.system("echo %s > /proc/sys/kernel/shmmax"%(new))  
   def set_file_distribution(self,val): self.file_distribution = val
   def set_client_fast_reconnect(self): self.client_fast_reconnect = True
   def set_xfs(self,mb,allocsize=None):

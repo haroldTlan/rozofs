@@ -746,6 +746,97 @@ def read_parallel ():
   ret=os.system("./IT2/read_parallel.exe -process %s -loop %s -file %s"%(process,loop,zefile)) 
   return ret 
   
+  
+#___________________________________________________
+def reread():
+#___________________________________________________
+  SIZE="1111111"
+  NBFILE="128"
+
+  backline("START ALL UP: Write files")  
+  ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action create"%(exepath,NBFILE,SIZE))
+  if ret != 0:
+    report("START ALL UP: Error on 1rst file creation")    
+    return 1
+    
+  backline("START ALL UP: Reread files")
+  
+  ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action check"%(exepath,NBFILE,SIZE))
+  if ret != 0:
+    report("START ALL UP: 1rst reread error")
+    return 1
+
+  # Loop on hosts
+  for hid in hosts:  
+         	    
+    # Reset a bunch of storages	    
+    storageStopAndWait(hid,1)
+    
+    ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action check"%(exepath,NBFILE,SIZE))
+    if ret != 0:
+      report("START ALL UP: reread error with storage %s failed"%(hid))
+      return 1
+
+    backline("START ALL UP: Unmount with storage %s failed"%(hid))
+    os.system("./setup.py mount %s stop"%(instance))
+    time.sleep(2)
+    
+    backline("START ALL UP: Mount with storage %s failed"%(hid))
+    os.system("./setup.py mount %s start"%(instance))
+    time.sleep(3)
+    
+    ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action check"%(exepath,NBFILE,SIZE))
+    if ret != 0:
+      report("START ALL UP: reread error with storage %s failed after remount"%hid)
+      return 1    
+          
+    # Restart every storages  
+    storageStartAndWait(hid,1)  
+
+
+  # Loop on hosts
+  for hid in hosts:  
+         	    
+    # Reset a bunch of storages	    
+    storageStopAndWait(hid,1)
+  
+    backline("STORAGE %s FAILED: Re-write files"%(hid))
+    ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action create"%(exepath,NBFILE,SIZE))
+    if ret != 0:
+      report("STORAGE %s FAILED: write error"%(hid))    
+      return 1
+    
+    backline("STORAGE %s FAILED: Reread files"%(hid))
+  
+    ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action check"%(exepath,NBFILE,SIZE))
+    if ret != 0:
+      report("STORAGE %s FAILED: reread files"%(hid))
+      return 1
+ 
+    backline("STORAGE %s FAILED: Unmount"%(hid))
+    os.system("./setup.py mount %s stop"%(instance))
+    time.sleep(2)
+    
+    backline("STORAGE %s FAILED: Mount"%(hid))
+    os.system("./setup.py mount %s start"%(instance))
+    time.sleep(3)
+    
+    ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action check"%(exepath,NBFILE,SIZE))
+    if ret != 0:
+      report("STORAGE %s FAILED: reread error after remount"%(hid))
+      return 1      
+          
+    # Restart every storages  
+    storageStartAndWait(hid,1)  
+
+    ret = os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action check"%(exepath,NBFILE,SIZE))
+    if ret != 0:
+      report("STORAGE %s FAILED: reread error after remount and restart"%(hid))
+      return 1  
+      
+  os.system("./IT2/test_file.exe -fullpath %s/reread -nbfiles %s -size %s -action delete"%(exepath,NBFILE,SIZE))        
+  return 0
+  
 #___________________________________________________
 def crc32():
 #___________________________________________________
@@ -2120,8 +2211,8 @@ parser.add_option("-n","--nfs", action="store_true",dest="nfs", default=False, h
 # Read/write test list
 TST_RW=['read_parallel','write_parallel','rw2','wr_rd_total','wr_rd_partial','wr_rd_random','wr_rd_total_close','wr_rd_partial_close','wr_rd_random_close','wr_close_rd_total','wr_close_rd_partial','wr_close_rd_random','wr_close_rd_total_close','wr_close_rd_partial_close','wr_close_rd_random_close']
 # Basic test list
-TST_BASIC=['cores','readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','resize']
-TST_BASIC_NFS=['cores','readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','resize']
+TST_BASIC=['cores','readdir','xattr','link','symlink', 'rename','chmod','truncate','bigFName','crc32','rsync','resize','reread']
+TST_BASIC_NFS=['cores','readdir','link', 'rename','chmod','truncate','bigFName','crc32','rsync','resize','reread']
 # Rebuild test list
 TST_REBUILD=['gruyere','rebuild_fid','rebuild_1dev','relocate_1dev','rebuild_all_dev','rebuild_1node','rebuild_1node_parts','gruyere_reread']
 # File locking
