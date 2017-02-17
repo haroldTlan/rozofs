@@ -50,6 +50,53 @@ stspare_fid_cache_t          * stspare_fid_cache_free_list;
 
 uint32_t STSPARE_FID_CACHE_MAX_ENTRIES = 0;
 
+stspare_fid_cache_t          * stspare_fid_cache_next_list_entry = NULL;
+
+
+/*
+**____________________________________________________
+**
+** Debug 
+**____________________________________________________  
+*/
+char * stspare_fid_cache_display(char * pChar, stspare_fid_cache_t * fidCtx, time_t now) {
+  uint32_t  mask;
+  int       first=1;
+  int       idx;
+  
+  if (fidCtx == NULL) return pChar;
+
+  pChar += rozofs_string_append(pChar,"    { \"cid\":");
+  pChar += rozofs_u32_append(pChar,fidCtx->data.key.cid);
+  pChar += rozofs_string_append(pChar,", \"sid\":");
+  pChar += rozofs_u32_append(pChar,fidCtx->data.key.sid);
+  pChar += rozofs_string_append(pChar,", \"fid\":\"");
+  pChar += rozofs_fid_append(pChar,fidCtx->data.key.fid);
+  pChar += rozofs_string_append(pChar,"\", \"modified\":");
+  pChar += rozofs_u32_append(pChar,now-fidCtx->data.mtime);
+  pChar += rozofs_string_append(pChar," , \"projections\":[\n");
+  mask=1;
+  for (idx=0; idx<32; idx++) {
+    if (fidCtx->data.prj_bitmap & mask) {
+      if (first) first = 0;
+      else {  
+        pChar += rozofs_string_append(pChar,",\n");
+      }
+      pChar += rozofs_string_append(pChar,"         { \"pjrId\":");
+      pChar += rozofs_u32_append(pChar,idx);
+      pChar += rozofs_string_append(pChar,", \"sid\":");
+      pChar += rozofs_u32_append(pChar,fidCtx->data.dist[idx]);
+      pChar += rozofs_string_append(pChar,", \"start\":");
+      pChar += rozofs_u32_append(pChar,fidCtx->data.prj[idx].start);
+      pChar += rozofs_string_append(pChar,", \"stop\":");
+      pChar += rozofs_u32_append(pChar,fidCtx->data.prj[idx].stop);
+      pChar += rozofs_string_append(pChar,"}");      
+    }
+    mask = mask << 1;
+  }
+  pChar += rozofs_string_append(pChar,"\n      ]\n    }");
+  return pChar;
+}  
 /*
 **____________________________________________________
 **
@@ -64,75 +111,62 @@ void stspare_fid_cache_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
   stspare_fid_cache_key_t        key;
   storage_t                    * st;
   int                            found;
+  stspare_fid_cache_t          * p = NULL;
+  int                            idx;  
+  int                            first=1;
 
-
+  time_t now = time(NULL);
+  
   if (argv[1] == NULL) {
+    pChar += rozofs_string_append(pChar,"{ ");
+  
     pChar = display_cache_fid_stat(pChar);
+
+    pChar += rozofs_string_append(pChar,"  ,\n");
     
-    pChar += rozofs_string_append(pChar,"ctx nb x sz : ");
+    pChar += rozofs_string_append(pChar,"  \"usage\" : {\n    \"entries\": ");
     pChar += rozofs_u32_append(pChar,STSPARE_FID_CACHE_MAX_ENTRIES);
-    pChar += rozofs_string_append(pChar," x ");
+    pChar += rozofs_string_append(pChar,",\n    \"size\":");
     pChar += rozofs_u32_append(pChar,sizeof(stspare_fid_cache_t));
-    pChar += rozofs_string_append(pChar," = ");    
+    pChar += rozofs_string_append(pChar,",\n    \"total\":");    
     pChar += rozofs_u32_append(pChar,STSPARE_FID_CACHE_MAX_ENTRIES * sizeof(stspare_fid_cache_t));
-    pChar += rozofs_eol(pChar);    
-    pChar += rozofs_string_append(pChar,"free        : ");
+    pChar += rozofs_string_append(pChar,",\n    \"free\":");
     pChar += rozofs_u64_append(pChar,stspare_fid_cache_stat.free);
-    pChar += rozofs_string_append(pChar,"\nallocation  : ");
+    pChar += rozofs_string_append(pChar,",\n    \"allocation\":");
     pChar += rozofs_u64_append(pChar,stspare_fid_cache_stat.allocation);
-    pChar += rozofs_string_append(pChar," (release+");
-    pChar += rozofs_u64_append(pChar,stspare_fid_cache_stat.allocation-stspare_fid_cache_stat.release);
-    pChar += rozofs_string_append(pChar,")\nrelease     : ");
+    pChar += rozofs_string_append(pChar,",\n    \"release\":");
     pChar += rozofs_u64_append(pChar,stspare_fid_cache_stat.release);
-    pChar += rozofs_eol(pChar);
+    pChar += rozofs_string_append(pChar,"\n  }\n");
+    pChar += rozofs_string_append(pChar,"}\n");
 
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());
     return;       
   }     
-
-
-  ret = rozofs_uuid_parse(argv[1],key.fid);
-  if (ret != 0) {
-    pChar += rozofs_string_append(pChar,argv[1]);
-    pChar += rozofs_string_append(pChar," is not a FID !!!\n");
+  
+  if (strcmp(argv[1],"first")==0) {
+    stspare_fid_cache_set1rst();
+  }
+  
+  else if (strcmp(argv[1],"next")!=0) {
+    pChar += rozofs_string_append(pChar,"Bad syntax\n");    
     uma_dbg_send(tcpRef,bufRef,TRUE,uma_dbg_get_buffer());
-    return;
+    return; 
   }
 
-  st = NULL;
-  found = 0;
-  while ((st = storaged_next(st)) != NULL) {
-  
-    key.cid = st->cid;
-    key.sid = st->sid;
-
-    int index = storio_fid_cache_search(stspare_fid_cache_hash(&key),&key);
-    if (index == -1) {
-      continue;
-    } 
-    
-    found=1;
-    stspare_fid_cache_t * p = stspare_fid_cache_retrieve(index);
-    if (p == NULL) {
-      pChar += rozofs_string_append(pChar,argv[1]);
-      pChar += rozofs_string_append(pChar," no match found !!!\n");
-      continue;
-    }
-    pChar += rozofs_string_append(pChar,"cid/sid ");
-    pChar += rozofs_u32_append(pChar,key.cid);
-    pChar += rozofs_string_append(pChar,"/");
-    pChar += rozofs_u32_append(pChar,key.sid);
-    pChar += rozofs_eol(pChar);
-      
-  }  
-  if (found == 0) {
-    pChar += rozofs_string_append(pChar,argv[1]);
-    pChar += rozofs_string_append(pChar," no such FID !!!\n");    
-  }
-  
-  pChar += sprintf(pChar,"\n");
+  pChar += rozofs_string_append(pChar,"{\n  \"fids\":[\n");     
+  for (idx=0;idx<12; idx++) {
+    p = stspare_fid_cache_getnext();
+    if (p==NULL) break;
+    if (first) first = 0;
+    else pChar += rozofs_string_append(pChar,",\n");
+    pChar = stspare_fid_cache_display(pChar, p, now);
+  } 
+  pChar += rozofs_string_append(pChar,"\n  ],\n");  
+  if (p==NULL) pChar += sprintf(pChar," \"end\": true\n");
+  else         pChar += sprintf(pChar," \"end\": false\n");
+  pChar += sprintf(pChar,"}\n");
   uma_dbg_send(tcpRef,bufRef,TRUE,uma_dbg_get_buffer());
-  return;         
+  return;            
 }
 
 
@@ -195,6 +229,7 @@ static inline void stspare_fid_cache_distributor_init(uint32_t nbCtx) {
   stspare_fid_cache_t          * p;
   int                            idx;
 
+
   STSPARE_FID_CACHE_MAX_ENTRIES = nbCtx*1024;
 
   /*
@@ -237,6 +272,7 @@ static inline void stspare_fid_cache_distributor_init(uint32_t nbCtx) {
 */
 uint32_t stspare_fid_cache_init(uint32_t nbCtx) {
 
+  stspare_fid_cache_next_list_entry = (stspare_fid_cache_t *) &stspare_fid_cache_running_list;
   
   /*
   ** Initialize the FID cache 

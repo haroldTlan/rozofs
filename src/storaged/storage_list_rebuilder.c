@@ -108,6 +108,7 @@ rbs_file_type_e ftype = rbs_file_type_all;
 */
 storage_t storaged_storages[0];
 uint16_t  storaged_nrstorages=0;
+int nolog = 0;
 
 
 /*-----------------------------------------------------------------------------
@@ -1241,7 +1242,8 @@ int main(int argc, char *argv[]) {
         { "ref", required_argument, 0, 'r'},	
         { "quiet", no_argument, 0, 'q'},
         { "instance", required_argument, 0, 'i'},	
-        { "throughput", required_argument, 0, 't'},	
+        { "throughput", required_argument, 0, 't'},
+        { "nolog", required_argument, 0, 'N'},	
         { 0, 0, 0, 0}
     };
 
@@ -1309,7 +1311,10 @@ int main(int argc, char *argv[]) {
 	    usage("Bad throughput value \"%s\"",optarg);
 	  }
 	  break;
-	  
+        case 'N':
+          nolog = 1;
+          quiet = 1;
+          break;  
 	case 'q':
 	  quiet = 1;
 	  break;

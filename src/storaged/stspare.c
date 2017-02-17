@@ -355,7 +355,7 @@ int stspare_restore_hole(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap, char 
     ** prj[0]   describes the holes
     ** prj[idx] describes projection id (idx-1) that should be written in sid dist[idx-1] 
     */
-    sprintf(cmd,"storage_rebuild -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
+    sprintf(cmd,"storage_rebuild --nolog -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
             common_config.spare_restore_read_throughput,
 	    fidCtx->data.key.cid, fidCtx->data.dist[idx-1],  fidString,
 	    fidCtx->data.key.chunk, fidCtx->data.prj[0].start, fidCtx->data.prj[0].stop);	 		 
@@ -375,7 +375,7 @@ int stspare_restore_hole(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap, char 
   /*
   ** Then let's rebuild the spare file it self hopping it will disappear
   */	
-  sprintf(cmd,"storage_rebuild -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
+  sprintf(cmd,"storage_rebuild --nolog  -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
           common_config.spare_restore_read_throughput,  
 	  fidCtx->data.key.cid, fidCtx->data.key.sid,  fidString,
 	  fidCtx->data.key.chunk, fidCtx->data.prj[0].start, fidCtx->data.prj[0].stop);
@@ -449,7 +449,7 @@ int stspare_restore_projections(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap
       ** prj[0]   describes the holes
       ** prj[idx] describes projection id (idx-1) that should be written in sid dist[idx-1] 
       */
-      sprintf(cmd,"storage_rebuild -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
+      sprintf(cmd,"storage_rebuild --nolog -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
                common_config.spare_restore_read_throughput,
 	       fidCtx->data.key.cid, fidCtx->data.dist[idx-1],  fidString,
 	       fidCtx->data.key.chunk, fidCtx->data.prj[idx].start, fidCtx->data.prj[idx].stop);
@@ -500,7 +500,7 @@ int stspare_restore_projections(stspare_fid_cache_t * fidCtx, uint64_t sidBitMap
   /*
   ** Since every thing has been rebuilt, rebuild the spare file it self hopping it will disappear
   */	
-  sprintf(cmd,"storage_rebuild -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
+  sprintf(cmd,"storage_rebuild --nolog -t %d -s %d/%d -f %s --chunk %d --bstart %u --bstop %u -l 1 -fg -q",
            common_config.spare_restore_read_throughput,
 	   fidCtx->data.key.cid, fidCtx->data.key.sid,  fidString,
 	   fidCtx->data.key.chunk, 0, -1);
@@ -653,7 +653,35 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
   */
   fidCtx = stspare_fid_cache_search(st->cid, st->sid, fid, chunk);
 
+  /*
+  ** Get the file modification time
+  */
+  if (stat(pathname,&stats) < 0) {
+    /*
+    ** File may have been deleted in the meantime
+    */
+    if (errno != ENOENT) {
+      severe("fstat(%s) %s",pathname,strerror(errno));
+    }
+    /*
+    ** Release context when one was allocated 
+    */  
+    goto release;
+  }
 
+  /*
+  ** Only take care of the file when it is stable; not modified for a while
+  */
+  if (stats.st_mtime >= (now-(common_config.spare_restore_loop_delay*60))) {
+    /*
+    ** Release context when one was allocated 
+    */  
+    goto release;
+  }     
+  
+  /*
+  ** No FID context. Allocate one
+  */
   if (fidCtx == NULL) {
 
     rozofs_stor_bins_file_hdr_t   file_hdr;
@@ -708,25 +736,6 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
     fidCtx->data.mtime  = 0; /* This tells that the file not yet read */
   }        
 
-  
-  /*
-  ** Open file
-  */
-  fd = open(pathname, O_RDONLY, S_IRWXU | S_IROTH);
-  if (fd < 0) {
-    severe("open(%s) %s",pathname,strerror(errno));
-    goto release;
-  }
-
-  /*
-  ** Read mtime
-  */
-  if (fstat(fd,&stats) < 0) {
-    severe("fstat(%s) %s",pathname,strerror(errno));
-    goto release;
-  }
-  
-   
   /*
   ** When mtime has not changed, no need to reread the file
   */
@@ -740,17 +749,21 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
   /*
   ** File has to be (re-)read
   */
-  fidCtx->data.mtime = 0;
-
+  fidCtx->data.mtime = 0;  
+  
   /*
-  ** Only read the file when it is stable; not modified for a while
+  ** Open file
   */
-  if (stats.st_mtime >= (now-(common_config.spare_restore_loop_delay*60))) {
+  fd = open(pathname, O_RDONLY, S_IRWXU | S_IROTH);
+  if (fd < 0) {
     /*
-    ** Better wait the file is not written any more
+    ** File may have been deleted in the meantime
     */
-    goto wait;
-  }  
+    if (errno != ENOENT) {
+      severe("open(%s) %s",pathname,strerror(errno));
+    }
+    goto release;
+  }
 
   /*
   ** Let's read the file now
@@ -794,7 +807,12 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
     */        
     sizeRead = pread(fd,buffer,sizeRequested,offset);
     if (sizeRead < 0) {
-      severe("pread(%s) %s",pathname, strerror(errno));
+      /*
+      ** File may have been deleted in the meantime
+      */
+      if (errno != ENOENT) {
+        severe("pread(%s,size=%d,offset=%d) %s",pathname,sizeRequested,offset,strerror(errno));
+      }
       goto release;
     }
 
@@ -876,39 +894,27 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
     }   
   }
   fidCtx->data.mtime = stats.st_mtime;
-  
-ok:
-  close(fd);
-  fd = -1;
-  return fidCtx;
+  goto ok;
 
-wait:
-  /*
-  ** Close the file when open
-  */
-  if (fd != -1) {
-    close(fd);
-    fd = -1;  
-  }
-  return NULL;
-    
+
+
 release:
-
-  /*
-  ** Close the file when open
-  */
-  if (fd != -1) {
-    close(fd);
-    fd = -1;  
-  }
   /*
   ** release fid context on error
   */
-  if (fidCtx) {
-    stspare_fid_cache_release(fidCtx);    
-    fidCtx = NULL;
+  stspare_fid_cache_release(fidCtx);    
+  fidCtx = NULL; 
+
+  
+ok:
+  /*
+  ** Close the file when open
+  */
+  if (fd != -1) {
+    close(fd);
+    fd = -1;  
   }
-  return NULL;
+  return fidCtx;
 }
 /*
 **____________________________________________________

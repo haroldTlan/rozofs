@@ -1847,7 +1847,7 @@ def rebuild_fid() :
 
       clean_rebuild_dir()
 	    	
-      string="./setup.py sid %s %s rebuild -fg -f %s -o fid%s_cid%s_sid%s"%(cid,sid,fid,fid,cid,sid)
+      string="./setup.py sid %s %s rebuild --nolog -fg -f %s -o fid%s_cid%s_sid%s"%(cid,sid,fid,fid,cid,sid)
       ret = cmd_returncode(string)
 
       if ret != 0:

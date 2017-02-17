@@ -1282,6 +1282,7 @@ class rozofs_class:
     display_config_int("storio_buf_cnt",32)
     display_config_int("export_buf_cnt",32)
     display_config_int("spare_restore_spare_ctx",1)
+    display_config_int("spare_restore_loop_delay",rozofs.spare_restore_loop_delay);
     display_config_int("storio_fidctx_ctx",16)   
     display_config_int("trashed_file_per_run",rozofs.trashed_file_per_run)
     
