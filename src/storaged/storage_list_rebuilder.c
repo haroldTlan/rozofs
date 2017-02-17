@@ -1243,7 +1243,7 @@ int main(int argc, char *argv[]) {
         { "quiet", no_argument, 0, 'q'},
         { "instance", required_argument, 0, 'i'},	
         { "throughput", required_argument, 0, 't'},
-        { "nolog", required_argument, 0, 'N'},	
+        { "nolog", no_argument, 0, 'N'},	
         { 0, 0, 0, 0}
     };
 
@@ -1256,7 +1256,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "hH:c:s:r:i:q:f:t:", long_options, &option_index);
+      c = getopt_long(argc, argv, "NhH:c:s:r:i:q:f:t:", long_options, &option_index);
 
       if (c == -1)
           break;
