@@ -544,6 +544,7 @@ static int do_cluster_distribute_strict_round_robin(uint8_t layout,int site_idx,
   uint8_t rozofs_safe=0;
   uint64_t    selectedBitMap[4];
   uint64_t    locationBitMap[4];
+  int         weight;
   
 
   rozofs_get_rozofs_invers_forward_safe(layout,&rozofs_inverse,&rozofs_forward,&rozofs_safe);
@@ -691,6 +692,13 @@ spare:
   ** Get the next forward sid
   */
   loop = 0;
+  /* 
+  ** The probability to receive a spare projection depends on the rank in the list of spare
+  ** so the weigth given to a spare role depends on the rank
+  ** in layout 1: 1rst spare has a weigth of 2, 2nd spare a weigth of 1
+  ** in layout 2: 1rst spare has a weigth of 4, 2nd spare a weigth of 3...
+  */
+  weight = rozofs_safe-rozofs_forward; 
   while (loop < 4) {
     loop++;
 
@@ -723,7 +731,10 @@ spare:
       */
       ROZOFS_BITMAP64_SET(sid,selectedBitMap);
       ROZOFS_BITMAP64_SET(location_bit,locationBitMap);
-      vs->spareCounter++;	
+      vs->spareCounter += weight;
+      if (weight > 1) {
+        weight--;	// Next spare will have lower weigth since less probability to receive a spare prj
+      }  
       sids[nb_selected++] = sid;
 
       DISTTRACE("sid%d is #%d selected with location bit %x with status %d", vs->sid, nb_selected, location_bit, vs->spareCounter);
