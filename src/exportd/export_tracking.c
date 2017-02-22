@@ -2142,6 +2142,13 @@ int export_mknod_multiple(export_t *e,uint32_t site_number,fid_t pfid, char *nam
         goto error;
 
     /*
+    ** Check parent GID bit
+    */
+    if (plv2->attributes.s.attrs.mode & S_ISGID) {
+      gid   = plv2->attributes.s.attrs.gid;
+    }  
+    
+    /*
     ** search for rozofs key in the filename
     */
     if (strncmp(name,".@rozofs-mf@",12) == 0)
@@ -2516,6 +2523,12 @@ int export_mknod(export_t *e,uint32_t site_number,fid_t pfid, char *name, uint32
     if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, pfid)))
         goto error;
 
+    /*
+    ** Check parent GID bit
+    */
+    if (plv2->attributes.s.attrs.mode & S_ISGID) {
+      gid   = plv2->attributes.s.attrs.gid;
+    }  
     if (strncmp(name,".@rozofs-mf@",12) == 0)
     {
       int ret;
@@ -2816,6 +2829,15 @@ int export_mkdir(export_t *e, fid_t pfid, char *name, uint32_t uid,
     // get the lv2 parent
     if (!(plv2 = EXPORT_LOOKUP_FID(e->trk_tb_p,e->lv2_cache, pfid)))
         goto error;
+        
+    /*
+    ** Check parent GID bit
+    */
+    if (plv2->attributes.s.attrs.mode & S_ISGID) {
+      gid   = plv2->attributes.s.attrs.gid;
+      mode |= S_ISGID;
+    }        
+    
     /*
     ** load the root_idx bitmap of the old parent
     */
