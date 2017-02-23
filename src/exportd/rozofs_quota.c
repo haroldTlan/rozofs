@@ -374,7 +374,7 @@ rozofs_qt_cache_entry_t *rozofs_qt_cache_get(rozofs_qt_cache_t *cache,
 	 /*
 	 ** warn but keep the data in cache
 	 */
-	 severe("quota writeback cache write failure");
+	 severe("quota writeback cache read failure qid/type %u/%u", entry->dquot.key.s.qid, entry->dquot.key.s.type);
 	 free(entry);
 	 return NULL;
       }
