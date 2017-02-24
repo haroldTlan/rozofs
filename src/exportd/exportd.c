@@ -2091,6 +2091,11 @@ int main(int argc, char *argv[]) {
                 break;
         }
     }
+    
+    /*
+    ** Do not log each remote end disconnection
+    */
+    af_unix_socket_no_disconnect_log();
        
     /*
     ** read common config file
