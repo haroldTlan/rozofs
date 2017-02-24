@@ -447,6 +447,43 @@ void show_layout(char * argv[], uint32_t tcpRef, void *bufRef) {
 } 
 /*__________________________________________________________________________
 */  
+void man_prj_size(char * pt) {
+  pt += sprintf(pt,"This command shows the layout infomation as well as the effective\n");
+  pt += sprintf(pt,"projection sizes on disk. Without argument the current layout as well\n");
+  pt += sprintf(pt,"as block size is used. An other layout and/or block size can be given\n");
+  pt += sprintf(pt,"  prjsize [l <layout>] [b <bsize>]\n");
+  pt += sprintf(pt,"bsize is 0 for a 4096 block size or 1 for a 8192 block size.\n");
+  
+}
+void show_prj_size(char * argv[], uint32_t tcpRef, void *bufRef) {
+  int idx;
+  int bsize;
+  int layout;
+  
+  layout = exportclt.layout;
+  bsize  = exportclt.bsize;
+
+
+  idx = 1;
+  while ((argv[idx] != NULL)&&(argv[idx+1] != NULL)) {
+       
+    if (strcmp(argv[idx],"b")==0) {
+      sscanf(argv[idx+1],"%d",&bsize);
+      idx += 2;
+      continue;
+    }
+    if (strcmp(argv[idx],"l")==0) {
+      sscanf(argv[idx+1],"%d",&layout);
+      idx += 2;
+      continue;
+    }    
+  }  
+  
+  rozofs_display_prjsize( uma_dbg_get_buffer(), layout, bsize);
+  uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());         
+} 
+/*__________________________________________________________________________
+*/  
 static char * show_rotate_modulo_help(char * pChar) {
   pChar += sprintf(pChar,"usage:\n");
   pChar += sprintf(pChar,"rotateModulo set <value> : set new rotate modulo value\n");
@@ -1820,6 +1857,7 @@ int fuseloop(struct fuse_args *args, int fg) {
     uma_dbg_addTopic("ientry", show_ientry);
     rozofs_layout_initialize();    
     uma_dbg_addTopic("layout", show_layout);
+    uma_dbg_addTopicAndMan("prjsize", show_prj_size, man_prj_size, 0);
     uma_dbg_addTopicAndMan("trc_fuse", show_trc_fuse,man_trc_fuse,UMA_DBG_OPTION_RESET);
     uma_dbg_addTopic("xattr_flt", show_xattr_flt);
     uma_dbg_addTopic("xattr", rozofs_disable_xattr);
