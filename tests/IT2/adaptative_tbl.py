@@ -62,7 +62,8 @@ class big_title:
     start = int(l)/2
     end   = int(l)-start
     
-    line+=self.effect+bold+reverse
+    if self.effect != None:
+      line+=self.effect+bold+reverse
     for i in range(start): line+=" "
     line+=self.text
     for i in range(end): line+=" " 
