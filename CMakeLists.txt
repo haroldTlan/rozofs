@@ -17,10 +17,9 @@
 # Project settings.
 #
 cmake_minimum_required(VERSION 2.6)
-project(rozofs C)
 set(MAJOR "2")
 set(MINOR "2")
-set(REVISION "~alpha15")
+set(REVISION "~alpha16")
 set(VERSION "${MAJOR}.${MINOR}.${REVISION}")
 
 # cmake_get.sh enables to populate some CMAKE variables

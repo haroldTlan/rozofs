@@ -207,6 +207,10 @@ This parameter gives in minutes the delay between two spare file restoring attem
 .TP 
 .SS spare_restore_read_throughput
 This parameter is the maximum network/disk bandwidth that the spare file restoring process will take to run.  
+.SS min_metadata_inodes
+Minimum number of inodes that must be available on metadata device to allow a mknod/mkdir operation (default 256K)
+.SS min_metadata_MB
+Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation (default 2048 MB)
 .SH EXAMPLE
 .PP
 .nf

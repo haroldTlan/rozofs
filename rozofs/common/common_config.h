@@ -95,6 +95,10 @@ typedef struct _common_config_t {
   int32_t     disable_sync_attributes;
   // Minimum delay between the deletion request and the effective projections deletion
   int32_t     deletion_delay;
+  // Minimum number of inodes that must be available on metadata device to allow a mknod/mkdir operation
+  int32_t     min_metadata_inodes;
+  // Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation
+  int32_t     min_metadata_MB;
 
   /*
   ** client scope configuration parameters

@@ -106,86 +106,7 @@ typedef struct _dirent_dir_root_idx_bitmap_t
 int export_recycle_remove_from_tracking_file(export_t * e,recycle_mem_t *entry);
 
 
-/*
-**__________________________________________________________________
-
-     Control meta-data SSD free size
-     
-     WARNING : Every export is supposed to reside on the same device
-     
-     
-**__________________________________________________________________
-*/
-
-#define          ONE_SECOND_TICK_CREDIT 1000000LL
-
-static inline int export_metadata_device_full(export_t *e, uint64_t microsec) {
-  struct statfs    buf;
-  uint32_t         count;
-
-  /*
-  ** Is it time to re-evaluate the SSD free size
-  */
-  if (microsec < e->meta_next_microsec) {
-    return e->meta_full;
-  }
-  
-  /*
-  ** Re avaluate the SSD left size
-  */
-  if (statfs(e->root,&buf) < 0) return e->meta_full;
-  
-  e->meta_full = 0;
-  
-  if (buf.f_ffree > 0xFFFFFFFF) {
-    e->meta_inode = 0xFFFFFFFF;
-  }  
-  else {
-    e->meta_inode = buf.f_ffree;
-  }
-  
-  if (buf.f_bfree > 0xFFFFFFFF) {
-    e->meta_block = 0xFFFFFFFF;
-  }  
-  else {
-    e->meta_block = buf.f_bfree;
-  }    
-  
-  if (e->meta_inode < e->meta_block) {
-    count = e->meta_inode;
-  }
-  else {
-    count = e->meta_block;
-  }  
-
-  /*
-  ** Full of resources
-  */
-  if (count > 128) {
-    e->meta_next_microsec = microsec + (128*ONE_SECOND_TICK_CREDIT);
-    return 0;
-  }
-  
-  /*
-  ** Enough resources 
-  */  
-  if (count > 2) {
-    e->meta_next_microsec = microsec + (ONE_SECOND_TICK_CREDIT*count);
-    return 0;
-  } 
-  
  
-  e->meta_next_microsec = microsec + (ONE_SECOND_TICK_CREDIT/2); 
-  if (count == 1) {
-    return 0;
-  } 
-
-  /*
-  ** Meta data fulle
-  */
-  e->meta_full = 1;    
-  return 1;
-}   
 
 /*
 **__________________________________________________________________
@@ -1392,10 +1313,7 @@ int export_initialize(export_t * e, volume_t *volume, uint8_t layout, ROZOFS_BSI
     /*
     ** Meta-data device resource supervision
     */
-    e->meta_full  = 0;    
-    e->meta_next_microsec = 0;
-    e->meta_inode = 0;
-    e->meta_block = 0;    
+    memset(&e->space_left, 0, sizeof(meta_resources_t));
 
     
     /*

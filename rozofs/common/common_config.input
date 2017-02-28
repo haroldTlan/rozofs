@@ -172,3 +172,7 @@ BOOL 	client 	async_setattr	            False
 INT     client statfs_period 	10 
 // Spare file restoring : Number of spare file context in 1K unit
 INT     storage spare_restore_spare_ctx 16
+// Minimum number of inodes that must be available on metadata device to allow a mknod/mkdir operation
+INT     export min_metadata_inodes             262144
+// Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation
+INT     export min_metadata_MB                   2048
