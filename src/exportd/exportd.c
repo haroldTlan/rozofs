@@ -1367,6 +1367,7 @@ void show_metadata_device(char * argv[], uint32_t tcpRef, void *bufRef)  {
   char     * pChar = uma_dbg_get_buffer();
   uint32_t   eid;
   export_t * e;
+  meta_resources_t * pRes;
 
   eid = 1;  
   if (argv[1] != NULL) {
@@ -1379,14 +1380,27 @@ void show_metadata_device(char * argv[], uint32_t tcpRef, void *bufRef)  {
     uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer()); 
     return;  	     
   }
+  export_metadata_check_device(e);
+  
+  pRes = &e->space_left;
   
    
   pChar += sprintf(pChar,"{ \"meta-data\" : {\n");
-  pChar += sprintf(pChar,"     \"eid\"        : %d,\n",eid);    
-  pChar += sprintf(pChar,"     \"full\"       : \"%s\",\n",e->meta_full?"YES":"NO");  
-  pChar += sprintf(pChar,"     \"inode-free\" : %u,\n",e->meta_inode);
-  pChar += sprintf(pChar,"     \"block-free\" : %u\n",e->meta_block);
-  pChar += sprintf(pChar,"  }\n}\n");  
+  pChar += sprintf(pChar,"     \"eid\"             : %d,\n",eid);    
+  pChar += sprintf(pChar,"     \"full\"            : \"%s\",\n",pRes->full?"YES":"NO");  
+  pChar += sprintf(pChar,"     \"full counter\"    : %llu,\n",pRes->full_counter);
+  pChar += sprintf(pChar,"     \"fstat errors\"    : %llu,\n",pRes->statfs_error);
+  pChar += sprintf(pChar,"     \"inodes\" : {\n");
+  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",pRes->inodes.total);
+  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",pRes->inodes.free);
+  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",common_config.min_metadata_inodes);
+  pChar += sprintf(pChar,"        \"depletion\" : \"%s\"\n",common_config.min_metadata_inodes>pRes->inodes.free ?"YES":"NO");
+  pChar += sprintf(pChar,"     },\n     \"sizeMB\" : {\n");
+  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",pRes->sizeMB.total);
+  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",pRes->sizeMB.free);
+  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",common_config.min_metadata_MB);
+  pChar += sprintf(pChar,"        \"depletion\" : \"%s\"\n",common_config.min_metadata_MB>pRes->sizeMB.free ?"YES":"NO");
+  pChar += sprintf(pChar,"     }\n  }\n}\n"); 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	     
 }
 /*

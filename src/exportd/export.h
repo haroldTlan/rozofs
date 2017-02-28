@@ -38,6 +38,7 @@
 #include <sys/stat.h>
 #include <uuid/uuid.h>
 #include <sys/param.h>
+#include <sys/vfs.h> 
 
 #include <rozofs/rozofs.h>
 #include <rozofs/common/dist.h>
@@ -159,6 +160,23 @@ typedef struct expgw_entry {
 */
 #define EXPORT_GEO_MAX_BIT 1
 #define EXPORT_GEO_MAX_CTX (1<<EXPORT_GEO_MAX_BIT)
+
+/*
+** Metadata device resources
+*/
+typedef struct _metadat_resource_t {
+  uint64_t  total;         //<* Maximum capacity of the device
+  uint64_t  free ;         //<* Current free capacity     
+} metadat_resource_t;
+
+typedef struct _meta_resources_t {
+  uint8_t   full;          //<* Flash full indicator    
+  uint64_t  next_microsec; //<* When to retry a statfs on flash
+  uint64_t  full_counter;  //<* Nb times full is returned on mknod/mkdir    
+  uint64_t  statfs_error;  //<* Nb times the statfs returned an error   
+  metadat_resource_t   inodes;
+  metadat_resource_t   sizeMB;
+} meta_resources_t;
 /** export stucture
  *
  */
@@ -169,12 +187,9 @@ typedef struct export {
     char root[PATH_MAX]; ///< absolute path of the storage root
     uint8_t layout; ///< layout
     /*
-    ** To check whether meta-data SSD is fulle 
+    ** To check metadat device resources
     */
-    uint8_t   meta_full;    
-    uint64_t  meta_next_microsec;
-    uint32_t  meta_inode;
-    uint32_t  meta_block;    
+    meta_resources_t   space_left;
     
     uint64_t squota; ///< soft quota in blocks
     uint64_t hquota; ///< hard quota in blocks
@@ -974,4 +989,90 @@ char *export_get_config_file_path();
  * @return: the address of the allocated structure
  */
 rmfentry_t * export_alloc_rmentry(rmfentry_disk_t * trash_entry);
+/*
+**__________________________________________________________________
+
+     Control meta-data SSD free size     
+     
+**__________________________________________________________________
+*/
+#define          ONE_SECOND_TICK_CREDIT 1000000LL
+
+static inline int export_metadata_check_device(export_t *e) {
+  struct statfs      buf;
+  uint64_t           val;
+  meta_resources_t * pRes = &e->space_left;
+  
+  /*
+  ** Re avaluate the SSD left size
+  */
+  if (statfs(e->root,&buf) < 0) {
+    pRes->statfs_error++; // Count the statfs errors
+    return pRes->full;
+  }
+  
+  /*
+  ** A priori the device is not full
+  */
+  pRes->full   = 0;  
+
+  pRes->inodes.free  = buf.f_ffree;
+  pRes->inodes.total = buf.f_files;
+  
+  pRes->sizeMB.free  = buf.f_bavail/1024;
+  pRes->sizeMB.total = buf.f_blocks/1024;  
+  
+  /*
+  ** Which resource is the smaller now
+  */
+  if (pRes->inodes.free < common_config.min_metadata_inodes) {
+    pRes->full = 1; 
+    return 1;
+  }  
+  if (pRes->sizeMB.free < common_config.min_metadata_MB) {
+    pRes->full = 1; 
+    return 1;
+  }  
+ 
+  return 0;
+}   
+static inline int export_metadata_device_full(export_t *e, uint64_t microsec) {
+  meta_resources_t * pRes = &e->space_left;
+
+  /*
+  ** Is it time to re-evaluate the SSD free size
+  */
+  if (microsec < pRes->next_microsec) {
+    return pRes->full;
+  }
+  
+  if (export_metadata_check_device(e)) {
+    pRes->full_counter++;
+    return 1;
+  }  
+    
+  /*
+  ** 8 times the limit. We are good for 32 secondes
+  */
+  if ((pRes->inodes.free  > (8*common_config.min_metadata_inodes))
+  &&   (pRes->sizeMB.free > (8*common_config.min_metadata_MB))) {
+    pRes->next_microsec = microsec + (32*ONE_SECOND_TICK_CREDIT);
+    return 0;
+  }
+  
+  /*
+  ** 2 times the limit. We are good 8 seconds 
+  */  
+  if ((pRes->inodes.free  > (2*common_config.min_metadata_inodes))
+  &&   (pRes->sizeMB.free > (2*common_config.min_metadata_MB))) {
+    pRes->next_microsec = microsec + (ONE_SECOND_TICK_CREDIT*8);
+    return 0;
+  } 
+  
+  /*
+  ** We are good for 1/2 sec
+  */   
+  pRes->next_microsec = microsec + (ONE_SECOND_TICK_CREDIT/2);   
+  return 0;
+}   
 #endif
