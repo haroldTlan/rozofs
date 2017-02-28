@@ -157,3 +157,7 @@ BOOL 	client 	client_xattr_cache	            False
 BOOL 	client 	async_setattr	            False
 // statfs period in seconds. minimum is 0.
 INT     client statfs_period 	10 
+// Minimum number of inodes that must be available on metadata device to allow a mknod/mkdir operation
+INT     export min_metadata_inodes             262144
+// Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation
+INT     export min_metadata_MB                   2048
