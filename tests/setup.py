@@ -333,7 +333,7 @@ class sid_class:
     mark="storage_c%s_s%s_%s"%(self.cid.cid,self.sid,device)
     
     if os.path.exists(path): return
-    rozofs.create_loopback_device(path,rozofs.disk_size_mb,mark)
+    rozofs.create_loopback_device(path,mark)
 
   def delete_device_file(self,device,h):
 
@@ -1292,7 +1292,7 @@ class rozofs_class:
     for idx in range(0,4096):
       path="%s/devices/spare%s"%(self.get_config_path(),idx)
       if not os.path.exists(path):
-        rozofs.create_loopback_device(path,rozofs.disk_size_mb,"rozofs_spare",mark)            
+        rozofs.create_loopback_device(path,"rozofs_spare",mark)            
         return
     report("No free spare number for spare device file")
                
