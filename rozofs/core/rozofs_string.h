@@ -278,6 +278,101 @@ static inline int rozofs_string_append(char * pChar, char * new_string) {
 }
 /*
 **___________________________________________________________
+** Set display in underscore
+**
+** @param pChar       The string that is being built
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_set_underscore(char * pChar) {
+  return rozofs_string_append(pChar,"\033[4m");
+}
+/*
+**___________________________________________________________
+** Set display in bold
+**
+** @param pChar       The string that is being built
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_set_bold(char * pChar) {
+  return rozofs_string_append(pChar,"\033[1m");
+}
+/*
+**___________________________________________________________
+** Set display with inverse effect
+**
+** @param pChar       The string that is being built
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_set_inverse(char * pChar) {
+  return rozofs_string_append(pChar,"\033[7m");
+}
+/*
+**___________________________________________________________
+** Set display with default effects
+**
+** @param pChar       The string that is being built
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_set_default(char * pChar) {
+  return rozofs_string_append(pChar,"\033[0m");
+}
+/*
+**___________________________________________________________
+** Append a bold string and add a 0 at the end
+**
+**
+** @param pChar       The string that is being built
+** @param new_string  The string to append. Must have an ending 0
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_append_bold(char * pChar, char * new_string) {
+  int len = 0;
+  len += rozofs_string_set_bold(&pChar[len]);
+  len += rozofs_string_append(&pChar[len],new_string);
+  len += rozofs_string_set_default(&pChar[len]);
+  return len;
+}
+/*
+**___________________________________________________________
+** Append an underscored string and add a 0 at the end
+**
+**
+** @param pChar       The string that is being built
+** @param new_string  The string to append. Must have an ending 0
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_append_underscore(char * pChar, char * new_string) {
+  int len = 0;
+  len += rozofs_string_set_underscore(&pChar[len]);
+  len += rozofs_string_append(&pChar[len],new_string);
+  len += rozofs_string_set_default(&pChar[len]);
+  return len;
+}
+/*
+**___________________________________________________________
+** Append an inversed string and add a 0 at the end
+**
+**
+** @param pChar       The string that is being built
+** @param new_string  The string to append. Must have an ending 0
+**
+** @retval the size added to the built string
+*/
+static inline int rozofs_string_append_inverse(char * pChar, char * new_string) {
+  int len = 0;
+  len += rozofs_string_set_inverse(&pChar[len]);
+  len += rozofs_string_append(&pChar[len],new_string);
+  len += rozofs_string_set_default(&pChar[len]);
+  return len;
+}
+/*
+**___________________________________________________________
 ** Append a string, padd with ' ' on a given size
 ** and add a 0 at the end
 **

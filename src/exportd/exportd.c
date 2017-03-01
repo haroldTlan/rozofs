@@ -1478,8 +1478,29 @@ static void exportd_release() {
 **__________________________________________________________________
 */
 void show_metadata_device_usage(char *pChar) {
-  pChar += sprintf(pChar,"Enable to check whether meta-data device lacks of resources\n");
-  pChar += sprintf(pChar,"usage : metadata <eid>\n");
+  pChar += rozofs_string_append           (pChar,"Checking metadata device resources\n");
+  pChar += rozofs_string_append_underscore(pChar,"\nUsage:\n");
+  pChar += rozofs_string_append_bold      (pChar,"\tmetadata  [<eid>]\n");
+  pChar += rozofs_string_append           (pChar,"\tto display resources of device of export <eid>\n\tDefault export is 1\n");
+  pChar += rozofs_string_append_underscore(pChar,"\nDisplay:\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\teid");
+  pChar += rozofs_string_append           (pChar,"\t\texport identifier\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tfull");
+  pChar += rozofs_string_append           (pChar,"\t\twhether ENOSPC would be returned on mkdir/mknod\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tfull counter");
+  pChar += rozofs_string_append           (pChar,"\t# of occurences of ENOSPC responses to mknod/mkdir\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tfstat errors");
+  pChar += rozofs_string_append           (pChar,"\t# of occurences of fstat() errors\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\tinodes/sizeMB");
+  pChar += rozofs_string_append           (pChar,"\tinformation about device inodes or size in MB\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t . total");
+  pChar += rozofs_string_append           (pChar,"\ttotal <number of inode/size in MB> of the device\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t . free");
+  pChar += rozofs_string_append           (pChar,"\t\tavailable <number of inode/size in MB> of the device\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t . mini");
+  pChar += rozofs_string_append           (pChar,"\t\tminimal allowed value to process mknod/mkdir\n");  
+  pChar += rozofs_string_append_bold      (pChar,"\t . depletion");
+  pChar += rozofs_string_append           (pChar,"\twhether an <inode/size> depletion is running\n"); 
 }
 /*
 **__________________________________________________________________
