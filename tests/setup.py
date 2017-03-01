@@ -333,7 +333,7 @@ class sid_class:
     mark="storage_c%s_s%s_%s"%(self.cid.cid,self.sid,device)
     
     if os.path.exists(path): return
-    rozofs.create_loopback_device(path,mark)
+    rozofs.new_create_loopback_device(path,rozofs.disk_size_mb,mark)
 
   def delete_device_file(self,device,h):
 
@@ -552,7 +552,7 @@ class mount_point_class:
     options += " -o rozofsnbstorcli=%s"%(rozofs.nb_storcli)
     options += " -o rozofssparestoragems=%s"%(self.spare_tmr_ms)
     options += " -o auto_unmount"
-  
+    options += " -o suid"
     options += " -o site=%s"%(self.site)
     if self.instance != 0: options += " -o instance=%s"%(self.instance)
     if rozofs.read_mojette_threads == True: options += " -o mojThreadRead=1"
@@ -693,7 +693,7 @@ class export_class:
     self.squota= quota            
 
   def get_root_path(self):
-    return "%s/export_%s"%(rozofs.get_config_path(),self.eid)  
+    return "%s/export/export_%s"%(rozofs.get_config_path(),self.eid)  
      
   def add_mount(self,site=0):
     m = mount_point_class(self,self.layout,site)
@@ -1079,7 +1079,13 @@ class rozofs_class:
     self.deletion_delay = None
     self.trashed_file_per_run = 100
     self.spare_restore_loop_delay = 15
-
+    self.metadata_size = None;
+    self.min_metadata_inodes = None
+    self.min_metadata_MB = None
+    
+  def set_min_metadata_inodes(self,val): self.min_metadata_inodes = val
+  def set_min_metadata_MB(self,val): self.min_metadata_MB = val
+  def set_metadata_size(self,size): self.metadata_size = size;
   def set_set_spare_restore_loop_delay(self,number): self.spare_restore_loop_delay = number  
   def set_site_number(self,number): self.site_number    
   def set_device_automount(self): 
@@ -1126,7 +1132,12 @@ class rozofs_class:
       
   def get_config_path(self):
     path = "%s/SIMU"%(os.getcwd())
-    if not os.path.exists(path): os.makedirs(path)
+    if not os.path.exists(path): 
+      os.makedirs(path)
+    if not os.path.exists("%s/export"%(path)):  
+      os.makedirs("%s/export"%(path))
+    if not os.path.exists("%s/devices"%(path)):    
+      os.makedirs("%s/devices"%(path))      
     return path
     
   def core_dir(self)        :
@@ -1217,6 +1228,39 @@ class rozofs_class:
     os.system("umount -f %s  > /dev/null 2>&1"%(tmpdir))
     syslog.syslog("Created %s -> %s -> %s"%(path,loop,mark))	  
     return  	 
+
+  def create_export_loopback_device(self,path,mount,sizeMB):  
+    if sizeMB == None: return
+    
+    # Need a working directory
+    os.system("umount -f %s  > /dev/null 2>&1"%(mount))
+    os.system("mkdir -p %s "%(mount))
+
+    # Find out a free loop back device to map on it
+    string="losetup -f "
+    parsed = shlex.split(string)
+    cmd = subprocess.Popen(parsed, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output = cmd.communicate()
+    if len(output) < 1:
+      log( "Can not find /dev/loop for %s"%(path))
+      return
+    loop=output[0].split('\n')[0]
+    report("%sMB %-12s %s -> %s"%(sizeMB,loop,path,mount))
+      
+    # Create the file with the given path
+    os.system("dd if=/dev/zero of=%s bs=1MB count=%s > /dev/null 2>&1"%(path,sizeMB))
+    
+    # Bind the loop back device to the file    
+    string="losetup %s %s "%(loop,path)
+    os.system(string)
+    
+    # Format it and mount it on the working directory
+    os.system("mkfs.ext4 -q %s"%(loop))
+    os.system("mount -t ext4 %s %s"%(loop,mount))
+    syslog.syslog("Created %s -> %s -> %s"%(path,loop,mount))
+    time.sleep(2)	  
+    return  	     
+
     
   def delete_loopback_device(self,path):  
     devFile = ""
@@ -1248,7 +1292,7 @@ class rozofs_class:
     for idx in range(0,4096):
       path="%s/devices/spare%s"%(self.get_config_path(),idx)
       if not os.path.exists(path):
-        rozofs.create_loopback_device(path,"rozofs_spare",mark)            
+        rozofs.new_create_loopback_device(path,rozofs.disk_size_mb,"rozofs_spare",mark)            
         return
     report("No free spare number for spare device file")
                
@@ -1285,6 +1329,10 @@ class rozofs_class:
     display_config_int("spare_restore_loop_delay",rozofs.spare_restore_loop_delay);
     display_config_int("storio_fidctx_ctx",16)   
     display_config_int("trashed_file_per_run",rozofs.trashed_file_per_run)
+    if rozofs.min_metadata_inodes != None:
+      display_config_int("min_metadata_inodes",rozofs.min_metadata_inodes)
+    if rozofs.min_metadata_MB != None:
+      display_config_int("min_metadata_MB",rozofs.min_metadata_MB)
     
   def create_common_config(self):
     try: os.remove('/usr/local/etc/rozofs/rozofs.conf');
@@ -1308,8 +1356,11 @@ class rozofs_class:
   def delete_config(self):
     global hosts
     exportd.delete_config()
+    mount="%s/export"%(rozofs.get_config_path())    
+    os.system("umount -f %s > /dev/null 2>&1"%(mount))  
     for h in hosts: h.delete_config()
     geomgr.delete_config()
+      
 
   def display(self):
     exportd.display()
@@ -1366,6 +1417,11 @@ class rozofs_class:
     geomgr.start()
 
   def configure(self):
+    # Case of a loop device for metadata
+    if rozofs.metadata_size != None:
+      path="%s/devices/exportd"%(rozofs.get_config_path())
+      mount="%s/export"%(rozofs.get_config_path())
+      rozofs.create_export_loopback_device(path,mount,rozofs.metadata_size)  
     self.create_path()
     self.create_config()   
        

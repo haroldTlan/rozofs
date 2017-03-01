@@ -85,6 +85,12 @@ def addExport(vol,layout=None):
 
     
 #_____________________________________ 
+
+# Set metadata device characteristics
+#rozofs.set_metadata_size(200)
+rozofs.set_min_metadata_inodes(1000)
+rozofs.set_min_metadata_MB(5)
+
 georep = False
 #georep = True
 
