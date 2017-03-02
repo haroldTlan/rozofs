@@ -436,7 +436,31 @@ static inline int rozofs_string_padded_append(char * pChar, int size, rozofs_ali
   *pChar = 0;
   return size;
 }
-
+/*
+**___________________________________________________________
+** Append a string, padd with ' ' on a given size
+** and add a 0 at the end
+**
+**     sprintf(pChar,"%-12s",new_string) 
+**  -> rozofs_string_padded_append(pChar, 12, rozofs_right_alignment,new_string)
+**
+**     sprintf(pChar,"%16s",new_string)
+**  -> rozofs_string_padded_append(pChar, 16, rozofs_left_alignment,new_string)
+**
+** @param pChar       The string that is being built
+** @param size        The total size to write to the built string
+** @param alignment   Left/right alignment
+** @param new_string  The string to append. Must have an ending 0
+**
+** @retval the size added to the string
+*/
+static inline int rozofs_string_padded_append_bold(char * pChar, int size, rozofs_alignment_e alignment, char * new_string) {
+  int len = 0;
+  len += rozofs_string_set_bold(&pChar[len]);
+  len += rozofs_string_padded_append(&pChar[len],size,alignment,new_string);
+  len += rozofs_string_set_default(&pChar[len]);
+  return len;
+}  
 /*
 **___________________________________________________________
 ** Append an end of line and a 0 at the end

@@ -34,10 +34,13 @@
 **
 */
 void man_common_config(char * pChar) {
-  pChar += rozofs_string_append(pChar,"cconf is related to the common_config configuration.\n");
-  pChar += rozofs_string_append(pChar,"cconf            displays the whole configuration.\n");
-  pChar += rozofs_string_append(pChar,"cconf <scope>    displays only the <scope> configuration part.\n");
-  pChar += rozofs_string_append(pChar,"cconf reload     reloads and then displays the configuration.\n");
+  pChar += rozofs_string_append_underscore(pChar,"\nUsage:\n");
+  pChar += rozofs_string_append_bold(pChar,"\tcconf");
+  pChar += rozofs_string_append     (pChar,"\t\tdisplays the whole common_config configuration.\n");
+  pChar += rozofs_string_append_bold(pChar,"\tcconf <scope>");
+  pChar += rozofs_string_append     (pChar,"\tdisplays only the <scope> configuration part.\n");
+  pChar += rozofs_string_append_bold(pChar,"\tcconf reload");
+  pChar += rozofs_string_append     (pChar,"\treloads and then displays the configuration.\n");
 }
 /*____________________________________________________________________________________________
 **
@@ -46,29 +49,59 @@ void man_common_config(char * pChar) {
 */
 char * show_common_config_module_global(char * pChar) {
 
-  pChar += rozofs_string_append(pChar,"#\n");
-  pChar += rozofs_string_append(pChar,"# global scope configuration parameters\n");
-  pChar += rozofs_string_append(pChar,"#\n\n");
+  pChar += rozofs_string_append_bold(pChar,"#\n");
+  pChar += rozofs_string_append_bold(pChar,"# ");
+  pChar += rozofs_string_append_bold(pChar,"global");
+  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
+  pChar += rozofs_string_append_bold(pChar,"#\n\n");
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_core_file,1);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Number of core files that each module is allowed to keep.\n");
   pChar += rozofs_string_append(pChar,"// Older core files are kept while newest are removed.	\n");
   COMMON_CONFIG_SHOW_INT_OPT(nb_core_file,1,"0:8");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(core_file_directory,"");
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Directory where the core files are stored.\n");
   COMMON_CONFIG_SHOW_STRING(core_file_directory,"");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(numa_aware,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Enables to take into account the NUMA architecture of the board in \n");
   pChar += rozofs_string_append(pChar,"// order to collocate some RozoFS modules on the same node for memory\n");
   pChar += rozofs_string_append(pChar,"// access efficiency.\n");
   COMMON_CONFIG_SHOW_BOOL(numa_aware,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(storio_slice_number,1024);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Number of slices in the STORIO.\n");
   COMMON_CONFIG_SHOW_INT_OPT(storio_slice_number,1024,"8:(32*1024)");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(file_distribution_rule,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// File distribution mode upon cluster, storages and devices. Check rozofs.conf manual.\n");
   pChar += rozofs_string_append(pChar,"// 0      = size balancing\n");
   pChar += rozofs_string_append(pChar,"// 1      = weigthed round robin\n");
   pChar += rozofs_string_append(pChar,"// 2 or 3 = strict round robin\n");
   COMMON_CONFIG_SHOW_INT_OPT(file_distribution_rule,0,"0:10");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(storio_dscp,46);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// DSCP for exchanges from/to the STORIO.\n");
   COMMON_CONFIG_SHOW_INT_OPT(storio_dscp,46,"0:46");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(export_dscp,34);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// DSCP for exchanges from/to the EXPORTD.\n");
   COMMON_CONFIG_SHOW_INT_OPT(export_dscp,34,"0:34");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -78,47 +111,113 @@ char * show_common_config_module_global(char * pChar) {
 */
 char * show_common_config_module_export(char * pChar) {
 
-  pChar += rozofs_string_append(pChar,"#\n");
-  pChar += rozofs_string_append(pChar,"# export scope configuration parameters\n");
-  pChar += rozofs_string_append(pChar,"#\n\n");
+  pChar += rozofs_string_append_bold(pChar,"#\n");
+  pChar += rozofs_string_append_bold(pChar,"# ");
+  pChar += rozofs_string_append_bold(pChar,"export");
+  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
+  pChar += rozofs_string_append_bold(pChar,"#\n\n");
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trashed_file_per_run,1000);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Max number of file that the exportd can remove from storages in a run.\n");
   pChar += rozofs_string_append(pChar,"// A new run occurs every 2 seconds.\n");
   COMMON_CONFIG_SHOW_INT(trashed_file_per_run,1000);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(trash_high_threshold,1000);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// High trash water mark when FID recycling is activated.\n");
   pChar += rozofs_string_append(pChar,"// When the trash has already this number of files, files are no more\n");
   pChar += rozofs_string_append(pChar,"// deleted but recycled.\n");
   COMMON_CONFIG_SHOW_INT_OPT(trash_high_threshold,1000,"0:1000000");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(fid_recycle,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Whether FID recycling feature is activated.\n");
   COMMON_CONFIG_SHOW_BOOL(fid_recycle,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(export_buf_cnt,128);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   COMMON_CONFIG_SHOW_INT_OPT(export_buf_cnt,128,"32:1024");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(export_attr_thread,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// To activate export writebehind attributes thread.\n");
   COMMON_CONFIG_SHOW_BOOL(export_attr_thread,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(export_versioning,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Support of deleted directory/file versioning.\n");
   COMMON_CONFIG_SHOW_BOOL(export_versioning,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(alloc_estimated_mb,1);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Number of MB to account a file for during file distribution phase\n");
   COMMON_CONFIG_SHOW_INT(alloc_estimated_mb,1);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(client_flock_timeout,30);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Delay from which a rozofsmoun client is declared disconnected and its \n");
   pChar += rozofs_string_append(pChar,"// file locks are automatically removed\n");
   COMMON_CONFIG_SHOW_INT_OPT(client_flock_timeout,30,"15:600");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(mproto_timeout,10);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Time out between export and storage for remove and stat\n");
   COMMON_CONFIG_SHOW_INT_OPT(mproto_timeout,10,"1:60");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(export_temporary_dir,"/tmp");
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Directory to use on the export to build temporary files.\n");
   pChar += rozofs_string_append(pChar,"// Used for instance to build list of files to rebuild.\n");
   COMMON_CONFIG_SHOW_STRING(export_temporary_dir,"/tmp");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(mkdir_ok_instead_of_eexist,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// To activate workaround that make mkdir respond OK instead of EEXIST\n");
   pChar += rozofs_string_append(pChar,"// when the directory is already created \n");
   COMMON_CONFIG_SHOW_BOOL(mkdir_ok_instead_of_eexist,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(mknod_ok_instead_of_eexist,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// To activate workaround that make mknod respond OK instead of EEXIST\n");
   pChar += rozofs_string_append(pChar,"// when the file is already created  \n");
   COMMON_CONFIG_SHOW_BOOL(mknod_ok_instead_of_eexist,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(disable_sync_attributes,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// To disable synchronous write of attributes when set to True\n");
   COMMON_CONFIG_SHOW_BOOL(disable_sync_attributes,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(deletion_delay,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Minimum delay between the deletion request and the effective projections deletion\n");
   COMMON_CONFIG_SHOW_INT(deletion_delay,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(min_metadata_inodes,262144);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Minimum number of inodes that must be available on metadata device to allow a mknod/mkdir operation\n");
   COMMON_CONFIG_SHOW_INT(min_metadata_inodes,262144);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(min_metadata_MB,2048);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation\n");
   COMMON_CONFIG_SHOW_INT(min_metadata_MB,2048);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -128,27 +227,65 @@ char * show_common_config_module_export(char * pChar) {
 */
 char * show_common_config_module_client(char * pChar) {
 
-  pChar += rozofs_string_append(pChar,"#\n");
-  pChar += rozofs_string_append(pChar,"# client scope configuration parameters\n");
-  pChar += rozofs_string_append(pChar,"#\n\n");
+  pChar += rozofs_string_append_bold(pChar,"#\n");
+  pChar += rozofs_string_append_bold(pChar,"# ");
+  pChar += rozofs_string_append_bold(pChar,"client");
+  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
+  pChar += rozofs_string_append_bold(pChar,"#\n\n");
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(wr_ack_on_inverse,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Whether STORCLI acknowleges write request on inverse or forward STORIO responses.\n");
   COMMON_CONFIG_SHOW_BOOL(wr_ack_on_inverse,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(rozofsmount_fuse_reply_thread,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// To activate rozofsmount reply fuse threads.\n");
   COMMON_CONFIG_SHOW_BOOL(rozofsmount_fuse_reply_thread,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(client_fast_reconnect,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// To activate fast reconnect from client to exportd\n");
   COMMON_CONFIG_SHOW_BOOL(client_fast_reconnect,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(archive_file_delay,10);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// delay is minutes after which a file is considered as an archived file (unit is minute)\n");
   COMMON_CONFIG_SHOW_INT_OPT(archive_file_delay,10,"0:3600");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(archive_file_dentry_timeout,30);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// dentry cache timeout for archive file type (unit is second)\n");
   COMMON_CONFIG_SHOW_INT_OPT(archive_file_dentry_timeout,30,"0:300");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(archive_file_attr_timeout,30);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// attribute cache timeout for archive file type (unit is second)\n");
   COMMON_CONFIG_SHOW_INT_OPT(archive_file_attr_timeout,30,"0:300");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(client_xattr_cache,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// When that flag is asserted, the rozofsmount client can cache the extended attributes\n");
   COMMON_CONFIG_SHOW_BOOL(client_xattr_cache,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(async_setattr,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// When that flag is asserted, the rozofsmount client performs setattr in asynchronous mode\n");
   COMMON_CONFIG_SHOW_BOOL(async_setattr,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(statfs_period,10);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// statfs period in seconds. minimum is 0.\n");
   COMMON_CONFIG_SHOW_INT(statfs_period,10);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
 /*____________________________________________________________________________________________
@@ -158,81 +295,199 @@ char * show_common_config_module_client(char * pChar) {
 */
 char * show_common_config_module_storage(char * pChar) {
 
-  pChar += rozofs_string_append(pChar,"#\n");
-  pChar += rozofs_string_append(pChar,"# storage scope configuration parameters\n");
-  pChar += rozofs_string_append(pChar,"#\n\n");
+  pChar += rozofs_string_append_bold(pChar,"#\n");
+  pChar += rozofs_string_append_bold(pChar,"# ");
+  pChar += rozofs_string_append_bold(pChar,"storage");
+  pChar += rozofs_string_append_bold(pChar," scope configuration parameters\n");
+  pChar += rozofs_string_append_bold(pChar,"#\n\n");
+
+  COMMON_CONFIG_IS_DEFAULT_INT(nb_disk_thread,4);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Number of disk threads in the STORIO.\n");
   COMMON_CONFIG_SHOW_INT_OPT(nb_disk_thread,4,"2:64");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(storio_multiple_mode,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Whether STORIO is in multiple (1 STORIO per cluster) \n");
   pChar += rozofs_string_append(pChar,"// or single mode (only 1 STORIO).\n");
   COMMON_CONFIG_SHOW_BOOL(storio_multiple_mode,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(crc32c_check,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Whether CRC32 MUST be checked by STORIO.\n");
   COMMON_CONFIG_SHOW_BOOL(crc32c_check,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(crc32c_generate,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Whether CRC32 MUST be computed by STORIO.\n");
   COMMON_CONFIG_SHOW_BOOL(crc32c_generate,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(crc32c_hw_forced,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Whether CRC32 MUST be absolutly hardware computed by STORIO.\n");
   COMMON_CONFIG_SHOW_BOOL(crc32c_hw_forced,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(allow_disk_spin_down,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Whether STORIO device monitoring should avoid reading from \n");
   pChar += rozofs_string_append(pChar,"// devices when no access have occured for read or write. This\n");
   pChar += rozofs_string_append(pChar,"// enables disk spin down to occur.\n");
   COMMON_CONFIG_SHOW_BOOL(allow_disk_spin_down,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(disk_usage_threshold,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Over which device usage threashold should the STORIO log the event. \n");
   COMMON_CONFIG_SHOW_INT_OPT(disk_usage_threshold,0,"0:100");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(disk_read_threshold,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Over which device read delay threashold should the STORIO log the event. \n");
   COMMON_CONFIG_SHOW_INT(disk_read_threshold,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(disk_write_threshold,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Over which device write delay threashold should the STORIO log the event. \n");
   COMMON_CONFIG_SHOW_INT(disk_write_threshold,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(storio_buf_cnt,128);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Number of STORIO receive buffer.\n");
   COMMON_CONFIG_SHOW_INT_OPT(storio_buf_cnt,128,"32:1024");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(recycle_truncate_blocks,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Number of block to which the chunk files should be truncated on storage \n");
   pChar += rozofs_string_append(pChar,"// node at the time it is recycled.\n");
   COMMON_CONFIG_SHOW_INT(recycle_truncate_blocks,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(storaged_start_script,"");
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Name of an executable file that the storaged should call at startup\n");
   COMMON_CONFIG_SHOW_STRING(storaged_start_script,"");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(device_automount,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Whether the storage has to automount the devices\n");
   COMMON_CONFIG_SHOW_BOOL(device_automount,False);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(device_automount_path,"/srv/rozofs/storages");
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// automount path where the devices should be mounted\n");
   COMMON_CONFIG_SHOW_STRING(device_automount_path,"/srv/rozofs/storages");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(device_automount_option,"");
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Device mounting options\n");
   COMMON_CONFIG_SHOW_STRING(device_automount_option,"");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(storage_temporary_dir,"/tmp");
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Directory to use on the storage node to build temporary files.\n");
   pChar += rozofs_string_append(pChar,"// Used for instance by the rebuild process.\n");
   COMMON_CONFIG_SHOW_STRING(storage_temporary_dir,"/tmp");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(ssh_port,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Port to be used for ssh or scp \n");
   COMMON_CONFIG_SHOW_INT(ssh_port,0);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(ssh_user,"root");
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// User name to be used for ssh or scp \n");
   COMMON_CONFIG_SHOW_STRING(ssh_user,"root");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(ssh_param,"");
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Other ssh/scp parameter (such as key location) \n");
   COMMON_CONFIG_SHOW_STRING(ssh_param,"");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(device_self_healing_process,8);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// self healing : Paralellism factor for device self healing feature\n");
   pChar += rozofs_string_append(pChar,"// i.e the number of process to run rebuild in //\n");
   COMMON_CONFIG_SHOW_INT_OPT(device_self_healing_process,8,"1:64");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(device_selfhealing_delay,15);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// self healing : Fault duration in minutes before device selfhealing starts\n");
   COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_delay,15,"0:10000");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(device_selfhealing_read_throughput,20);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// self healing :  throughput limitation in MB/s per rebuild process in //\n");
   pChar += rozofs_string_append(pChar,"// for reading external projections. The writing on disk is only\n");
   pChar += rozofs_string_append(pChar,"// 1/2 of that in layout 0, 1/4 in layout 1...\n");
   pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
   COMMON_CONFIG_SHOW_INT_OPT(device_selfhealing_read_throughput,20,"0:10000");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(device_selfhealing_mode,"spareOnly");
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// self healing : possible modes\n");
   pChar += rozofs_string_append(pChar,"// spareOnly  only self repair on a spare disk\n");
   pChar += rozofs_string_append(pChar,"// relocate   also repair on remaining disks when no spare available\n");
   COMMON_CONFIG_SHOW_STRING(device_selfhealing_mode,"spareOnly");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_STRING(export_hosts,"");
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Export host names or IP addresses separated with / \n");
   pChar += rozofs_string_append(pChar,"// Required for selfhealing.\n");
   pChar += rozofs_string_append(pChar,"// Required for spare file restoring to its nominal location.\n");
   COMMON_CONFIG_SHOW_STRING(export_hosts,"");
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_BOOL(spare_restore_enable,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Spare file restoring : whether the service is active or not\n");
   COMMON_CONFIG_SHOW_BOOL(spare_restore_enable,True);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_loop_delay,120);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Spare file restoring : how often the process runs  \n");
   COMMON_CONFIG_SHOW_INT(spare_restore_loop_delay,120);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_read_throughput,5);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Spare file restoring : throughput limitation for reading and analyzing spare files in MB/s\n");
   pChar += rozofs_string_append(pChar,"// 0 means no limit\n");
   COMMON_CONFIG_SHOW_INT(spare_restore_read_throughput,5);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(storio_fidctx_ctx,128);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Storio number of FID context in 1K unit\n");
   COMMON_CONFIG_SHOW_INT(storio_fidctx_ctx,128);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
+
+  COMMON_CONFIG_IS_DEFAULT_INT(spare_restore_spare_ctx,16);
+  if (isDefaultValue==0) pChar += rozofs_string_set_bold(pChar);
   pChar += rozofs_string_append(pChar,"// Spare file restoring : Number of spare file context in 1K unit\n");
   COMMON_CONFIG_SHOW_INT(spare_restore_spare_ctx,16);
+  if (isDefaultValue==0) pChar += rozofs_string_set_default(pChar);
   return pChar;
 }
 /*____________________________________________________________________________________________
