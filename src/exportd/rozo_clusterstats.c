@@ -221,6 +221,12 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
    rz_cids_stats_t  *cid_p;
    rz_sids_stats_t  *sid_p;
    
+   /*
+   ** Do not process symlink
+   */
+   if (!S_ISREG(inode_p->s.attrs.mode)) {
+     return 0;
+   }   
 
    if (rozofs_fwd < 0) 
    {
