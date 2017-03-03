@@ -116,6 +116,12 @@ int         search_dir=0;
 ** xatrr or not
 */
 int         has_xattr=-1;
+/*
+** slink ? regular files ?
+*/
+int         exclude_symlink=1;
+int         exclude_regular=0;
+
 
 /*
 **_______________________________________________________________________
@@ -210,6 +216,30 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   char         fullName[ROZOFS_PATH_MAX];
   char        *pChar;
   int          idx;
+
+   if (search_dir==0) {
+     /*
+     ** Exclude symlink
+     */
+     if ((exclude_symlink)&&(S_ISLNK(inode_p->s.attrs.mode))) {
+       return 0;
+     }
+     /*
+     ** Exclude regular files
+     */
+     if ((exclude_regular)&&(S_ISREG(inode_p->s.attrs.mode))) {
+       return 0;
+     }     
+   }   
+   else {
+     /*
+     ** Only process directories
+     */   
+     if (!S_ISDIR(inode_p->s.attrs.mode)) {
+       return 0;
+     }       
+   }
+
 
   /*
   ** PFID must match equal_pfid
@@ -516,6 +546,8 @@ static void usage() {
     printf("\t\033[1m-x,--xattr\033[0m\t\twith xattribute.\n");
     printf("\t\033[1m-X,--noxattr\033[0m\t\twithout xattribute.\n");    
     printf("\t\033[1m-d,--dir\033[0m\t\tis a directory.\n");
+    printf("\t\033[1m-S,--slink\033[0m\t\tinclude symbolink links.\n");
+    printf("\t\033[1m-R,--noreg\033[0m\t\texclude regular files.\n");
     printf("\n\033[1mFIELD:\033[0m\n");
     printf("\t\033[1m-c,--cr8\033[0m\t\tcreation date.\n");
     printf("\t\033[1m-m,--mod\033[0m\t\tmodification date.\n"); 
@@ -554,6 +586,8 @@ static void usage() {
     printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --name --ge captainNemo\033[0m\n");
     printf("Searching directories with more than 100K entries.\n");
     printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --dir --children --ge 100000\033[0m\n");
+    printf("Searching all symbolic links.\n");
+    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --slink --noreg\033[0m\n");
  
 };
 /*
@@ -680,6 +714,8 @@ int main(int argc, char *argv[]) {
         {"name", no_argument, 0, 'n'},        
         {"xattr", no_argument, 0, 'x'}, 
         {"noxattr", no_argument, 0, 'X'},  
+        {"slink", no_argument, 0, 'S'},  
+        {"noreg", no_argument, 0, 'R'},  
         {"lt", required_argument, 0, '<'},
         {"le", required_argument, 0, '-'},
         {"gt", required_argument, 0, '>'},
@@ -694,7 +730,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:hvcmsguClxXdefn", long_options, &option_index);
+      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:hvcmsguClxXdefnSR", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -756,6 +792,12 @@ int main(int argc, char *argv[]) {
               break;   
           case 'X':
               has_xattr = 0;
+              break;                     
+          case 'S':
+              exclude_symlink = 0;
+              break;                     
+          case 'R':
+              exclude_regular = 1;
               break;                     
           /*
           ** Lower or equal
