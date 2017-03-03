@@ -28,7 +28,8 @@ typedef enum _scan_criterie_e {
   SCAN_CRITERIA_CID,    
   SCAN_CRITERIA_NLINK, 
   SCAN_CRITERIA_CHILDREN, 
-  SCAN_CRITERIA_PFID,     
+  SCAN_CRITERIA_PFID,
+  SCAN_CRITERIA_FNAME       
 } SCAN_CRITERIA_E;
 
 SCAN_CRITERIA_E scan_criteria = SCAN_CRITERIA_NONE;
@@ -102,6 +103,12 @@ uint64_t    children_diff  = -1;
 */
 fid_t       fid_null   = {0};
 fid_t       pfid_equal = {0};
+
+/*
+** FNAME
+*/
+char      * fname_equal = NULL;
+char      * fname_bigger = NULL;
 
 int         search_dir=0;
 
@@ -213,6 +220,24 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
     }  
   }
 
+  /*
+  ** Name must match fname_equal
+  */
+  if (fname_equal) {
+    if (strcmp(fname_equal,inode_p->s.fname.name)!= 0) {
+      return 0;
+    }  
+  }
+  
+  /*
+  ** Name must iclude fname_bigger
+  */
+  if (fname_bigger) {
+    if (strstr(inode_p->s.fname.name, fname_bigger)==NULL) {
+      return 0;
+    }  
+  }
+  
   /*
   ** Must have a creation time bigger than cr8_bigger
   */ 
@@ -501,29 +526,34 @@ static void usage() {
     printf("\t\033[1m-l,--link\033[0m\t\tnumber of link.\n"); 
     printf("\t\033[1m-e,--children\033[0m\t\tnumber of children.\n"); 
     printf("\t\033[1m-f,--pfid\033[0m\t\tParent FID (2).\n");
+    printf("\t\033[1m-n,--name\033[0m\t\tfile name (3).\n");
     printf("(1) only --eq or --ne conditions are supported.\n");
     printf("(2) only --eq condition is supported.\n");
+    printf("(3) only --eq or --ge conditions are supported.\n");
     printf("\n\033[1mCONDITIONS:\033[0m\n");              
     printf("\t\033[1m--lt <val>\033[0m\t\tField must be lower than <val>.\n");
     printf("\t\033[1m--le <val>\033[0m\t\tField must be lower or equal than <val>.\n");
     printf("\t\033[1m--gt <val>\033[0m\t\tField must be greater than <val>.\n");
     printf("\t\033[1m--ge <val>\033[0m\t\tField must be greater or equal than <val>.\n");
+    printf("\t\t\t\tFor --name search files whoes name contains <val>.\n");
     printf("\t\033[1m--eq <val>\033[0m\t\tField must be equal to <val>.\n");
     printf("\t\033[1m--ne <val>\033[0m\t\tField must not be equal to <val>.\n");
     printf("\nDates must be expressed as:\n");
     printf(" - YYYY-MM-DD\n - \"YYYY-MM-DD HH\"\n - \"YYYY-MM-DD HH:MM\"\n - \"YYYY-MM-DD HH:MM:SS\"\n");
 
-    printf("\n\033[4mExamples:\033[0m\n\n");
+    printf("\n\033[4mExamples:\033[0m\n");
     printf("Searching files with a size comprised between 76000 and 76100 and having extended attributes.\n");
-    printf("\033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --xattr --size --ge 76000 --le 76100\033[0m\n\n");
+    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --xattr --size --ge 76000 --le 76100\033[0m\n");
     printf("Searching files with a modification date in february 2017 but created before 2017.\n");
-    printf("\033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --mod --ge \"2017-02-01\" --lt \"2017-03-01\" --cr8 --lt \"2017-01-01\"\033[0m\n\n");
+    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --mod --ge \"2017-02-01\" --lt \"2017-03-01\" --cr8 --lt \"2017-01-01\"\033[0m\n");
     printf("Searching files created by user 4501 on 2015 January the 10th in the afternoon.\n");
-    printf("\033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --uid --eq 4501 --cr8 --ge \"2015-01-10 12:00\" --le \"2015-01-11\"\033[0m\n\n");
+    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --uid --eq 4501 --cr8 --ge \"2015-01-10 12:00\" --le \"2015-01-11\"\033[0m\n");
     printf("Searching files owned by group 4321 in directory 00000000-0000-4000-1800-000000000018.\n");
-    printf("\033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --gid --eq 4321 --pfid --eq 00000000-0000-4000-1800-000000000018\033[0m\n\n");
+    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --gid --eq 4321 --pfid --eq 00000000-0000-4000-1800-000000000018\033[0m\n");
+    printf("Searching files whoes name constains captainNemo.\n");
+    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --name --ge captainNemo\033[0m\n");
     printf("Searching directories with more than 100K entries.\n");
-    printf("\033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --dir --children --ge 100000\033[0m\n\n");
+    printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --dir --children --ge 100000\033[0m\n");
  
 };
 /*
@@ -647,6 +677,7 @@ int main(int argc, char *argv[]) {
         {"link", no_argument, 0, 'l'},        
         {"children", no_argument, 0, 'e'},        
         {"pfid", no_argument, 0, 'f'},        
+        {"name", no_argument, 0, 'n'},        
         {"xattr", no_argument, 0, 'x'}, 
         {"noxattr", no_argument, 0, 'X'},  
         {"lt", required_argument, 0, '<'},
@@ -663,7 +694,7 @@ int main(int argc, char *argv[]) {
     while (1) {
 
       int option_index = 0;
-      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:hvcmsguClxXdef", long_options, &option_index);
+      c = getopt_long(argc, argv, "p:<:-:>:+:=:!:hvcmsguClxXdefn", long_options, &option_index);
 
       if (c == -1)
           break;
@@ -714,6 +745,10 @@ int main(int argc, char *argv[]) {
               break;                
           case 'f':
               scan_criteria = SCAN_CRITERIA_PFID;
+              crit = c;
+              break;                
+          case 'n':
+              scan_criteria = SCAN_CRITERIA_FNAME;
               crit = c;
               break;                
           case 'x':   
@@ -778,6 +813,7 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_UID:
                 case SCAN_CRITERIA_CID:
                 case SCAN_CRITERIA_PFID:
+                case SCAN_CRITERIA_FNAME:
                   printf("\nNo %s comparison for -%c\n",comp,crit);     
                   usage();
                   exit(EXIT_FAILURE);  
@@ -865,6 +901,7 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_GID:          
                 case SCAN_CRITERIA_UID:
                 case SCAN_CRITERIA_PFID:
+                case SCAN_CRITERIA_FNAME:
                   printf("\nNo %s comparison for -%c\n",comp,crit);     
                   usage();
                   exit(EXIT_FAILURE);  
@@ -926,6 +963,10 @@ int main(int argc, char *argv[]) {
                     usage();
                     exit(EXIT_FAILURE);
                   } 
+                  break;
+                  
+                case SCAN_CRITERIA_FNAME:
+                  fname_bigger = optarg;
                   break;
                      
                 case SCAN_CRITERIA_GID:          
@@ -1004,6 +1045,7 @@ int main(int argc, char *argv[]) {
                 case SCAN_CRITERIA_UID:
                 case SCAN_CRITERIA_CID:                
                 case SCAN_CRITERIA_PFID:
+                case SCAN_CRITERIA_FNAME:
                   printf("\nNo %s comparison for -%c\n",comp,crit);     
                   usage();
                   exit(EXIT_FAILURE);  
@@ -1101,6 +1143,11 @@ int main(int argc, char *argv[]) {
                     exit(EXIT_FAILURE);
                   }   
                   break;                                                                         
+                  
+                case SCAN_CRITERIA_FNAME:
+                  fname_equal = optarg;
+                  break;                                                                         
+                                                                         
                                                                          
                 default:
                   printf("\nNo criteria defined prior to %s\n",comp);     
@@ -1188,6 +1235,7 @@ int main(int argc, char *argv[]) {
                   break;
                   
                 case SCAN_CRITERIA_PFID:
+                case SCAN_CRITERIA_FNAME:
                   printf("\nNo %s comparison for -%c\n",comp,crit);     
                   usage();
                   exit(EXIT_FAILURE);  
