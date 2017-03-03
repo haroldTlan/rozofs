@@ -254,15 +254,27 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   ** Name must match fname_equal
   */
   if (fname_equal) {
-    if (strcmp(fname_equal,inode_p->s.fname.name)!= 0) {
+    if (inode_p->s.fname.name_type != ROZOFS_FNAME_TYPE_DIRECT) {
       return 0;
     }  
+    if (inode_p->s.fname.len != strlen(fname_equal)) {
+      return 0;
+    }
+    if (strncmp(fname_equal,inode_p->s.fname.name,inode_p->s.fname.len)!= 0) {
+      return 0;
+    }   
   }
   
   /*
-  ** Name must iclude fname_bigger
+  ** Name must include fname_bigger
   */
   if (fname_bigger) {
+    if (inode_p->s.fname.name_type != ROZOFS_FNAME_TYPE_DIRECT) {
+      return 0;
+    }  
+    if (inode_p->s.fname.len < strlen(fname_bigger)) {
+      return 0;
+    }
     if (strstr(inode_p->s.fname.name, fname_bigger)==NULL) {
       return 0;
     }  
@@ -572,7 +584,8 @@ static void usage() {
     printf("\t\033[1m--ne <val>\033[0m\t\tField must not be equal to <val>.\n");
     printf("\nDates must be expressed as:\n");
     printf(" - YYYY-MM-DD\n - \"YYYY-MM-DD HH\"\n - \"YYYY-MM-DD HH:MM\"\n - \"YYYY-MM-DD HH:MM:SS\"\n");
-
+    printf("\n\033[4mWARNING:\033[0m\n");
+    printf("Name search only works for file whoes name length is under %d characters.\n",ROZOFS_OBJ_NAME_MAX);    
     printf("\n\033[4mExamples:\033[0m\n");
     printf("Searching files with a size comprised between 76000 and 76100 and having extended attributes.\n");
     printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --xattr --size --ge 76000 --le 76100\033[0m\n");
@@ -588,7 +601,7 @@ static void usage() {
     printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --dir --children --ge 100000\033[0m\n");
     printf("Searching all symbolic links.\n");
     printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --slink --noreg\033[0m\n");
- 
+     
 };
 /*
 **_______________________________________________________________________
@@ -1008,6 +1021,11 @@ int main(int argc, char *argv[]) {
                   break;
                   
                 case SCAN_CRITERIA_FNAME:
+                  if (strlen(optarg) >= ROZOFS_OBJ_NAME_MAX) {
+                    printf("\nInput name is too long (%d)\n",ROZOFS_OBJ_NAME_MAX);     
+                    usage();
+                    exit(EXIT_FAILURE);                    
+                  }                
                   fname_bigger = optarg;
                   break;
                      
@@ -1187,6 +1205,11 @@ int main(int argc, char *argv[]) {
                   break;                                                                         
                   
                 case SCAN_CRITERIA_FNAME:
+                  if (strlen(optarg) >= ROZOFS_OBJ_NAME_MAX) {
+                    printf("\nInput name is too long %d\n",ROZOFS_OBJ_NAME_MAX);     
+                    usage();
+                    exit(EXIT_FAILURE);                    
+                  }
                   fname_equal = optarg;
                   break;                                                                         
                                                                          
