@@ -1135,9 +1135,16 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
    ext_mattr_t *inode_p = inode_attr_p;
    rz_cids_stats_t  *cid_p;
    rz_sids_stats_t  *sid_p;
+
    
-   rozo_balancing_ctx.current_scanned_file_cpt++;
+   /*
+   ** Do not process symlink
+   */
+   if (!S_ISREG(inode_p->s.attrs.mode)) {
+     return 0;
+   }   
    
+   rozo_balancing_ctx.current_scanned_file_cpt++;   
 
    if (rozofs_fwd < 0) 
    {
