@@ -14,9 +14,11 @@
 #include "export.h"
 #include "rozo_inode_lib.h"
 #include "exp_cache.h"
+#include "mdirent.h"
 
 
-lv2_cache_t cache;
+lv2_cache_t            cache;
+mdirents_name_entry_t  bufferName;
 
 typedef enum _scan_criterie_e {
   SCAN_CRITERIA_NONE=0,
@@ -122,7 +124,226 @@ int         has_xattr=-1;
 int         exclude_symlink=1;
 int         exclude_regular=0;
 
+/*
+**__________________________________________________________________
+**
+** Read the name from the inode
+  
+  @param rootPath : export root path
+  @param buffer   : where to copy the name back
+  @param len      : name length
+*/
+char * exp_read_fname_from_inode(char        * rootPath,
+                              ext_mattr_t    * inode_p,
+                              int            * len)
+{
+  char             pathname[ROZOFS_PATH_MAX+1];
+  char           * p = pathname;
+  rozofs_inode_t * fake_inode;
+  int              fd;
+  off_t            offset;
+  size_t           size;
+  mdirents_name_entry_t * pentry;
 
+  
+  if (inode_p->s.fname.name_type == ROZOFS_FNAME_TYPE_DIRECT) {
+    * len = inode_p->s.fname.len;
+    inode_p->s.fname.name[*len] = 0;
+    return inode_p->s.fname.name;
+  }
+  
+  pentry = &bufferName;
+
+  /*
+  ** Name is too big and is so in the direntry
+  */
+
+  size = inode_p->s.fname.s.name_dentry.nb_chunk * MDIRENTS_NAME_CHUNK_SZ;
+  offset = DIRENT_HASH_NAME_BASE_SECTOR * MDIRENT_SECTOR_SIZE
+         + inode_p->s.fname.s.name_dentry.chunk_idx * MDIRENTS_NAME_CHUNK_SZ;
+
+  /*
+  ** Start with the export root path
+  */   
+  p += rozofs_string_append(p,rootPath);
+  p += rozofs_string_append(p, "/");
+
+  /*
+  ** Add the parent slice
+  */
+  fake_inode = (rozofs_inode_t *) inode_p->s.pfid;
+  p += rozofs_u32_append(p, fake_inode->s.usr_id);
+  p += rozofs_string_append(p, "/");
+
+  /*
+  ** Add the parent FID
+  */
+  p += rozofs_fid_append(p, inode_p->s.pfid);
+  p += rozofs_string_append(p, "/d_");
+
+  /*
+  ** Add the root idx
+  */
+  p += rozofs_u32_append(p, inode_p->s.fname.s.name_dentry.root_idx);
+
+  /*
+  ** Add the collision idx
+  */
+  if (inode_p->s.fname.s.name_dentry.coll) {
+    p += rozofs_string_append(p, "_");
+    p += rozofs_u32_append(p, inode_p->s.fname.s.name_dentry.coll_idx);
+  }   
+
+  /*
+  ** Open the file
+  */
+  fd = open(pathname,O_RDONLY);
+  if (fd < 0) {
+    return NULL;
+  }
+  
+  /*
+  ** Read the file
+  */
+  int ret = pread(fd, &bufferName, size, offset);
+  close(fd);
+  
+  if (ret != size) {
+    return NULL;
+  }
+  * len = pentry->len;
+  pentry->name[*len] = 0;
+  return pentry->name;
+}    
+/*
+**__________________________________________________________________
+**
+** Check whether names are equal 
+  
+  @param rootPath : export root path
+  @param inode_p  : the inode to check
+  @param name     : the name to check
+*/
+int exp_are_name_equal(char        * rootPath,
+                       ext_mattr_t * inode_p,
+                       char        * name)
+{
+  char             pathname[ROZOFS_PATH_MAX+1];
+  char           * p = pathname;
+  rozofs_inode_t * fake_inode;
+  int              fd;
+  off_t            offset;
+  size_t           size;
+  mdirents_name_entry_t * pentry;
+  int              len;
+
+  len = strlen(name);
+  
+  /*
+  ** Short names are stored in inode
+  */
+  if (len < ROZOFS_OBJ_NAME_MAX) {
+
+    if (inode_p->s.fname.name_type != ROZOFS_FNAME_TYPE_DIRECT) {
+      /* 
+      ** This guy has a long name
+      */
+      return 0;
+    }
+    if (inode_p->s.fname.len != len) {
+      /*
+      ** Not the same length
+      */
+      return 0;
+    }    
+    /*
+    ** Compare the names
+    */
+    if (strcmp(inode_p->s.fname.name, name)==0) {
+      return 1;
+    }  
+    return 0;
+  }
+  
+  /*
+  ** When name length is bigger than ROZOFS_OBJ_NAME_MAX
+  ** indirect mode is used
+  */
+  pentry = &bufferName;
+
+  /*
+  ** Name is too big and is so in the direntry
+  */
+
+  size = inode_p->s.fname.s.name_dentry.nb_chunk * MDIRENTS_NAME_CHUNK_SZ;
+  if ((size-sizeof(fid_t)) < len) {
+    return 0;
+  }  
+  
+  offset = DIRENT_HASH_NAME_BASE_SECTOR * MDIRENT_SECTOR_SIZE
+         + inode_p->s.fname.s.name_dentry.chunk_idx * MDIRENTS_NAME_CHUNK_SZ;
+
+  /*
+  ** Start with the export root path
+  */   
+  p += rozofs_string_append(p,rootPath);
+  p += rozofs_string_append(p, "/");
+
+  /*
+  ** Add the parent slice
+  */
+  fake_inode = (rozofs_inode_t *) inode_p->s.pfid;
+  p += rozofs_u32_append(p, fake_inode->s.usr_id);
+  p += rozofs_string_append(p, "/");
+
+  /*
+  ** Add the parent FID
+  */
+  p += rozofs_fid_append(p, inode_p->s.pfid);
+  p += rozofs_string_append(p, "/d_");
+
+  /*
+  ** Add the root idx
+  */
+  p += rozofs_u32_append(p, inode_p->s.fname.s.name_dentry.root_idx);
+
+  /*
+  ** Add the collision idx
+  */
+  if (inode_p->s.fname.s.name_dentry.coll) {
+    p += rozofs_string_append(p, "_");
+    p += rozofs_u32_append(p, inode_p->s.fname.s.name_dentry.coll_idx);
+  }   
+
+  /*
+  ** Open the file
+  */
+  fd = open(pathname,O_RDONLY);
+  if (fd < 0) {
+    return 0;
+  }
+  
+  /*
+  ** Read the file
+  */
+  int ret = pread(fd, &bufferName, size, offset);
+  close(fd);
+  
+  if (ret != size) {
+    return 0;
+  }
+  if (len != pentry->len) {
+    return 0;
+  }  
+  pentry->name[len] = 0;
+  /*
+  ** Compare the names
+  */
+  if (strcmp(pentry->name, name)==0) {
+    return 1;
+  }  
+  return 0;
+}    
 /*
 **_______________________________________________________________________
 */
@@ -216,29 +437,32 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   char         fullName[ROZOFS_PATH_MAX];
   char        *pChar;
   int          idx;
-
-   if (search_dir==0) {
-     /*
-     ** Exclude symlink
-     */
-     if ((exclude_symlink)&&(S_ISLNK(inode_p->s.attrs.mode))) {
-       return 0;
-     }
-     /*
-     ** Exclude regular files
-     */
-     if ((exclude_regular)&&(S_ISREG(inode_p->s.attrs.mode))) {
-       return 0;
-     }     
-   }   
-   else {
-     /*
-     ** Only process directories
-     */   
-     if (!S_ISDIR(inode_p->s.attrs.mode)) {
-       return 0;
-     }       
-   }
+  int          nameLen;
+  char       * pName;
+  export_t   * e = exportd;
+  
+  if (search_dir==0) {
+    /*
+    ** Exclude symlink
+    */
+    if ((exclude_symlink)&&(S_ISLNK(inode_p->s.attrs.mode))) {
+      return 0;
+    }
+    /*
+    ** Exclude regular files
+    */
+    if ((exclude_regular)&&(S_ISREG(inode_p->s.attrs.mode))) {
+      return 0;
+    }     
+  }   
+  else {
+    /*
+    ** Only process directories
+    */   
+    if (!S_ISDIR(inode_p->s.attrs.mode)) {
+      return 0;
+    }       
+  }
 
 
   /*
@@ -254,28 +478,23 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   ** Name must match fname_equal
   */
   if (fname_equal) {
-    if (inode_p->s.fname.name_type != ROZOFS_FNAME_TYPE_DIRECT) {
+    if (!exp_are_name_equal(e->root,inode_p,fname_equal)) {
       return 0;
     }  
-    if (inode_p->s.fname.len != strlen(fname_equal)) {
-      return 0;
-    }
-    if (strncmp(fname_equal,inode_p->s.fname.name,inode_p->s.fname.len)!= 0) {
-      return 0;
-    }   
   }
   
   /*
   ** Name must include fname_bigger
   */
   if (fname_bigger) {
-    if (inode_p->s.fname.name_type != ROZOFS_FNAME_TYPE_DIRECT) {
+    pName = exp_read_fname_from_inode(e->root,inode_p,&nameLen);
+    if (pName==NULL) {
       return 0;
     }  
-    if (inode_p->s.fname.len < strlen(fname_bigger)) {
+    if (nameLen < strlen(fname_bigger)) {
       return 0;
     }
-    if (strstr(inode_p->s.fname.name, fname_bigger)==NULL) {
+    if (strstr(pName, fname_bigger)==NULL) {
       return 0;
     }  
   }
@@ -584,8 +803,6 @@ static void usage() {
     printf("\t\033[1m--ne <val>\033[0m\t\tField must not be equal to <val>.\n");
     printf("\nDates must be expressed as:\n");
     printf(" - YYYY-MM-DD\n - \"YYYY-MM-DD HH\"\n - \"YYYY-MM-DD HH:MM\"\n - \"YYYY-MM-DD HH:MM:SS\"\n");
-    printf("\n\033[4mWARNING:\033[0m\n");
-    printf("Name search only works for file whoes name length is under %d characters.\n",ROZOFS_OBJ_NAME_MAX);    
     printf("\n\033[4mExamples:\033[0m\n");
     printf("Searching files with a size comprised between 76000 and 76100 and having extended attributes.\n");
     printf("  \033[1mrozo_scan_by_criteria -p /mnt/srv/rozofs/export/export_1 --xattr --size --ge 76000 --le 76100\033[0m\n");
@@ -1021,11 +1238,6 @@ int main(int argc, char *argv[]) {
                   break;
                   
                 case SCAN_CRITERIA_FNAME:
-                  if (strlen(optarg) >= ROZOFS_OBJ_NAME_MAX) {
-                    printf("\nInput name is too long (%d)\n",ROZOFS_OBJ_NAME_MAX);     
-                    usage();
-                    exit(EXIT_FAILURE);                    
-                  }                
                   fname_bigger = optarg;
                   break;
                      
@@ -1205,11 +1417,6 @@ int main(int argc, char *argv[]) {
                   break;                                                                         
                   
                 case SCAN_CRITERIA_FNAME:
-                  if (strlen(optarg) >= ROZOFS_OBJ_NAME_MAX) {
-                    printf("\nInput name is too long %d\n",ROZOFS_OBJ_NAME_MAX);     
-                    usage();
-                    exit(EXIT_FAILURE);                    
-                  }
                   fname_equal = optarg;
                   break;                                                                         
                                                                          
@@ -1330,6 +1537,7 @@ int main(int argc, char *argv[]) {
        exit(EXIT_FAILURE);  
   }
 
+  printf("\n\n");
   /*
   ** init of the RozoFS data structure on export
   ** in order to permit the scanning of the exportd
