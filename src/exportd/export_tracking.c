@@ -1678,11 +1678,30 @@ int export_lookup(export_t *e, fid_t pfid, char *name, mattr_t *attrs,mattr_t *p
     if (exp_metadata_inode_is_del_pending(child_fid))
     {
        attrs->mode &=~(S_IWUSR|S_IWGRP|S_IWOTH);
+       if (exp_metadata_inode_is_del_pending(pfid)==0)
+       {
+         /*
+	 ** attempt to do a lookup on a deleted file while parent is not the trash
+	 */
+         errno = ENOENT;
+	 goto out;       
+       }    
+    }
+    else
+    {
+       /*
+       ** not a deleted file: so the parent MUST NOT have the delete pending bit asserted
+       */
+       if (exp_metadata_inode_is_del_pending(pfid))
+       {
+         errno = ENOENT;
+	 goto out;       
+       }    
     }
     /*
-    ** clear the delete pending bit of the i-node if it is not a directory
+    ** clear the delete pending bit of the i-node to avoid a BUSY error on VFS (mainly directory)
     */
-    if (!S_ISDIR(lv2->attributes.s.attrs.mode))
+//    if (!S_ISDIR(lv2->attributes.s.attrs.mode))
     {
       exp_metadata_inode_del_deassert(attrs->fid);
     }
@@ -1745,9 +1764,9 @@ int export_getattr(export_t *e, fid_t fid, mattr_t *attrs) {
        attrs->mode &=~(S_IWUSR|S_IWGRP|S_IWOTH);
     }
     /*
-    ** clear the delete pending bit of the i-node if it is not a directory
+    ** clear the delete pending bit of the i-node to avoid BUSY error in VFS
     */
-    if (!S_ISDIR(lv2->attributes.s.attrs.mode))
+//    if (!S_ISDIR(lv2->attributes.s.attrs.mode))
     {
       exp_metadata_inode_del_deassert(attrs->fid);
     }
@@ -3409,7 +3428,7 @@ char *export_build_deleted_name(char *buffer,uint64_t *inode_val,char *name)
     instant.tm_min = 0;
     secondes = mktime(&instant);
     instant=*localtime(&secondes);
-    strftime(bufall,80,"%F-%I%p", &instant);
+    strftime(bufall,80,"%F-%H", &instant);
     if (inode_val==NULL) sprintf(buffer,"@%s@@%s",bufall,name);
     else sprintf(buffer,"@%s@%llx@%s",bufall,(unsigned long long int)*inode_val,name);
     return buffer;
@@ -3630,7 +3649,7 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
     */
     if (exp_metadata_inode_is_del_pending(parent)==0)
     {
-       if (common_config.export_versioning)rename = 1;
+       if ((common_config.export_versioning) || (plv2->attributes.s.attrs.sids[1] != 0)) rename = 1;
        else rename = 0;
        update_children = 1;
     }
@@ -3665,6 +3684,20 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
       errno=EACCES;
       goto out;    
     }
+    if (exp_metadata_inode_is_del_pending(parent)==1)
+    {
+      /*
+      ** the parent directory is "@rozofs-del@"
+      */
+      if (exp_metadata_inode_is_del_pending(child_fid)==0)
+      {
+         /*
+	 ** cannot reference an active file in a trash!
+	 */
+	errno=EACCES;
+	goto out;    
+      }     
+    }
 
     // Delete the mdirentry if exist
     if (del_mdirentry(plv2->dirent_root_idx_p,fdp, parent, name, child_fid, &child_type,root_dirent_mask) != 0)
@@ -3692,6 +3725,7 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
     // nlink=1, it's not a harlink -> put the lv2 file on trash directory
 
     // Not a hardlink
+duplicate_deleted_file:
     if (nlink == 1) {
         int fid_has_been_recycled = 0;
 
@@ -3825,7 +3859,9 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
                   // Best effort
               }
 	    }
-        } else {
+        } 
+	else 
+	{
 	    /*
 	    ** release the inode entry: case of the symbolic link: no delete defer for symbolic link
 	    */
@@ -3854,7 +3890,9 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
 	  } 
         } 
     }
-    // It's a hardlink
+    /*
+    **  IT'S A HARDLINK
+    */
     if (nlink > 1) {
         rename = 0;
 	update_children = 1;
@@ -3897,7 +3935,7 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
     memcpy(pattrs, &plv2->attributes.s.attrs, sizeof (mattr_t));
     status = 0;
     /*
-    ** Check the case of the rename
+    ** CHECK THE CASE OF THE RENAME
     */
     if (rename)
     {
@@ -3950,8 +3988,18 @@ int export_unlink(export_t * e, fid_t parent, char *name, fid_t fid,mattr_t * pa
        */
        if (get_mdirentry(plv2->dirent_root_idx_p,fdp, parent, del_name, old_child_fid, &old_child_type,&root_dirent_mask) == 0)
        {
-         export_unlink_duplicate_fid(e,plv2,parent,old_child_fid);
-	 write_parent_attributes = 1;       
+         //export_unlink_duplicate_fid(e,plv2,parent,old_child_fid);
+	 write_parent_attributes = 1;  
+	 /*
+	 ** remove the current file since there already one with the same name
+	 ** the current number of deleted file must be updated since it has incremented by anticipation
+	 ** turning off the rename flag implies that the file will be deleted
+	 ** clear the update_children flag since the count of file within the directory has already been updated on the first pass.
+	 */
+	 plv2->attributes.s.hpc_reserved--;
+	 rename = 0;
+	 update_children = 0;
+	 goto duplicate_deleted_file;  
        }
        /*
        **  update the parent
@@ -4564,7 +4612,7 @@ int export_rmdir(export_t *e, fid_t pfid, char *name, fid_t fid,mattr_t * pattrs
     */
     if (exp_metadata_inode_is_del_pending(pfid)==0)
     {
-       if (common_config.export_versioning)rename = 1;
+       if ((common_config.export_versioning) || (plv2->attributes.s.attrs.sids[1] != 0))rename = 1;
        else rename = 0;
        update_children = 1;
     }
@@ -6000,6 +6048,8 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
   bufall[0] = 0;
   ctime_r((const time_t *)&lv2->attributes.s.cr8time,bufall);
   DISPLAY_ATTR_TXT_NOCR("CREATE", bufall);
+  ctime_r((const time_t *)&lv2->attributes.s.attrs.mtime,bufall);
+  DISPLAY_ATTR_TXT_NOCR("MTIME ", bufall);
   if (test_no_extended_attr(lv2)) {
     DISPLAY_ATTR_TXT("XATTR", "NO");  
   }
@@ -6027,6 +6077,16 @@ static inline int get_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * value, 
     {
        DISPLAY_ATTR_INT("SHARE",lv2->attributes.s.attrs.cid);    
     }
+    switch (lv2->attributes.s.attrs.sids[1])
+    {
+       case 0:
+       default:
+         DISPLAY_ATTR_TXT("TRASH", "NO");
+         break;
+       case 1:
+         DISPLAY_ATTR_TXT("TRASH", "YES");
+         break;         
+    }  
     DISPLAY_ATTR_INT("CHILDREN",lv2->attributes.s.attrs.children);
     DISPLAY_ATTR_INT("NLINK",lv2->attributes.s.attrs.nlink);
     DISPLAY_ATTR_LONG("SIZE",lv2->attributes.s.attrs.size);
@@ -6403,6 +6463,30 @@ static inline int set_rozofs_xattr(export_t *e, lv2_entry_t *lv2, char * input_b
       ** Save new distribution on disk
       */
       lv2->attributes.s.attrs.sids[0]=(sid_t)valint;
+      return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
+    }
+    return 0;
+  }
+  /*
+  ** case of the versioning
+  */
+  if (sscanf(p," versioning = %d", &valint) == 1) 
+  {
+    if ((valint < 0) || (valint > 1))
+    {
+      errno = ENOTDIR;
+      return -1;        
+    }
+    if (!S_ISDIR(lv2->attributes.s.attrs.mode)) {
+      errno = ENOTDIR;
+      return -1;
+    }
+    if (lv2->attributes.s.attrs.sids[1]!= (sid_t)valint)
+    {
+      /*
+      ** Save new distribution on disk
+      */
+      lv2->attributes.s.attrs.sids[1]=(sid_t)valint;
       return export_lv2_write_attributes(e->trk_tb_p,lv2,0/* No sync */);
     }
     return 0;
