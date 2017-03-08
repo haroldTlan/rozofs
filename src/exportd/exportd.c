@@ -145,7 +145,7 @@ char *export_get_config_file_path()
   
    @retval none
 */
-static inline export_slave_launcher_pid_file(char * pidfile, int slaveid) {
+static inline void export_slave_launcher_pid_file(char * pidfile, int slaveid) {
   sprintf(pidfile,ROZOFS_RUNDIR_PID"launcher_exportd_slave_%d.pid",slaveid);
 }
 /*
@@ -222,7 +222,7 @@ void export_start_one_export_slave(int instance) {
   
    @retval none
 */
-static inline export_rebalancer_pid_file(char * pidfile, int vid) {
+static inline void export_rebalancer_pid_file(char * pidfile, int vid) {
   sprintf(pidfile,ROZOFS_RUNDIR_PID"launcher_rebalance_vol%d.pid",vid);
 }
 /*
@@ -245,7 +245,7 @@ void export_stop_one_rebalancer(int vid) {
   // Launch exportd slave
   ret = rozo_launcher_stop(pidfile);
   if (ret !=0) {
-    severe("rozo_launcher_stop(%s,%s) %s",pidfile, strerror(errno));
+    severe("rozo_launcher_stop(%s) %s",pidfile, strerror(errno));
     return;
   }
 }
@@ -1532,17 +1532,17 @@ void show_metadata_device(char * argv[], uint32_t tcpRef, void *bufRef)  {
   pChar += sprintf(pChar,"{ \"meta-data\" : {\n");
   pChar += sprintf(pChar,"     \"eid\"             : %d,\n",eid);    
   pChar += sprintf(pChar,"     \"full\"            : \"%s\",\n",pRes->full?"YES":"NO");  
-  pChar += sprintf(pChar,"     \"full counter\"    : %llu,\n",pRes->full_counter);
-  pChar += sprintf(pChar,"     \"fstat errors\"    : %llu,\n",pRes->statfs_error);
+  pChar += sprintf(pChar,"     \"full counter\"    : %llu,\n",(long long unsigned int)pRes->full_counter);
+  pChar += sprintf(pChar,"     \"fstat errors\"    : %llu,\n",(long long unsigned int)pRes->statfs_error);
   pChar += sprintf(pChar,"     \"inodes\" : {\n");
-  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",pRes->inodes.total);
-  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",pRes->inodes.free);
-  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",common_config.min_metadata_inodes);
+  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",(long long unsigned int)pRes->inodes.total);
+  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",(long long unsigned int)pRes->inodes.free);
+  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",(long long unsigned int)common_config.min_metadata_inodes);
   pChar += sprintf(pChar,"        \"depletion\" : \"%s\"\n",common_config.min_metadata_inodes>pRes->inodes.free ?"YES":"NO");
   pChar += sprintf(pChar,"     },\n     \"sizeMB\" : {\n");
-  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",pRes->sizeMB.total);
-  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",pRes->sizeMB.free);
-  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",common_config.min_metadata_MB);
+  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",(long long unsigned int)pRes->sizeMB.total);
+  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",(long long unsigned int)pRes->sizeMB.free);
+  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",(long long unsigned int)common_config.min_metadata_MB);
   pChar += sprintf(pChar,"        \"depletion\" : \"%s\"\n",common_config.min_metadata_MB>pRes->sizeMB.free ?"YES":"NO");
   pChar += sprintf(pChar,"     }\n  }\n}\n"); 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	     

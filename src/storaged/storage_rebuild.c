@@ -2003,7 +2003,7 @@ int rbs_do_list_rebuild(int cid, int sid, rbs_file_type_e ftype) {
  * @param count: count of file
  *
  */
-static int rbs_update_file_count(int idx) {
+static void rbs_update_file_count(int idx) {
   rbs_monitor[idx].list_building_sec = time(NULL) - loc_time;
   rbs_monitor[idx].nb_files          = rb_fid_table_count;      
   rbs_monitor_file_update();

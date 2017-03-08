@@ -811,7 +811,7 @@ stspare_fid_cache_t * stspare_scan_one_spare_file(
       ** File may have been deleted in the meantime
       */
       if (errno != ENOENT) {
-        severe("pread(%s,size=%d,offset=%d) %s",pathname,sizeRequested,offset,strerror(errno));
+        severe("pread(%s,size=%d,offset=%d) %s",pathname,sizeRequested,(int)offset,strerror(errno));
       }
       goto release;
     }

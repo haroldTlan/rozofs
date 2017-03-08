@@ -129,7 +129,7 @@ static int               intval;
 #else
 static long int          intval;
 #endif
-static long long         longval;
+//static long long         longval;
 
 #define COMMON_CONFIG_READ_INT_MINMAX(val,def,mini,maxi)  {\
   common_config.val = def;\

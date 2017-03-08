@@ -436,7 +436,6 @@ int rozofs_visit(void *exportd,void *inode_attr_p,void *p)
   ext_mattr_t *inode_p = inode_attr_p;
   char         fullName[ROZOFS_PATH_MAX];
   char        *pChar;
-  int          idx;
   int          nameLen;
   char       * pName;
   export_t   * e = exportd;
@@ -879,16 +878,16 @@ static inline time_t rozofs_date2time(char * date) {
   int sec=0;
   
   ret = sscanf(date,"%d-%d-%d %d:%d:%d",&year,&month,&day,&hour,&minute,&sec);
-  if (ret = 6) {
+  if (ret == 6) {
     return rozofs_date_in_seconds(year,month,day,hour,minute,sec);
   }    
-  if (ret = 5) {
+  if (ret == 5) {
     return rozofs_date_in_seconds(year,month,day,hour,minute,0);
   }    
-  if (ret = 4) {
+  if (ret == 4) {
     return rozofs_date_in_seconds(year,month,day,hour,0,0);
   }    
-  if (ret = 3) {
+  if (ret == 3) {
     return rozofs_date_in_seconds(year,month,day,0,0,0);
   }
   return -1;    
@@ -908,7 +907,7 @@ static inline uint64_t rozofs_scan_u64(char * str) {
   uint64_t val;
   int      ret;
   
-  ret = sscanf(str,"%llu",&val);
+  ret = sscanf(str,"%llu",(long long unsigned int *)&val);
   if (ret != 1) {
     return -1;
   }    
@@ -922,10 +921,9 @@ static inline uint64_t rozofs_scan_u64(char * str) {
 int main(int argc, char *argv[]) {
     int   c;
     void *rozofs_export_p;
-    int   i;
     char *root_path=NULL;
     int   verbose = 0;
-    char  crit;
+    char  crit=0;
     char *comp;
     
     static struct option long_options[] = {

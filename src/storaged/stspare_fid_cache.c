@@ -107,10 +107,6 @@ void stspare_fid_cache_debug(char * argv[], uint32_t tcpRef, void *bufRef) {
 
 
   char                         * pChar=uma_dbg_get_buffer();
-  int                            ret;
-  stspare_fid_cache_key_t        key;
-  storage_t                    * st;
-  int                            found;
   stspare_fid_cache_t          * p = NULL;
   int                            idx;  
   int                            first=1;
