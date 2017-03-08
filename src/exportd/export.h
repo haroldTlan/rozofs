@@ -1000,7 +1000,6 @@ rmfentry_t * export_alloc_rmentry(rmfentry_disk_t * trash_entry);
 
 static inline int export_metadata_check_device(export_t *e) {
   struct statfs      buf;
-  uint64_t           val;
   meta_resources_t * pRes = &e->space_left;
   
   /*
