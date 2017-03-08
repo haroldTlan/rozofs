@@ -326,7 +326,6 @@ def go_build_macros(struct_name):
   print "#else"
   print "static long int          intval;"
   print "#endif"
-  print "static long long         longval;"
   print ""  
   print "#define %s_READ_INT_MINMAX(val,def,mini,maxi)  {\\"%(struct_name.upper())
   print "  %s.val = def;\\"%(struct_name)
@@ -353,6 +352,7 @@ def go_build_macros(struct_name):
   print ""  
      
   print "#define %s_READ_LONG(val,def) {\\"%(struct_name.upper())
+  print "static long long         longval;\\"
   print "  %s.val = def;\\"%(struct_name)
   print "  if (config_lookup_int64(&cfg, #val, &longval)) { \\"
   print "    %s.val = longval;\\"%(struct_name)
@@ -361,6 +361,7 @@ def go_build_macros(struct_name):
   print ""  
   print ""  
   print "#define %s_READ_LONG_MINMAX(val,def,mini,maxi)  {\\"%(struct_name.upper())
+  print "static long long         longval;\\"
   print "  %s.val = def;\\"%(struct_name)
   print "  if (config_lookup_int64(&cfg, #val, &longval)) { \\"
   print "    if (longval<mini) {\\"
