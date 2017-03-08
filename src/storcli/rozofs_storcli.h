@@ -1740,7 +1740,7 @@ static inline void storcli_trace_error(int line, int error, rozofs_storcli_ctx_t
 ** then in the large pool depending on the availability
 ** 
 */ 
-static void * rozofs_storcli_any_south_buffer_allocate() {
+static inline void * rozofs_storcli_any_south_buffer_allocate() {
   void *buf=NULL;
   
   /*

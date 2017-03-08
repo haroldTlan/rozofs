@@ -14,10 +14,9 @@
 # Author: Fizians S.A.S. <devel@rozofs.com>
 
 PATH=/sbin:/bin:/usr/bin
-DESC=rozofsmount             # Introduce a short description here
-NAME=rozofsmount             # Introduce the short server's name here
-DAEMON=/sbin/mount.rozofs    # Introduce the server's location here
-DAEMON_ARGS=""               # Arguments to run the daemon with
+NAME=rozofs-rozofsmount
+DAEMON=/sbin/mount.rozofs
+DAEMON_ARGS=""
 SCRIPTNAME=$0
 
 . /lib/init/vars.sh
@@ -33,9 +32,15 @@ SCRIPTNAME=/etc/init.d/$NAME
 
 # Default values
 WAITROZOFSMOUNT="no" # Enable or not waiting mount (yes or no)
+ENABLE_INIT_SCRIPT="yes"
 
 # Read configuration variable file if it is present
 [ -r /etc/default/$NAME ] && . /etc/default/$NAME
+
+# Don't use init script if ENABLE_INIT_SCRIPT = "no"
+if [ no = "${ENABLE_INIT_SCRIPT}" ]; then
+    exit 0
+fi
 
 # Load the VERBOSE setting and other rcS variables
 . /lib/init/vars.sh
@@ -46,6 +51,9 @@ WAITROZOFSMOUNT="no" # Enable or not waiting mount (yes or no)
 
 # Enable core files
 ulimit -c unlimited
+
+
+
 
 #
 # Function that wait connectivity with exportd before mount
