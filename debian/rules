@@ -18,6 +18,10 @@ CMAKE_EXTRA_FLAGS += -DCMAKE_SKIP_RPATH=ON \
 override_dh_python2:
 	dh_python2 --no-guessing-versions
 
+override_dh_installinit:
+	dh_installinit -prozofs-rozofsmount --no-start
+	dh_installinit --remaining
+
 override_dh_auto_configure:
 	dh_auto_configure -- $(CMAKE_EXTRA_FLAGS)
 
