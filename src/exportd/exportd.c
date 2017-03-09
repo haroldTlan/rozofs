@@ -54,6 +54,7 @@
 #include <rozofs/core/uma_dbg_api.h>
 #include <rozofs/core/rozo_launcher.h>
 #include <rozofs/core/rozofs_core_files.h>
+#include <rozofs/core/af_unix_socket_generic.h>
 
 #include <rozofs/core/rozofs_cpu.h>
 #include "config.h"
@@ -96,7 +97,6 @@ static list_t volumes;
 static pthread_rwlock_t volumes_lock;
 
 static pthread_t bal_vol_thread=0;
-static pthread_t rm_bins_thread=0;
 static pthread_t monitor_thread=0;
 static pthread_t exp_tracking_thread=0;
 static pthread_t geo_poll_thread=0;
@@ -120,6 +120,11 @@ gw_host_conf_t expgw_host_table[EXPGW_EXPGW_MAX_IDX];
 uint32_t export_configuration_file_hash = 0;  /**< hash value of the configuration file */
 export_one_profiler_t  * export_profiler[EXPGW_EID_MAX_IDX+1] = { 0 };
 uint32_t export_profiler_eid;
+
+/*
+** rmbins thread context tabel
+*/
+rmbins_thread_t rmbins_thread[ROZO_NB_RMBINS_THREAD];
 
 /*
  *_______________________________________________________________________
@@ -621,60 +626,127 @@ static void *balance_volume_thread(void *v) {
  */
 static void *remove_bins_thread(void *v) {
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-    list_t *iterator = NULL;
-    int export_idx = 0;
-    uint64_t        delay;
+    list_t          * iterator = NULL;
+    int               export_idx = 0;
+    char              thName[16];
+    rmbins_thread_t * thCtx;
+    uint64_t          before,after,credit;
+    uint64_t          processed;
     
+    thCtx = (rmbins_thread_t *) v;
     
-    uma_dbg_thread_add_self("remove bins");
+    /*
+    ** Record thread name
+    */
+    sprintf(thName, "Trash%d", thCtx->idx);    
+    uma_dbg_thread_add_self(thName);
 
-    // Pointer for store start bucket index for each exports
-    uint16_t * idx_p = xmalloc(list_size(&exports) * sizeof (uint16_t));
+    /*
+    ** One run time credit
+    */
+    credit = RM_BINS_PTHREAD_FREQUENCY_SEC*1000000*common_config.nb_trash_thread;
+        
+    // Pointer for store re-start bucket index for each exports
+    uint16_t * bucket_idx = xmalloc(list_size(&exports) * sizeof (uint16_t));
     // Init. each index to 0
-    memset(idx_p, 0, sizeof (uint16_t) * list_size(&exports));
+    memset(bucket_idx, 0, sizeof (uint16_t) * list_size(&exports));
+    
+    /*
+    ** Thread time shifting.
+    ** Thread 0 do not sleep.
+    ** Thread 1 sleeps 2 sec. 
+    ** Thread 2 sleeps 4 sec.
+    ** ...
+    */ 
+    sleep(thCtx->idx * 2);
 
     for (;;) {
         export_idx = 0;
+        processed  = 0;
 
         /*
 	** Read ticker before loop
 	*/
-        delay = rdtsc();
+        GETMICROLONG(before);
 	
         list_for_each_forward(iterator, &exports) {
             export_entry_t *entry = list_entry(iterator, export_entry_t, list);
 
             // Remove bins file starting with specific bucket idx
-            if (export_rm_bins(&entry->export, &idx_p[export_idx]) != 0) {
-                severe("export_rm_bins failed (eid: %"PRIu32"): %s",
-                        entry->export.eid, strerror(errno));
-            }
+            processed += export_rm_bins(&entry->export, &bucket_idx[export_idx], thCtx);
             export_idx++;
         }
 	
 	/*
-	** Compute number of ticks of the loop
+	** Read ticker after loop
 	*/
-	delay = rdtsc()- delay;
-	
+	GETMICROLONG(after); 
+        thCtx->total_usec  += thCtx->last_usec;
+        thCtx->total_count += thCtx->last_count;
+        
+	thCtx->last_usec  = after - before;
+        thCtx->last_count = processed;
+        
+        thCtx->nb_run++; 
+        
 	/*
-	** 
+	** Compte credit for a loop 
 	*/
-	uint64_t delay_ticks = rozofs_get_cpu_frequency()*RM_BINS_PTHREAD_FREQUENCY_SEC;
-	if (delay < delay_ticks) {
+	if (thCtx->last_usec < credit) {
+          uint64_t delay;
 	  /*
-	  ** The loop did last less than RM_BINS_PTHREAD_FREQUENCY_SEC.
+	  ** The loop did last less than the credit
 	  ** Wait a little...
 	  */ 
-	  delay = delay_ticks-delay;
-	  delay *= 1000000;
-	  delay /= rozofs_get_cpu_frequency();
+	  delay = credit - thCtx->last_usec;
           usleep(delay);
 	}  
     }
     return 0;
 }
-
+/*
+**_______________________________________________________________________
+**
+** Start every required trash thread
+**
+*/
+static void start_all_remove_bins_thread() {
+  int idx;
+  
+  for (idx=0; idx < common_config.nb_trash_thread; idx++) {
+  
+    rmbins_thread[idx].idx  = idx;
+    rmbins_thread[idx].thId = 0;
+    
+    if ((errno = pthread_create(&rmbins_thread[idx].thId, NULL, remove_bins_thread, &rmbins_thread[idx])) != 0) {
+      fatal("can't create remove files thread %d %s", idx, strerror(errno));  
+    }	
+  }
+}
+/*
+**_______________________________________________________________________
+**
+** Stop every started trash thread
+**
+*/
+static void stop_all_remove_bins_thread() {
+  int idx;
+  
+  for (idx=0; idx < ROZO_NB_RMBINS_THREAD; idx++) {
+    if (rmbins_thread[idx].thId) {
+      // Canceled the remove bins pthread before reload list of exports
+      if ((errno = pthread_cancel(rmbins_thread[idx].thId)) != 0) {
+        severe("can't canceled remove bins pthread %d : %s", idx, strerror(errno));
+      }  
+    }
+    rmbins_thread[idx].thId = 0;
+  }
+}  
+/*
+**_______________________________________________________________________
+**
+**
+*/
 /**
 *  tracking thread parameters and statistics
 */
@@ -1411,8 +1483,7 @@ static int exportd_initialize() {
         fatal("can't create balancing thread %s", strerror(errno));
 
     if (expgwc_non_blocking_conf.slave != 0) {
-      if (pthread_create(&rm_bins_thread, NULL, remove_bins_thread, NULL) != 0)
-        fatal("can't create remove files thread %s", strerror(errno));     
+      start_all_remove_bins_thread();     
     }
     	
     /*
@@ -1446,30 +1517,7 @@ static int exportd_initialize() {
 }
 
 static void exportd_release() {
-#if 0
-    pthread_cancel(bal_vol_thread);
-    pthread_cancel(rm_bins_thread);
-    pthread_cancel(exp_tracking_thread);
-    pthread_cancel(monitor_thread);
-    if ( expgwc_non_blocking_conf.slave == 1) pthread_cancel(geo_poll_thread);
 
-
-    if ((errno = pthread_rwlock_destroy(&config_lock)) != 0) {
-        severe("can't release config lock: %s", strerror(errno));
-    }
-#endif    
-
-#if 0
-    In case we crash, let the system free the memory for us.
-    It knows better than us, especially when we crash...
-    
-    monitor_release();
-    exports_release();
-    volumes_release();
-    export_expgws_release();
-    econfig_release(&exportd_config);
-    lv2_cache_release(&cache);
-#endif    
 }
 
 /*
@@ -1532,17 +1580,17 @@ void show_metadata_device(char * argv[], uint32_t tcpRef, void *bufRef)  {
   pChar += sprintf(pChar,"{ \"meta-data\" : {\n");
   pChar += sprintf(pChar,"     \"eid\"             : %d,\n",eid);    
   pChar += sprintf(pChar,"     \"full\"            : \"%s\",\n",pRes->full?"YES":"NO");  
-  pChar += sprintf(pChar,"     \"full counter\"    : %llu,\n",(long long unsigned int)pRes->full_counter);
-  pChar += sprintf(pChar,"     \"fstat errors\"    : %llu,\n",(long long unsigned int)pRes->statfs_error);
+  pChar += sprintf(pChar,"     \"full counter\"    : %llu,\n",(unsigned long long int)pRes->full_counter);
+  pChar += sprintf(pChar,"     \"fstat errors\"    : %llu,\n",(unsigned long long int)pRes->statfs_error);
   pChar += sprintf(pChar,"     \"inodes\" : {\n");
-  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",(long long unsigned int)pRes->inodes.total);
-  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",(long long unsigned int)pRes->inodes.free);
-  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",(long long unsigned int)common_config.min_metadata_inodes);
+  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",(unsigned long long int)pRes->inodes.total);
+  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",(unsigned long long int)pRes->inodes.free);
+  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",(unsigned long long int)common_config.min_metadata_inodes);
   pChar += sprintf(pChar,"        \"depletion\" : \"%s\"\n",common_config.min_metadata_inodes>pRes->inodes.free ?"YES":"NO");
   pChar += sprintf(pChar,"     },\n     \"sizeMB\" : {\n");
-  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",(long long unsigned int)pRes->sizeMB.total);
-  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",(long long unsigned int)pRes->sizeMB.free);
-  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",(long long unsigned int)common_config.min_metadata_MB);
+  pChar += sprintf(pChar,"        \"total\"     : %llu,\n",(unsigned long long int)pRes->sizeMB.total);
+  pChar += sprintf(pChar,"        \"free\"      : %llu,\n",(unsigned long long int)pRes->sizeMB.free);
+  pChar += sprintf(pChar,"        \"mini\"      : %llu,\n",(unsigned long long int)common_config.min_metadata_MB);
   pChar += sprintf(pChar,"        \"depletion\" : \"%s\"\n",common_config.min_metadata_MB>pRes->sizeMB.free ?"YES":"NO");
   pChar += sprintf(pChar,"     }\n  }\n}\n"); 
   uma_dbg_send(tcpRef, bufRef, TRUE, uma_dbg_get_buffer());   	     
@@ -1812,17 +1860,10 @@ int export_reload_nb()
     if ((errno = pthread_rwlock_unlock(&volumes_lock)) != 0) {
         severe("can't unlock volumes: %s", strerror(errno));
         goto error;
-    }
+    } 
 
+    stop_all_remove_bins_thread();
 
-
-    if (rm_bins_thread) {
-      // Canceled the remove bins pthread before reload list of exports
-      if ((errno = pthread_cancel(rm_bins_thread)) != 0)
-        severe("can't canceled remove bins pthread: %s", strerror(errno));
-    }
-    rm_bins_thread = 0;
-    
     // Canceled the export tracking pthread before reload list of exports
     if ((errno = pthread_cancel(exp_tracking_thread)) != 0)
         severe("can't canceled export tracking pthread: %s", strerror(errno));
@@ -1866,11 +1907,7 @@ int export_reload_nb()
 
     // Start pthread for remove bins file on slave thread only
     if (expgwc_non_blocking_conf.slave != 0) {
-      if ((errno = pthread_create(&rm_bins_thread, NULL,
-            remove_bins_thread, NULL)) != 0) {
-        severe("can't create remove files pthread %s", strerror(errno));
-        goto error;
-      }	
+      start_all_remove_bins_thread();
     }
 
     if (pthread_create(&exp_tracking_thread, NULL, export_tracking_thread, NULL) != 0)

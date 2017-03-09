@@ -129,7 +129,6 @@ static int               intval;
 #else
 static long int          intval;
 #endif
-//static long long         longval;
 
 #define COMMON_CONFIG_READ_INT_MINMAX(val,def,mini,maxi)  {\
   common_config.val = def;\
@@ -154,6 +153,7 @@ static long int          intval;
 }
 
 #define COMMON_CONFIG_READ_LONG(val,def) {\
+static long long         longval;\
   common_config.val = def;\
   if (config_lookup_int64(&cfg, #val, &longval)) { \
     common_config.val = longval;\
@@ -162,6 +162,7 @@ static long int          intval;
 
 
 #define COMMON_CONFIG_READ_LONG_MINMAX(val,def,mini,maxi)  {\
+static long long         longval;\
   common_config.val = def;\
   if (config_lookup_int64(&cfg, #val, &longval)) { \
     if (longval<mini) {\

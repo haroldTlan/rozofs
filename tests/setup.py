@@ -1333,6 +1333,7 @@ class rozofs_class:
       display_config_int("min_metadata_inodes",rozofs.min_metadata_inodes)
     if rozofs.min_metadata_MB != None:
       display_config_int("min_metadata_MB",rozofs.min_metadata_MB)
+    display_config_int("nb_trash_thread",8)
     
   def create_common_config(self):
     try: os.remove('/usr/local/etc/rozofs/rozofs.conf');

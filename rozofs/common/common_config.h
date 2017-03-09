@@ -99,6 +99,8 @@ typedef struct _common_config_t {
   int32_t     min_metadata_inodes;
   // Minimum available size in MB that must be available on metadata device to allow a mknod/mkdir operation
   int32_t     min_metadata_MB;
+  // Number of trash threads that work in parallel
+  int32_t     nb_trash_thread;
 
   /*
   ** client scope configuration parameters
