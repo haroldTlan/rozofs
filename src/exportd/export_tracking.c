@@ -79,6 +79,7 @@ uint64_t export_last_ticks = 0;
 uint64_t export_last_us = 0;
 uint64_t export_last_count = 0;
 uint64_t export_last_count_json = 0; 
+uint64_t export_last_trashed_json = 0; 
 uint64_t export_fid_recycle_reload_count = 0; /**< number of recycle fid reloaded */
 int export_fid_recycle_ready = 0; /**< assert to 1 when fid recycle have been reloaded */
 int export_limit_rm_files;
@@ -4311,6 +4312,7 @@ char *export_rm_bins_stats_json(char *pChar)
 {
    uint64_t new_us;
    uint64_t new_count;
+   uint64_t new_trashed;
    int      idx; 
    
    pChar += rozofs_string_append(pChar, "{ \"trash\" : {\n");    
@@ -4341,30 +4343,60 @@ char *export_rm_bins_stats_json(char *pChar)
    pChar += rozofs_string_append(pChar, "\n    ],\n");
       
    GETMICROLONG(new_us);
-   new_count = export_rm_bins_done_count;
 
-   pChar += rozofs_string_append(pChar, "    \"deleted/min\"   : ");   
+   pChar += rozofs_string_append(pChar, "    \"delete delay\"  : ");   
+   pChar += rozofs_u64_append(pChar, (unsigned long long int)common_config.deletion_delay);   
+   
+   pChar += rozofs_string_append(pChar, ",\n    \"reloaded count\": "); 
+   pChar += rozofs_u64_append(pChar, (unsigned long long int) export_rm_bins_reload_count);
+
+   /*
+   ** Trashed
+   */
+
+   pChar += rozofs_string_append(pChar, ",\n    \"trashed count\" : "); 
+   new_trashed = export_rm_bins_pending_count;
+   pChar += rozofs_u64_append(pChar, (unsigned long long int) new_trashed);
+   
+
+   pChar += rozofs_string_append(pChar, ",\t    \"trashed/min\"   : ");      
+   if ((export_last_us!=0) &&(new_us>export_last_us)) {
+     pChar += rozofs_u64_append(pChar, (unsigned long long int) (new_trashed-export_last_trashed_json)*(60000000)/(new_us-export_last_us));
+   }
+   else {
+     pChar += rozofs_string_append(pChar, "0"); 
+   }  
+   export_last_trashed_json = new_trashed;
+   /*
+
+   ** Actually deleted
+   */
+   
+   pChar += rozofs_string_append(pChar, ",\n    \"deleted count\" : "); 
+   new_count   = export_rm_bins_done_count;
+   pChar += rozofs_u64_append(pChar, (unsigned long long int) new_count);
+   
+   
+   pChar += rozofs_string_append(pChar, ",\t    \"deleted/min\"   : ");   
    if ((export_last_us!=0) &&(new_us>export_last_us)) {
      pChar += rozofs_u64_append(pChar, (unsigned long long int) (new_count-export_last_count_json)*(60000000)/(new_us-export_last_us));
    }
    else {
-      pChar += rozofs_string_append(pChar, "0"); 
+     pChar += rozofs_string_append(pChar, "0"); 
    }  
-   pChar += rozofs_string_append(pChar, ",\n");    
-   export_last_us         = new_us;
    export_last_count_json = new_count;
-
-   pChar += rozofs_string_append(pChar, "    \"defered delete\": ");   
-   pChar += rozofs_u64_append(pChar, (unsigned long long int)common_config.deletion_delay);   
    
-   pChar += rozofs_string_append(pChar, ",\n    \"reloaded\"      : "); 
-   pChar += rozofs_u64_append(pChar, (unsigned long long int) export_rm_bins_reload_count);
-   pChar += rozofs_string_append(pChar, ",\n    \"trashed\"       : "); 
-   pChar += rozofs_u64_append(pChar, (unsigned long long int) export_rm_bins_pending_count);
-   pChar += rozofs_string_append(pChar, ",\n    \"done\"          : "); 
-   pChar += rozofs_u64_append(pChar, (unsigned long long int) export_rm_bins_done_count);
+     
+   /*
+   ** Still pending
+   */   
+   
    pChar += rozofs_string_append(pChar, ",\n    \"pending\"       : ");   
    pChar += rozofs_u64_append(pChar, (unsigned long long int) (export_rm_bins_reload_count+export_rm_bins_pending_count)-export_rm_bins_done_count);
+
+   /*
+   ** Recyclinging
+   */   
 
    if (common_config.fid_recycle) {
      pChar += rozofs_string_append(pChar, ",\n    \"recycling\" : {\n");
@@ -4381,7 +4413,9 @@ char *export_rm_bins_stats_json(char *pChar)
      pChar += rozofs_u64_append(pChar, (unsigned long long int) (export_fid_recycle_reload_count+export_recycle_pending_count)-export_recycle_done_count);
      pChar += rozofs_string_append(pChar, "\n    }");
    }
-     pChar += rozofs_string_append(pChar, "\n  }\n}\n");
+   pChar += rozofs_string_append(pChar, "\n  }\n}\n");
+
+   export_last_us = new_us;
    return pChar;
 }
 char *export_rm_bins_stats(char *pChar)
