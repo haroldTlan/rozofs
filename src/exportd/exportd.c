@@ -625,84 +625,91 @@ static void *balance_volume_thread(void *v) {
 /** Thread for remove bins files on storages for each exports
  */
 static void *remove_bins_thread(void *v) {
-    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-    list_t          * iterator = NULL;
-    int               export_idx = 0;
-    char              thName[16];
-    rmbins_thread_t * thCtx;
-    uint64_t          before,after,credit;
-    uint64_t          processed;
-    
-    thCtx = (rmbins_thread_t *) v;
-    
-    /*
-    ** Record thread name
-    */
-    sprintf(thName, "Trash%d", thCtx->idx);    
-    uma_dbg_thread_add_self(thName);
+  pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+  list_t          * iterator = NULL;
+  int               export_idx = 0;
+  char              thName[16];
+  rmbins_thread_t * thCtx;
+  uint64_t          before,after,credit;
+  uint64_t          processed;
+
+  thCtx = (rmbins_thread_t *) v;
+
+  /*
+  ** Record thread name
+  */
+  sprintf(thName, "Trash%d", thCtx->idx);    
+  uma_dbg_thread_add_self(thName);
+
+  // Pointer for store re-start bucket index for each exports
+  uint16_t * bucket_idx = xmalloc(list_size(&exports) * sizeof (uint16_t));
+  // Init. each index to 0
+  memset(bucket_idx, 0, sizeof (uint16_t) * list_size(&exports));
+
+  /*
+  ** Thread time shifting.
+  ** Thread 0 do not sleep.
+  ** Thread 1 sleeps 2 sec. 
+  ** Thread 2 sleeps 4 sec.
+  ** ...
+  */ 
+  sleep(thCtx->idx * 2);
+
+  for (;;) {
+
+
+    if (thCtx->idx >= common_config.nb_trash_thread) {
+      usleep(RM_BINS_PTHREAD_FREQUENCY_SEC*1000000*ROZO_NB_RMBINS_THREAD);
+      continue;
+    }  
+
+    export_idx = 0;
+    processed  = 0;
 
     /*
     ** One run time credit
     */
     credit = RM_BINS_PTHREAD_FREQUENCY_SEC*1000000*common_config.nb_trash_thread;
-        
-    // Pointer for store re-start bucket index for each exports
-    uint16_t * bucket_idx = xmalloc(list_size(&exports) * sizeof (uint16_t));
-    // Init. each index to 0
-    memset(bucket_idx, 0, sizeof (uint16_t) * list_size(&exports));
-    
+
     /*
-    ** Thread time shifting.
-    ** Thread 0 do not sleep.
-    ** Thread 1 sleeps 2 sec. 
-    ** Thread 2 sleeps 4 sec.
-    ** ...
-    */ 
-    sleep(thCtx->idx * 2);
+    ** Read ticker before loop
+    */
+    GETMICROLONG(before);
 
-    for (;;) {
-        export_idx = 0;
-        processed  = 0;
+    list_for_each_forward(iterator, &exports) {
+        export_entry_t *entry = list_entry(iterator, export_entry_t, list);
 
-        /*
-	** Read ticker before loop
-	*/
-        GETMICROLONG(before);
-	
-        list_for_each_forward(iterator, &exports) {
-            export_entry_t *entry = list_entry(iterator, export_entry_t, list);
-
-            // Remove bins file starting with specific bucket idx
-            processed += export_rm_bins(&entry->export, &bucket_idx[export_idx], thCtx);
-            export_idx++;
-        }
-	
-	/*
-	** Read ticker after loop
-	*/
-	GETMICROLONG(after); 
-        thCtx->total_usec  += thCtx->last_usec;
-        thCtx->total_count += thCtx->last_count;
-        
-	thCtx->last_usec  = after - before;
-        thCtx->last_count = processed;
-        
-        thCtx->nb_run++; 
-        
-	/*
-	** Compte credit for a loop 
-	*/
-	if (thCtx->last_usec < credit) {
-          uint64_t delay;
-	  /*
-	  ** The loop did last less than the credit
-	  ** Wait a little...
-	  */ 
-	  delay = credit - thCtx->last_usec;
-          usleep(delay);
-	}  
+        // Remove bins file starting with specific bucket idx
+        processed += export_rm_bins(&entry->export, &bucket_idx[export_idx], thCtx);
+        export_idx++;
     }
-    return 0;
+
+    /*
+    ** Read ticker after loop
+    */
+    GETMICROLONG(after); 
+    thCtx->total_usec  += thCtx->last_usec;
+    thCtx->total_count += thCtx->last_count;
+
+    thCtx->last_usec  = after - before;
+    thCtx->last_count = processed;
+
+    thCtx->nb_run++; 
+
+    /*
+    ** Compte credit for a loop 
+    */
+    if (thCtx->last_usec < credit) {
+      uint64_t delay;
+      /*
+      ** The loop did last less than the credit
+      ** Wait a little...
+      */ 
+      delay = credit - thCtx->last_usec;
+      usleep(delay);
+    }  
+  }
+  return 0;
 }
 /*
 **_______________________________________________________________________
@@ -713,7 +720,7 @@ static void *remove_bins_thread(void *v) {
 static void start_all_remove_bins_thread() {
   int idx;
   
-  for (idx=0; idx < common_config.nb_trash_thread; idx++) {
+  for (idx=0; idx < ROZO_NB_RMBINS_THREAD; idx++) {
   
     rmbins_thread[idx].idx  = idx;
     rmbins_thread[idx].thId = 0;

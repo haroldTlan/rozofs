@@ -230,7 +230,7 @@ typedef struct export {
 extern uint32_t export_configuration_file_hash;  /**< hash value of the configuration file */
 extern int export_local_site_number; 
 extern int rozofs_no_site_file; 
-extern uint64_t export_rm_bins_pending_count; /**< trash thread statistics  */
+extern uint64_t export_rm_bins_trashed_count; /**< trash thread statistics  */
 extern uint64_t export_rm_bins_done_count ;  /**< trash thread statistics  */
 extern int export_limit_rm_files;
 

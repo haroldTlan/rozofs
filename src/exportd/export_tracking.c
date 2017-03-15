@@ -68,13 +68,18 @@ int rozofs_acl_access_check(const char *name, const char *value, size_t size,mod
 #define EXPORT_DEFAULT_ROOT_MODE S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
 
 extern epp_profiler_t  gprofiler;
+/*
+** Trash counters
+*/
+uint64_t export_rm_bins_trashed_count = 0; /**< Nb files put in trash from startup  */
+uint64_t export_rm_bins_done_count    = 0; /**< Nb files actually deleted from startup  */
+uint64_t export_rm_bins_reload_count  = 0; /**< Nb files dicovered in trash at startup  */
+uint64_t export_rm_bins_in_ram        = 0; /**< Nb files in RAM to be deleted */
+uint64_t export_rm_bins_in_flash      = 0; /**< Nb files in flash but not in RAM to be deleted */
 
-uint64_t export_rm_bins_reload_count = 0; /**< trash thread statistics  */
-uint64_t export_rm_bins_pending_count = 0; /**< trash thread statistics  */
 uint64_t export_recycle_pending_count = 0; /**< recycle thread statistics  */
 uint64_t export_recycle_done_count = 0; /**< recycle thread statistics  */
 uint64_t export_rm_bins_threshold_high = 10; /**< trash threshold  where FID recycling starts */
-uint64_t export_rm_bins_done_count = 0;  /**< trash thread statistics  */
 uint64_t export_last_ticks = 0;
 uint64_t export_last_us = 0;
 uint64_t export_last_count = 0;
@@ -3086,7 +3091,7 @@ int exp_delete_file(export_t * e, lv2_entry_t *lvl2)
  */
 rmfentry_t * export_alloc_rmentry(rmfentry_disk_t * trash_entry) {
   rmfentry_t *rmfe = xmalloc(sizeof (rmfentry_t));
-  export_rm_bins_pending_count++;
+  export_rm_bins_trashed_count++;
   memcpy(rmfe->fid, trash_entry->fid, sizeof (fid_t));
   rmfe->cid = trash_entry->cid;
   memcpy(rmfe->initial_dist_set, trash_entry->initial_dist_set,
@@ -3350,7 +3355,7 @@ int export_fid_recycle_attempt(export_t * e,lv2_entry_t *lv2)
    /*
    ** check the number of pending fid in trash
    */
-   count = (export_rm_bins_reload_count+export_rm_bins_pending_count)-export_rm_bins_done_count;
+   count = (export_rm_bins_reload_count+export_rm_bins_trashed_count)-export_rm_bins_done_count;
    if (count < export_rm_bins_threshold_high)
    {
      return 0;
@@ -4314,6 +4319,7 @@ char *export_rm_bins_stats_json(char *pChar)
    uint64_t new_count;
    uint64_t new_trashed;
    int      idx; 
+   int      first=1;
    
    pChar += rozofs_string_append(pChar, "{ \"trash\" : {\n");    
    pChar += rozofs_string_append(pChar, "    \"nb threads\"    : ");
@@ -4324,8 +4330,20 @@ char *export_rm_bins_stats_json(char *pChar)
    pChar += rozofs_u32_append(pChar, export_limit_rm_files);  
    
    pChar += rozofs_string_append(pChar, ",\n    \"threads\": [\n");   
-   for (idx=0; idx < common_config.nb_trash_thread; idx++) {
-     if (idx != 0) pChar += rozofs_string_append(pChar, ",\n"); 
+   for (idx=0; idx < ROZO_NB_RMBINS_THREAD; idx++) {
+
+     /*
+     ** Only diplay threads that have worked
+     */
+     if (rmbins_thread[idx].total_usec == 0) continue;
+     
+     if (first) {
+       first = 0;
+     }  
+     else {
+       pChar += rozofs_string_append(pChar, ",\n"); 
+     }
+       
      pChar += rozofs_string_append(pChar, "       {\"idx\": ");   
      pChar += rozofs_u32_append(pChar, idx);   
      pChar += rozofs_string_append(pChar, ", \"nb run\": ");   
@@ -4355,7 +4373,7 @@ char *export_rm_bins_stats_json(char *pChar)
    */
 
    pChar += rozofs_string_append(pChar, ",\n    \"trashed count\" : "); 
-   new_trashed = export_rm_bins_pending_count;
+   new_trashed = export_rm_bins_trashed_count;
    pChar += rozofs_u64_append(pChar, (unsigned long long int) new_trashed);
    
 
@@ -4392,7 +4410,7 @@ char *export_rm_bins_stats_json(char *pChar)
    */   
    
    pChar += rozofs_string_append(pChar, ",\n    \"pending\"       : ");   
-   pChar += rozofs_u64_append(pChar, (unsigned long long int) (export_rm_bins_reload_count+export_rm_bins_pending_count)-export_rm_bins_done_count);
+   pChar += rozofs_u64_append(pChar, (unsigned long long int) (export_rm_bins_reload_count+export_rm_bins_trashed_count)-export_rm_bins_done_count);
 
    /*
    ** Recyclinging
@@ -4440,10 +4458,10 @@ char *export_rm_bins_stats(char *pChar)
      
    pChar += sprintf(pChar,"trash stats:\n");
    pChar += sprintf(pChar,"  - reloaded = %llu\n", (unsigned long long int) export_rm_bins_reload_count);
-   pChar += sprintf(pChar,"  - trashed  = %llu\n", (unsigned long long int) export_rm_bins_pending_count);
+   pChar += sprintf(pChar,"  - trashed  = %llu\n", (unsigned long long int) export_rm_bins_trashed_count);
    pChar += sprintf(pChar,"  - done     = %llu\n", (unsigned long long int) export_rm_bins_done_count);
    pChar += sprintf(pChar,"  - pending  = %llu\n", 
-        (unsigned long long int) (export_rm_bins_reload_count+export_rm_bins_pending_count)-export_rm_bins_done_count);
+        (unsigned long long int) (export_rm_bins_reload_count+export_rm_bins_trashed_count)-export_rm_bins_done_count);
 
    if (common_config.fid_recycle) {
      pChar += sprintf(pChar,"recycle stats:\n");
