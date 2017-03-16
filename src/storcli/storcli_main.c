@@ -345,6 +345,7 @@ char * display_corrupted(char * pChar) {
   uint8_t *   fid;
   storcli_one_corrupted_fid_ctx * pCtx;
   int        first=1;
+  struct tm  ts;
   
   
   /*
@@ -354,7 +355,7 @@ char * display_corrupted(char * pChar) {
   pChar += rozofs_string_append(pChar, (conf.noReadFaultTolerant==0)?"\"Tolerant\"":"\"EIO\"");
   pChar += rozofs_string_append(pChar, ",\n         \"running\" : ");
   pChar += rozofs_string_append(pChar, (noReadFaultTolerant==0)?"\"Tolerant\"":"\"EIO\"");
-  pChar += rozofs_string_append(pChar, "\n      },\n      \"corruption count\" : ");
+  pChar += rozofs_string_append(pChar, "\n      },\n      \"profiler count\" : ");
   pChar += rozofs_u64_append(pChar, gprofiler->read_blk_corrupted[P_COUNT]);
   pChar += rozofs_string_append(pChar, ",\n");
 
@@ -373,7 +374,9 @@ char * display_corrupted(char * pChar) {
     pChar += 36;
     pChar += rozofs_string_append(pChar, "\", \"count\" : ");  
     pChar += rozofs_u64_append(pChar, pCtx->count);
-    pChar += rozofs_string_append(pChar, "}");  
+    pChar += rozofs_string_append(pChar, ", \"date\" : \"");    
+    ts = *localtime(&pCtx->time1rst);
+    pChar += strftime(pChar, 100, "%Y-%m-%d %H:%M:%S\" }", &ts);
   }
   pChar += rozofs_string_append(pChar, "\n      ]\n   }\n}\n");  
 

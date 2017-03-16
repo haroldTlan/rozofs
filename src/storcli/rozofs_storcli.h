@@ -1603,6 +1603,7 @@ extern int noReadFaultTolerant;
 typedef struct _storcli_one_corrupted_fid_ctx {
   fid_t            fid;
   uint64_t         count;
+  time_t           time1rst;
 } storcli_one_corrupted_fid_ctx;
 
 /*

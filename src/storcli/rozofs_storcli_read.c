@@ -1539,6 +1539,7 @@ void rozofs_storcli_read_req_processing_cbk(void *this,void *param)
 	fid = pCtx->fid;
         memcpy(fid,storcli_read_rq_p->fid,16);
 	pCtx->count = 1;
+        pCtx->time1rst = time(NULL);
 	storcli_fid_corrupted.nextIdx++;
 	if (storcli_fid_corrupted.nextIdx>=STORCLI_MAX_CORRUPTED_FID_NB) {
 	  storcli_fid_corrupted.nextIdx = 0;
