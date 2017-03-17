@@ -1,3 +1,8 @@
+increatment change
+safe:8 ,forward:5, inverse:4;
+
+
+
 ##ABOUT ROZOFS
 
 RozoFS is a scale-out NAS file system. RozoFS aims to provide an open source high performance and high availability scale out storage software appliance  for  intensive disk IO data center scenario. It comes as a free software, licensed under the GNU GPL v2. RozoFS provides an easy way to scale to petabytes storage but using erasure coding it was designed to provide very high availability levels with optimized raw capacity usage on heterogenous commodity hardwares.
